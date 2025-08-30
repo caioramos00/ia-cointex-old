@@ -26,13 +26,11 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const DJANGO_API_URL = process.env.DJANGO_API_URL || 'https://cointex.com.br/api/create-user/';
 const estadoContatos = {};
 
-// Pool de conexões Postgres
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
-// Inicializa o DB (cria tabela se não existir)
 async function initDatabase() {
   const client = await pool.connect();
   try {
@@ -166,6 +164,114 @@ async function atualizarContato(contato, conversou, etapa_atual, mensagem = null
     console.error(`[Erro] Falha ao atualizar contato ${contato}: ${error.message}`);
   }
 }
+
+function checkAuth(req, res, next) {
+  if (req.session.loggedIn) {
+    next();
+  } else {
+    res.redirect('/login');
+  }
+}
+
+// Servir arquivos estáticos (CSS, JS)
+app.use('/public', express.static(path.join(__dirname, 'public')));
+
+// Rota para login page
+app.get('/login', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+// Rota para login POST
+app.post('/login', (req, res) => {
+  const { username, password } = req.body;
+  if (username === 'ncfp' && password === '8065537Ncfp@') {
+    req.session.loggedIn = true;
+    res.redirect('/dashboard');
+  } else {
+    res.send('Login inválido. <a href="/login">Tente novamente</a>');
+  }
+});
+
+// Rota para logout
+app.get('/logout', (req, res) => {
+  req.session.destroy();
+  res.redirect('/login');
+});
+
+// Rota para dashboard
+app.get('/dashboard', checkAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+});
+
+// API para métricas
+app.get('/api/metrics', checkAuth, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const activeRes = await client.query('SELECT COUNT(*) FROM contatos WHERE status = \'ativo\' AND ultima_interacao > NOW() - INTERVAL \'10 minutes\'');
+    const totalContatosRes = await client.query('SELECT COUNT(*) FROM contatos');
+    const messagesReceivedRes = await client.query('SELECT SUM(jsonb_array_length(historico)) AS total FROM contatos');
+    const messagesSentRes = await client.query('SELECT SUM(jsonb_array_length(historico_interacoes)) AS total FROM contatos');
+    const stagesRes = await client.query('SELECT etapa_atual, COUNT(*) FROM contatos GROUP BY etapa_atual');
+
+    const active = activeRes.rows[0].count || 0;
+    const totalContatos = totalContatosRes.rows[0].count || 0;
+    const messagesReceived = messagesReceivedRes.rows[0].total || 0;
+    const messagesSent = messagesSentRes.rows[0].total || 0;
+    const stages = stagesRes.rows.reduce((acc, row) => ({ ...acc, [row.etapa_atual]: row.count }), {});
+
+    res.json({
+      activeConversations: active,
+      totalContatos: totalContatos,
+      messagesReceived: messagesReceived,
+      messagesSent: messagesSent,
+      stages
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// API para lista de contatos (com paginação)
+app.get('/api/contatos', checkAuth, async (req, res) => {
+  const page = parseInt(req.query.page) || 0;
+  const limit = parseInt(req.query.limit) || 10;
+  const client = await pool.connect();
+  try {
+    const resQuery = await client.query(
+      'SELECT id, etapa_atual, ultima_interacao FROM contatos ORDER BY ultima_interacao DESC LIMIT $1 OFFSET $2',
+      [limit, page * limit]
+    );
+    res.json(resQuery.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// API para histórico de chat
+app.get('/api/chat/:id', checkAuth, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const historicoRes = await client.query('SELECT historico FROM contatos WHERE id = $1', [req.params.id]);
+    const interacoesRes = await client.query('SELECT historico_interacoes FROM contatos WHERE id = $1', [req.params.id]);
+
+    const historico = historicoRes.rows[0]?.historico || [];
+    const interacoes = interacoesRes.rows[0]?.historico_interacoes || [];
+
+    // Combinar e ordenar por data
+    const allMessages = [...historico.map(msg => ({ ...msg, role: 'received' })), ...interacoes.map(msg => ({ ...msg, role: 'sent' }))];
+    allMessages.sort((a, b) => new Date(a.data) - new Date(b.data));
+
+    res.json(allMessages);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
 
 function promptClassificaAceite(contexto) {
   return `
