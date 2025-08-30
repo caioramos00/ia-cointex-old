@@ -62,6 +62,24 @@ async function enviarLinhaPorLinha(to, texto) {
   console.log(`[${to}] Envio concluído: "${texto}"`);
 }
 
+async function sendMessage(to, text) {
+  try {
+    const response = await axios.post(WHATSAPP_API_URL, {
+      messaging_product: 'whatsapp',
+      to: to,
+      type: 'text',
+      text: { body: text }
+    }, {
+      headers: {
+        Authorization: `Bearer ${ACCESS_TOKEN}`
+      }
+    });
+    console.log(`[Envio] Mensagem enviada para ${to}: "${text}" - Status: ${response.status}`);
+  } catch (error) {
+    console.error(`[Erro] Falha ao enviar mensagem para ${to}: ${error.message}`);
+  }
+}
+
 function inicializarEstado(contato) {
   estadoContatos[contato] = {
     etapa: 'abertura',

@@ -66,13 +66,11 @@ function loadChat(id) {
     .catch(err => console.error('Erro ao carregar chat:', err));
 }
 
-// Infinite scroll
 document.getElementById('contacts-list').addEventListener('scroll', function() {
   if (this.scrollTop + this.clientHeight >= this.scrollHeight - 20) {
     loadContacts(true);
   }
 });
 
-// Carrega inicial
 loadMetrics();
 loadContacts();

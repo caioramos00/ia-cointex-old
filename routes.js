@@ -1,5 +1,6 @@
 const path = require('path');
 
+// Middleware auth
 function checkAuth(req, res, next) {
   if (req.session.loggedIn) {
     next();
@@ -8,6 +9,7 @@ function checkAuth(req, res, next) {
   }
 }
 
+// Setup de rotas
 function setupRoutes(app, path) {
   app.use('/public', express.static(path.join(__dirname, 'public')));
 
