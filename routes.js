@@ -1,6 +1,12 @@
 const express = require('express');
 const path = require('path');
 
+const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
+const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
+const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
+const GRAPH_API_VERSION = 'v23.0';
+const WHATSAPP_API_URL = `https://graph.facebook.com/${GRAPH_API_VERSION}/${PHONE_NUMBER_ID}/messages`;
+
 function checkAuth(req, res, next) {
   if (req.session.loggedIn) {
     next();
