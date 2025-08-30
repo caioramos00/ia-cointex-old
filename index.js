@@ -2,14 +2,21 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const OpenAI = require('openai');
 const axios = require('axios');
-const fs = require('fs').promises;
-const lockfile = require('proper-lockfile');
 const http = require('http');
 const socketIo = require('socket.io');
+const session = require('express-session');
 const { Pool } = require('pg');
 require('dotenv').config();
 const app = express();
 app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+
+app.use(session({
+  secret: '8065537Ncfp@',
+  resave: false,
+  saveUninitialized: true,
+  cookie: { secure: false }
+}));
 
 const server = http.createServer(app);
 const io = socketIo(server);
@@ -53,6 +60,213 @@ const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 const GRAPH_API_VERSION = 'v23.0';
 const WHATSAPP_API_URL = `https://graph.facebook.com/${GRAPH_API_VERSION}/${PHONE_NUMBER_ID}/messages`;
 
+function checkAuth(req, res, next) {
+  if (req.session.loggedIn) {
+    next();
+  } else {
+    res.redirect('/login');
+  }
+}
+
+// Novo: Rota para login page (GET)
+app.get('/login', (req, res) => {
+  res.send(`
+    <html>
+      <head>
+        <title>Login Dashboard</title>
+      </head>
+      <body>
+        <h1>Login</h1>
+        <form action="/login" method="post">
+          <label>Username:</label><input type="text" name="username"><br>
+          <label>Senha:</label><input type="password" name="password"><br>
+          <button type="submit">Entrar</button>
+        </form>
+      </body>
+    </html>
+  `);
+});
+
+// Novo: Rota para login (POST)
+app.post('/login', (req, res) => {
+  const { username, password } = req.body;
+  if (username === 'ncfp' && password === '8065537Ncfp@') {
+    req.session.loggedIn = true;
+    res.redirect('/dashboard');
+  } else {
+    res.send('Login inválido. <a href="/login">Tente novamente</a>');
+  }
+});
+
+// Novo: Rota para logout
+app.get('/logout', (req, res) => {
+  req.session.destroy();
+  res.redirect('/login');
+});
+
+// Novo: Rota para dashboard (protegida)
+app.get('/dashboard', checkAuth, (req, res) => {
+  res.send(`
+    <html>
+      <head>
+        <title>Dashboard Bot</title>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> <!-- Chart.js via CDN -->
+        <style>
+          body { font-family: Arial; }
+          #metrics { margin-bottom: 20px; }
+          #contacts-list { height: 300px; overflow-y: scroll; border: 1px solid #ccc; }
+          #chat-view { height: 400px; overflow-y: scroll; border: 1px solid #ccc; display: none; }
+          .contact { cursor: pointer; padding: 5px; border-bottom: 1px solid #eee; }
+          .message { padding: 5px; margin: 5px; border-radius: 5px; }
+          .sent { background: #dcf8c6; align-self: flex-end; }
+          .received { background: #fff; align-self: flex-start; }
+        </style>
+      </head>
+      <body>
+        <h1>Dashboard</h1>
+        <button onclick="location.reload()">Recarregar</button>
+        <a href="/logout">Logout</a>
+
+        <div id="metrics">
+          <h2>Métricas</h2>
+          <p id="active-conversations"></p>
+          <p id="total-messages"></p>
+          <canvas id="stages-chart" width="400" height="200"></canvas>
+        </div>
+
+        <div id="contacts">
+          <h2>Contatos</h2>
+          <div id="contacts-list"></div>
+        </div>
+
+        <div id="chat">
+          <h2>Chat</h2>
+          <div id="chat-view"></div>
+        </div>
+
+        <script>
+          let page = 0;
+          const limit = 10;
+
+          function loadMetrics() {
+            fetch('/api/metrics')
+              .then(res => res.json())
+              .then(data => {
+                document.getElementById('active-conversations').innerText = \`Conversas Ativas: \${data.active}\`;
+                document.getElementById('total-messages').innerText = \`Mensagens Recebidas/Enviadas: \${data.messagesReceived} / \${data.messagesSent}\`;
+
+                const ctx = document.getElementById('stages-chart').getContext('2d');
+                new Chart(ctx, {
+                  type: 'pie',
+                  data: {
+                    labels: Object.keys(data.stages),
+                    datasets: [{ data: Object.values(data.stages), backgroundColor: ['#ff6384', '#36a2eb', '#ffce56', '#4bc0c0', '#9966ff'] }]
+                  },
+                  options: { responsive: true }
+                });
+              });
+          }
+
+          function loadContacts(append = false) {
+            fetch(\`/api/contatos?page=\${page}&limit=\${limit}\`)
+              .then(res => res.json())
+              .then(data => {
+                const list = document.getElementById('contacts-list');
+                if (!append) list.innerHTML = '';
+                data.forEach(contact => {
+                  const div = document.createElement('div');
+                  div.classList.add('contact');
+                  div.innerText = \`\${contact.id} - Etapa: \${contact.etapa_atual} - Última: \${new Date(contact.ultima_interacao).toLocaleString()}\`;
+                  div.onclick = () => loadChat(contact.id);
+                  list.appendChild(div);
+                });
+                if (data.length === limit) page++;
+              });
+          }
+
+          function loadChat(id) {
+            fetch(\`/api/chat/\${id}\`)
+              .then(res => res.json())
+              .then(data => {
+                const view = document.getElementById('chat-view');
+                view.innerHTML = '';
+                data.historico.forEach(msg => {
+                  const div = document.createElement('div');
+                  div.classList.add('message', msg.role === 'assistant' ? 'sent' : 'received');
+                  div.innerText = \`\${msg.data}: \${msg.mensagem}\`;
+                  view.appendChild(div);
+                });
+                view.style.display = 'block';
+                view.scrollTop = view.scrollHeight;
+              });
+          }
+
+          // Infinite scroll para contatos
+          document.getElementById('contacts-list').addEventListener('scroll', function() {
+            if (this.scrollTop + this.clientHeight >= this.scrollHeight) {
+              loadContacts(true);
+            }
+          });
+
+          // Carrega inicial
+          loadMetrics();
+          loadContacts();
+        </script>
+      </body>
+    </html>
+  `);
+});
+
+// Novo: API para métricas
+app.get('/api/metrics', checkAuth, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const active = await client.query('SELECT COUNT(*) FROM contatos WHERE status = \'ativo\'');
+    const messagesReceived = await client.query('SELECT SUM(jsonb_array_length(historico)) FROM contatos'); // Aproximação
+    const messagesSent = await client.query('SELECT SUM(jsonb_array_length(historico_interacoes)) FROM contatos'); // Aproximação
+    const stagesRes = await client.query('SELECT etapa_atual, COUNT(*) FROM contatos GROUP BY etapa_atual');
+    const stages = stagesRes.rows.reduce((acc, row) => ({ ...acc, [row.etapa_atual]: row.count }), {});
+    res.json({
+      active: active.rows[0].count,
+      messagesReceived: messagesReceived.rows[0].sum || 0,
+      messagesSent: messagesSent.rows[0].sum || 0,
+      stages
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Novo: API para lista de contatos (com paginação)
+app.get('/api/contatos', checkAuth, async (req, res) => {
+  const page = parseInt(req.query.page) || 0;
+  const limit = parseInt(req.query.limit) || 10;
+  const client = await pool.connect();
+  try {
+    const resQuery = await client.query('SELECT id, etapa_atual, ultima_interacao FROM contatos ORDER BY ultima_interacao DESC LIMIT $1 OFFSET $2', [limit, page * limit]);
+    res.json(resQuery.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Novo: API para histórico de chat
+app.get('/api/chat/:id', checkAuth, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const resHist = await client.query('SELECT historico FROM contatos WHERE id = $1', [req.params.id]);
+    res.json(resHist.rows[0] ? resHist.rows[0].historico : []);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
 async function sendMessage(to, text) {
   try {
     const response = await axios.post(WHATSAPP_API_URL, {
@@ -71,7 +285,6 @@ async function sendMessage(to, text) {
   }
 }
 
-// Nova versão: salvarContato com Postgres
 async function salvarContato(contatoId, grupoId = null, mensagem = null) {
   try {
     const agora = new Date().toISOString();
@@ -124,7 +337,6 @@ async function salvarContato(contatoId, grupoId = null, mensagem = null) {
   }
 }
 
-// Nova versão: atualizarContato com Postgres
 async function atualizarContato(contato, conversou, etapa_atual, mensagem = null, temMidia = false) {
   try {
     const client = await pool.connect();
