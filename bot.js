@@ -27,6 +27,10 @@ function quebradizarTexto(resposta) {
   return resposta.replace(/\b(você|vcê|cê|ce)\b/gi, 'vc');
 }
 
+function gerarSenhaAleatoria() {
+  return Math.floor(1000 + Math.random() * 9000).toString();
+}
+
 async function enviarLinhaPorLinha(to, texto) {
   const estado = estadoContatos[to];
   if (!estado) {
