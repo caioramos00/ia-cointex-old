@@ -6,6 +6,7 @@ const fs = require('fs').promises;
 const lockfile = require('proper-lockfile');
 const http = require('http');
 const socketIo = require('socket.io');
+const { Pool } = require('pg');
 require('dotenv').config();
 const app = express();
 app.use(bodyParser.json());
@@ -17,10 +18,39 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const DJANGO_API_URL = process.env.DJANGO_API_URL || 'https://cointex.com.br/api/create-user/';
 const estadoContatos = {};
 
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
+
+async function initDatabase() {
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS contatos (
+        id VARCHAR(255) PRIMARY KEY,
+        grupos JSONB DEFAULT '[]',
+        status VARCHAR(50) DEFAULT 'ativo',
+        etapa VARCHAR(50) DEFAULT 'abertura',
+        ultima_interacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        historico JSONB DEFAULT '[]',
+        conversou VARCHAR(3) DEFAULT 'Não',
+        etapa_atual VARCHAR(50) DEFAULT 'abertura',
+        historico_interacoes JSONB DEFAULT '[]'
+      );
+    `);
+    console.log('[DB] Tabela contatos criada ou já existe.');
+  } catch (error) {
+    console.error('[DB] Erro ao inicializar tabela:', error.message);
+  } finally {
+    client.release();
+  }
+}
+
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
-const GRAPH_API_VERSION = 'v20.0';
+const GRAPH_API_VERSION = 'v23.0';
 const WHATSAPP_API_URL = `https://graph.facebook.com/${GRAPH_API_VERSION}/${PHONE_NUMBER_ID}/messages`;
 
 async function sendMessage(to, text) {
@@ -41,101 +71,88 @@ async function sendMessage(to, text) {
   }
 }
 
-async function escreverArquivoComLock(caminho, dados) {
-  try {
-    const release = await lockfile.lock(caminho, { retries: { retries: 5, minTimeout: 100 } });
-    try {
-      await fs.writeFile(caminho, JSON.stringify(dados, null, 2));
-      console.log(`[Arquivo] Escrito com sucesso: ${caminho}`);
-    } finally {
-      await release();
-    }
-  } catch (error) {
-    console.error(`[Erro] Falha ao escrever arquivo ${caminho}: ${error.message}`);
-    throw error;
-  }
-}
-
+// Nova versão: salvarContato com Postgres
 async function salvarContato(contatoId, grupoId = null, mensagem = null) {
   try {
-    const GRUPOS_CONTATOS_FILE = './grupos_e_contatos.json';
-    let dados;
-    try {
-      const conteudo = await fs.readFile(GRUPOS_CONTATOS_FILE, 'utf8');
-      dados = JSON.parse(conteudo);
-    } catch (error) {
-      console.error(`[Erro] JSON inválido em ${GRUPOS_CONTATOS_FILE}: ${error.message}`);
-      dados = { contatos: [] };
-      await escreverArquivoComLock(GRUPOS_CONTATOS_FILE, dados);
-    }
-
     const agora = new Date().toISOString();
-    let contatoExistente = dados.contatos.find(c => c.id === contatoId);
+    const client = await pool.connect();
+    try {
+      const res = await client.query('SELECT * FROM contatos WHERE id = $1', [contatoId]);
+      let contatoExistente = res.rows[0];
 
-    if (!contatoExistente) {
-      contatoExistente = {
-        id: contatoId,
-        grupos: grupoId ? [{ id: grupoId, dataEntrada: agora }] : [],
-        status: 'ativo',
-        etapa: 'abertura',
-        ultimaInteracao: agora,
-        historico: mensagem ? [{ data: agora, mensagem }] : [],
-        conversou: 'Não',
-        etapa_atual: 'abertura',
-        historico_interacoes: []
-      };
-      dados.contatos.push(contatoExistente);
-      console.log(`[Contato] Novo contato salvo: ${contatoId}`);
-    } else {
-      if (grupoId && !contatoExistente.grupos.some(g => g.id === grupoId)) {
-        contatoExistente.grupos.push({ id: grupoId, dataEntrada: agora });
+      if (!contatoExistente) {
+        await client.query(`
+          INSERT INTO contatos (id, grupos, status, etapa, ultima_interacao, historico, conversou, etapa_atual, historico_interacoes)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `, [
+          contatoId,
+          grupoId ? JSON.stringify([{ id: grupoId, dataEntrada: agora }]) : '[]',
+          'ativo',
+          'abertura',
+          agora,
+          mensagem ? JSON.stringify([{ data: agora, mensagem }]) : '[]',
+          'Não',
+          'abertura',
+          '[]'
+        ]);
+        console.log(`[Contato] Novo contato salvo: ${contatoId}`);
+      } else {
+        let grupos = contatoExistente.grupos || [];
+        if (grupoId && !grupos.some(g => g.id === grupoId)) {
+          grupos.push({ id: grupoId, dataEntrada: agora });
+        }
+        let historico = contatoExistente.historico || [];
+        if (mensagem) {
+          historico.push({ data: agora, mensagem });
+        }
+        await client.query(`
+          UPDATE contatos SET
+            grupos = $1,
+            ultima_interacao = $2,
+            status = $3,
+            historico = $4
+          WHERE id = $5
+        `, [JSON.stringify(grupos), agora, 'ativo', JSON.stringify(historico), contatoId]);
+        console.log(`[Contato] Contato atualizado: ${contatoId}`);
       }
-      if (mensagem) {
-        contatoExistente.historico.push({ data: agora, mensagem });
-      }
-      contatoExistente.ultimaInteracao = agora;
-      contatoExistente.status = 'ativo';
-      console.log(`[Contato] Contato atualizado: ${contatoId}`);
+    } finally {
+      client.release();
     }
-
-    await escreverArquivoComLock(GRUPOS_CONTATOS_FILE, dados);
-    console.log(`[Arquivo] Contato ${contatoId} salvo no JSON`);
+    console.log(`[DB] Contato ${contatoId} salvo`);
   } catch (error) {
     console.error(`[Erro] Falha ao salvar contato ${contatoId}: ${error.message}`);
   }
 }
 
+// Nova versão: atualizarContato com Postgres
 async function atualizarContato(contato, conversou, etapa_atual, mensagem = null, temMidia = false) {
   try {
-    const GRUPOS_CONTATOS_FILE = './grupos_e_contatos.json';
-    const dados = JSON.parse(await fs.readFile(GRUPOS_CONTATOS_FILE, 'utf8'));
-    const contatoIndex = dados.contatos.findIndex(c => c.id === contato);
-    if (contatoIndex !== -1) {
-      if (!dados.contatos[contatoIndex].historico_interacoes) {
-        dados.contatos[contatoIndex].historico_interacoes = [];
+    const client = await pool.connect();
+    try {
+      const res = await client.query('SELECT * FROM contatos WHERE id = $1', [contato]);
+      if (res.rows.length === 0) {
+        console.error(`[${contato}] Contato não encontrado no DB`);
+        return;
       }
-      if (!dados.contatos[contatoIndex].conversou) {
-        dados.contatos[contatoIndex].conversou = 'Não';
-      }
-      if (!dados.contatos[contatoIndex].etapa_atual) {
-        dados.contatos[contatoIndex].etapa_atual = 'abertura';
-      }
-
-      dados.contatos[contatoIndex].conversou = conversou;
-      dados.contatos[contatoIndex].etapa_atual = etapa_atual;
+      let historicoInteracoes = res.rows[0].historico_interacoes || [];
       if (mensagem) {
-        const interacao = {
+        historicoInteracoes.push({
           mensagem,
           data: new Date().toISOString(),
           etapa: etapa_atual,
           tem_midia: temMidia
-        };
-        dados.contatos[contatoIndex].historico_interacoes.push(interacao);
+        });
       }
-      await escreverArquivoComLock(GRUPOS_CONTATOS_FILE, dados);
+      await client.query(`
+        UPDATE contatos SET
+          conversou = $1,
+          etapa_atual = $2,
+          historico_interacoes = $3
+        WHERE id = $4
+      `, [conversou, etapa_atual, JSON.stringify(historicoInteracoes), contato]);
       console.log(`[${contato}] Contato atualizado: ${conversou}, ${etapa_atual}`);
-    } else {
-      console.error(`[${contato}] Contato não encontrado no JSON para atualização`);
+    } finally {
+      client.release();
     }
   } catch (error) {
     console.error(`[Erro] Falha ao atualizar contato ${contato}: ${error.message}`);
@@ -1034,7 +1051,9 @@ io.on('connection', (socket) => {
   });
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`[✅ Servidor rodando na porta ${PORT}]`);
-});
+initDatabase().then(() => {
+  const PORT = process.env.PORT || 3000;
+  server.listen(PORT, () => {
+    console.log(`[✅ Servidor rodando na porta ${PORT}]`);
+  });
+}).catch(err => console.error('Erro ao init DB:', err));
