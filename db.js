@@ -8,6 +8,7 @@ const pool = new Pool({
 async function initDatabase() {
   const client = await pool.connect();
   try {
+    // Cria a tabela se não existir (mantém o original)
     await client.query(`
       CREATE TABLE IF NOT EXISTS contatos (
         id VARCHAR(255) PRIMARY KEY,
@@ -18,12 +19,18 @@ async function initDatabase() {
         historico JSONB DEFAULT '[]',
         conversou VARCHAR(3) DEFAULT 'Não',
         etapa_atual VARCHAR(50) DEFAULT 'abertura',
-        historico_interacoes JSONB DEFAULT '[]',
-        tid VARCHAR(255) DEFAULT '',
-        click_type VARCHAR(50) DEFAULT 'Orgânico'
+        historico_interacoes JSONB DEFAULT '[]'
       );
     `);
     console.log('[DB] Tabela contatos criada ou já existe.');
+
+    // Adiciona colunas novas se não existirem (corrige o erro)
+    await client.query(`
+      ALTER TABLE contatos
+      ADD COLUMN IF NOT EXISTS tid VARCHAR(255) DEFAULT '',
+      ADD COLUMN IF NOT EXISTS click_type VARCHAR(50) DEFAULT 'Orgânico';
+    `);
+    console.log('[DB] Colunas tid e click_type adicionadas ou já existem.');
   } catch (error) {
     console.error('[DB] Erro ao inicializar tabela:', error.message);
   } finally {
