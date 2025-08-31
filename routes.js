@@ -1,5 +1,6 @@
 const path = require('path');
 const express = require('express');
+const axios = require('axios');
 const { pool } = require('./db.js');
 const { delay } = require('./bot.js');
 const estadoContatos = require('./state.js');
