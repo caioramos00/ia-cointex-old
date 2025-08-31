@@ -1,6 +1,9 @@
 const path = require('path');
+const { pool } = require('./db.js');
+const { delay } = require('./bot.js');
 
-// Middleware auth
+const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
+
 function checkAuth(req, res, next) {
   if (req.session.loggedIn) {
     next();
@@ -9,7 +12,6 @@ function checkAuth(req, res, next) {
   }
 }
 
-// Setup de rotas (adicionando estadoContatos como parâmetro final)
 function setupRoutes(app, path, processarMensagensPendentes, inicializarEstado, criarUsuarioDjango, salvarContato, VERIFY_TOKEN, estadoContatos) {
   app.use('/public', express.static(path.join(__dirname, 'public')));
 

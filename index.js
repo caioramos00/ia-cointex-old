@@ -25,7 +25,9 @@ app.use(session({
 const server = http.createServer(app);
 const io = socketIo(server);
 
-setupRoutes(app, path, processarMensagensPendentes, inicializarEstado, criarUsuarioDjango, require('./db.js').salvarContato, require('./prompts.js').VERIFY_TOKEN, estadoContatos);
+let estadoContatos = {};
+
+setupRoutes(app, path, processarMensagensPendentes, inicializarEstado, criarUsuarioDjango, require('./db.js').salvarContato, process.env.VERIFY_TOKEN, estadoContatos);
 
 io.on('connection', (socket) => {
   console.log('Usuário conectado ao dashboard');

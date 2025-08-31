@@ -2,6 +2,10 @@ const axios = require('axios');
 const OpenAI = require('openai');
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL;
+const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
+
+const { atualizarContato } = require('./db.js');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function gerarResposta(messages, max_tokens = 60) {
