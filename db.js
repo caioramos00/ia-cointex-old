@@ -19,8 +19,8 @@ async function initDatabase() {
         conversou VARCHAR(3) DEFAULT 'Não',
         etapa_atual VARCHAR(50) DEFAULT 'abertura',
         historico_interacoes JSONB DEFAULT '[]',
-        tid VARCHAR(255) DEFAULT '',  // Nova coluna para TID
-        click_type VARCHAR(50) DEFAULT 'Orgânico'  // Nova coluna para click_type
+        tid VARCHAR(255) DEFAULT '',
+        click_type VARCHAR(50) DEFAULT 'Orgânico'
       );
     `);
     console.log('[DB] Tabela contatos criada ou já existe.');
@@ -53,8 +53,8 @@ async function salvarContato(contatoId, grupoId = null, mensagem = null, tid = '
           'Não',
           'abertura',
           '[]',
-          tid,  // Novo: Salva TID
-          click_type  // Novo: Salva click_type
+          tid,
+          click_type
         ]);
         console.log(`[Contato] Novo contato salvo: ${contatoId}, TID: ${tid}, click_type: ${click_type}`);
       } else {
@@ -72,8 +72,8 @@ async function salvarContato(contatoId, grupoId = null, mensagem = null, tid = '
             ultima_interacao = $2,
             status = $3,
             historico = $4,
-            tid = $5,  // Novo: Atualiza TID se necessário
-            click_type = $6  // Novo: Atualiza click_type se necessário
+            tid = $5,
+            click_type = $6 
           WHERE id = $7
         `, [JSON.stringify(grupos), agora, 'ativo', JSON.stringify(historico), tid, click_type, contatoId]);
         console.log(`[Contato] Contato atualizado: ${contatoId}, TID: ${tid}, click_type: ${click_type}`);
