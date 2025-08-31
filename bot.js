@@ -8,8 +8,10 @@ const WHATSAPP_API_URL = `https://graph.facebook.com/v23.0/${PHONE_NUMBER_ID}/me
 const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
 
 const { atualizarContato } = require('./db.js');
-const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const estadoContatos = require('./state.js');
+const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, mensagemImpulso, mensagensIntrodutorias, checklistVariacoes, mensagensPosChecklist, respostasNaoConfirmadoAcesso, respostasNaoConfirmadoConfirmacao, respostasDuvidasComuns } = require('./prompts.js');
+
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function gerarResposta(messages, max_tokens = 60) {
   try {
