@@ -5,7 +5,7 @@ const { pool } = require('./db.js');
 const { delay } = require('./bot.js');
 const estadoContatos = require('./state.js');
 
-const LANDING_URL = process.env.LANDING_URL || 'https://grupo-whatsapp-trampos-lara-2025.onrender.com/';
+const LANDING_URL = process.env.LANDING_URL || 'https://grupo-whatsapp-trampos-lara-2025.onrender.com';
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 
 function checkAuth(req, res, next) {
