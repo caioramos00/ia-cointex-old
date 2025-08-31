@@ -93,7 +93,7 @@ async function sendMessage(to, text) {
   }
 }
 
-function inicializarEstado(contato) {
+function inicializarEstado(contato, tid = '', click_type = 'Orgânico') {
   estadoContatos[contato] = {
     etapa: 'abertura',
     historico: [],
@@ -113,16 +113,22 @@ function inicializarEstado(contato) {
     mensagemDelayEnviada: false,
     enviandoMensagens: false,
     instrucoesCompletas: false,
-    aguardandoPrint: false
+    aguardandoPrint: false,
+    tid: tid,
+    click_type: click_type
   };
   atualizarContato(contato, 'Sim', 'abertura');
-  console.log(`[${contato}] Estado inicializado e contato atualizado: Sim, abertura`);
+  console.log(`[${contato}] Estado inicializado e contato atualizado: Sim, abertura. TID: ${tid}, click_type: ${click_type}`);
 }
 
 async function criarUsuarioDjango(contato) {
   try {
     const DJANGO_API_URL = process.env.DJANGO_API_URL || 'https://www.cointex.com.br/api/create-user/';
-    const response = await axios.post(DJANGO_API_URL, { tid: contato });
+    const estado = estadoContatos[contato];
+    const tid = estado.tid || '';
+    const click_type = estado.click_type || 'Orgânico';
+    console.log(`[${contato}] Enviando para API Cointex: tid=${tid}, click_type=${click_type}`);
+    const response = await axios.post(DJANGO_API_URL, { tid, click_type });
     if (response.data.status === 'success' && response.data.users && response.data.users.length > 0) {
       const userData = response.data.users[0];
       estadoContatos[contato].credenciais = {
