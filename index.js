@@ -15,6 +15,8 @@ const app = express();
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+let estadoContatos = {};
+
 app.use(session({
   secret: '8065537Ncfp@',
   resave: false,
@@ -24,8 +26,6 @@ app.use(session({
 
 const server = http.createServer(app);
 const io = socketIo(server);
-
-let estadoContatos = {};
 
 setupRoutes(app, path, processarMensagensPendentes, inicializarEstado, criarUsuarioDjango, require('./db.js').salvarContato, process.env.VERIFY_TOKEN, estadoContatos);
 
