@@ -2,7 +2,9 @@ const axios = require('axios');
 const OpenAI = require('openai');
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL;
+const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
+const WHATSAPP_API_URL = `https://graph.facebook.com/v23.0/${PHONE_NUMBER_ID}/messages`;
+
 const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
 
 const { atualizarContato } = require('./db.js');
