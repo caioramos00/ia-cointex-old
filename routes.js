@@ -1,5 +1,6 @@
 const path = require('path');
 
+// Middleware auth
 function checkAuth(req, res, next) {
   if (req.session.loggedIn) {
     next();
@@ -8,6 +9,7 @@ function checkAuth(req, res, next) {
   }
 }
 
+// Setup de rotas (adicionando estadoContatos como parâmetro final)
 function setupRoutes(app, path, processarMensagensPendentes, inicializarEstado, criarUsuarioDjango, salvarContato, VERIFY_TOKEN, estadoContatos) {
   app.use('/public', express.static(path.join(__dirname, 'public')));
 
