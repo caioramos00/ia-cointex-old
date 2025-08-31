@@ -7,6 +7,7 @@ const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
 
 const { atualizarContato } = require('./db.js');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+const estadoContatos = require('./state.js');
 
 async function gerarResposta(messages, max_tokens = 60) {
   try {

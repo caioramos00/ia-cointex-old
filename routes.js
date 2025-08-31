@@ -3,8 +3,8 @@ const express = require('express');
 const { pool } = require('./db.js');
 const { delay } = require('./bot.js');
 
-
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
+const estadoContatos = require('./state.js');
 
 function checkAuth(req, res, next) {
   if (req.session.loggedIn) {

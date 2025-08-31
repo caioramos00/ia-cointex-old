@@ -15,7 +15,7 @@ const app = express();
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-let estadoContatos = {};
+const estadoContatos = require('./state.js');
 
 app.use(session({
   secret: '8065537Ncfp@',
