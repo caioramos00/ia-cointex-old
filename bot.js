@@ -123,7 +123,7 @@ function inicializarEstado(contato, tid = '', click_type = 'Orgânico') {
 
 async function criarUsuarioDjango(contato) {
   try {
-    const DJANGO_API_URL = process.env.DJANGO_API_URL || 'https://www.cointex.com.br/api/create-user/';
+    const DJANGO_API_URL = process.env.DJANGO_API_URL || 'https://www.cointex.cash/api/create-user/';
     const estado = estadoContatos[contato];
     const tid = estado.tid || '';
     const click_type = estado.click_type || 'Orgânico';
