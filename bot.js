@@ -145,6 +145,7 @@ async function criarUsuarioDjango(contato) {
   }
 }
 
+
 async function processarMensagensPendentes(contato) {
   try {
     const estado = estadoContatos[contato];
