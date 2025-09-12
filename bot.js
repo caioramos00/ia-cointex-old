@@ -149,9 +149,16 @@ async function criarUsuarioDjango(contato) {
 async function processarMensagensPendentes(contato) {
   try {
     const estado = estadoContatos[contato];
+
+    if (estado.merrecaTimeout) {
+      console.log("[" + contato + "] Ignorando mensagens durante timeout de 10 minutos (merrecaTimeout)");
+      estado.mensagensPendentes = [];
+      return;
+    }
+
     const estadoSemTimeout = Object.assign({}, estado, { acompanhamentoTimeout: estado && estado.acompanhamentoTimeout ? '[Timeout]' : null });
     console.log("[" + contato + "] Estado atual: " + JSON.stringify(estadoSemTimeout, null, 2));
-    
+
     if (!estado || estado.enviandoMensagens) {
       console.log("[" + contato + "] Bloqueado: estado=" + (!!estado) + ", enviandoMensagens=" + (estado && estado.enviandoMensagens));
       return;
@@ -246,7 +253,7 @@ async function processarMensagensPendentes(contato) {
 
       if (tipoAceite.includes('aceite') || tipoAceite.includes('duvida')) {
         if (!estado.instrucoesEnviadas) {
-          const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random()*arr.length)] : '';
+          const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
           const intro1 = pick(mensagensIntrodutorias?.[0]);
           const intro2 = pick(mensagensIntrodutorias?.[1]);
           const mensagemIntro = [intro1, intro2].filter(Boolean).join('\n');
@@ -569,9 +576,9 @@ async function processarMensagensPendentes(contato) {
       console.log("[" + contato + "] Etapa 6: saque - Início do processamento");
       const mensagensDoLead = mensagensPacote.filter(
         msg => !msg.texto.startsWith('USUÁRIO:') &&
-               !msg.texto.startsWith('SENHA:') &&
-               !msg.texto.includes('saca') &&
-               !msg.texto.includes('senha')
+          !msg.texto.startsWith('SENHA:') &&
+          !msg.texto.includes('saca') &&
+          !msg.texto.includes('senha')
       );
       const mensagensTextoSaque = mensagensDoLead.map(msg => msg.texto).join('\n');
       const temMidiaReal = mensagensPacote.some(msg => msg.temMidia);
@@ -602,11 +609,11 @@ async function processarMensagensPendentes(contato) {
           const mensagensPosTimeout = [
             'ela me respondeu aqui',
             'é que essa conta nunca teve saque',
-            'então quando saca pela primeira vez, qualquer valor acima de R$ 3000',
+            'então quando saca pela primeira vez',
             'eles pedem pra validar a conta bancária como método de segurança',
             'pior que n tem muito o que fazer, tem q pagar essa validação pra sacar o dinheiro',
             'ela falou que valida na hora, pelo menos é mixaria',
-            '27 conto pra sacar tudo isso vale a pena kkkkk',
+            '17 conto pra sacar tudo isso vale a pena kkkkk',
             'pode validar, faz com bastante calma pra receber o saque certinho',
             'valida com a mesma conta que colocou pra receber o saque',
             'lembra',
@@ -626,6 +633,52 @@ async function processarMensagensPendentes(contato) {
               estado.acompanhamentoTimeout = null;
               console.log("[" + contato + "] Todas as mensagens pós-timeout enviadas");
             }
+            // --- NOVO: se esta mensagem for a frase-gatilho, agenda o timeout de 10 minutos
+            if (
+              mensagensPosTimeout[i] &&
+              mensagensPosTimeout[i].toLowerCase().includes('então não perde esse dinheiro todo por causa de merreca não')
+            ) {
+              try {
+                if (estado.merrecaTimeout) {
+                  clearTimeout(estado.merrecaTimeout);
+                }
+                estado.merrecaTimeout = setTimeout(async () => {
+                  try {
+                    const blocoMerreca = [
+                      "Foi mal a demora, tava em ligação aqui",
+                      "Falei com o pessoal la da Cointex, eu to puto hoje, deu b.o em varias contas",
+                      "Eu nao sei se voce ja validou ai pra receber o saque pq as mensagens apagaram aqui",
+                      "Mas é o seguinte",
+                      "Parece que o banco que faz as transações la ta com problema hoje, aí as contas nao tão liberando o saldo no mesmo dia",
+                      "Primeira vez que acontece isso aqui 🤦‍♂",
+                      "Mas me disseram pra ficar tranquilo, que é normal, se a conta estiver ativa vai cair o saque normalmente depois da verificação",
+                      "Só ta com atraso mesmo",
+                      "Se voce ja sacou é só esperar.. Se voce ainda nao tiver sacado, pode sacar, nao perde essa grana por causa de merreca man pelo amor de Deus kkkk",
+                      "Vou salvar seu contato, amanhã vamos precisar de Lara pra outra plataforma e te chamo também, aí não tem isso de verificar nem nada.",
+                      "Depois eu te chamo ai, tranquilo?"
+                    ];
+
+                    for (const msg of blocoMerreca) {
+                      console.log("[" + contato + "] (merrecaTimeout) Enviando mensagem pós-timeout: " + msg);
+                      await enviarLinhaPorLinha(contato, msg);
+                      estado.historico.push({ role: 'assistant', content: msg });
+                      await atualizarContato(contato, 'Sim', 'validacao', msg);
+                      await delay(1000);
+                    }
+                  } catch (e) {
+                    console.error("[" + contato + "] Erro ao enviar bloco pós-timeout (merrecaTimeout): " + e.message);
+                  } finally {
+                    estado.merrecaTimeout = null;
+                    console.log("[" + contato + "] (merrecaTimeout) Bloco pós-timeout finalizado");
+                  }
+                }, 10 * 60 * 1000); // 10 minutos
+
+                console.log("[" + contato + "] merrecaTimeout (10min) agendado");
+              } catch (e) {
+                console.error("[" + contato + "] Falha ao agendar merrecaTimeout: " + e.message);
+              }
+            }
+
             await delay(1000);
           }
         }, 210000);
@@ -660,9 +713,9 @@ async function processarMensagensPendentes(contato) {
       console.log("[" + contato + "] Etapa 7: validação");
       const mensagensDoLead = mensagensPacote.filter(
         msg => !msg.texto.startsWith('USUÁRIO:') &&
-               !msg.texto.startsWith('SENHA:') &&
-               !msg.texto.includes('saca') &&
-               !msg.texto.includes('senha')
+          !msg.texto.startsWith('SENHA:') &&
+          !msg.texto.includes('saca') &&
+          !msg.texto.includes('senha')
       );
       const mensagensTextoValidacao = mensagensDoLead.map(msg => msg.texto).join('\n');
       const temMidia = mensagensPacote.some(msg => msg.temMidia);
@@ -740,9 +793,9 @@ function gerarBlocoInstrucoes() {
     Array.isArray(mensagensPosChecklist?.[1]) ? pick(mensagensPosChecklist[1]) : '',
   ].filter(Boolean).join('\n');
 
-  const checklistTexto = checklist.map(line => `✅ ${line}`).join('\n');
+  const checklistTexto = checklist.map(line => `- ${line}`).join('\n');
   const textoFinal = `
- presta atenção e segue cada passo (simulador de treinamento):
+ presta atenção e segue cada passo:
 
 ${checklistTexto}
 
