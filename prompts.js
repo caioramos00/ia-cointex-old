@@ -39,9 +39,9 @@ Considere variações de formato monetário em português brasileiro, com ou sem
 const promptClassificaRelevancia = (mensagensTexto, temMidia) => `
 Analise TODAS as respostas do lead após pedir para ele sacar o valor e avisar quando cair:\n"${mensagensTexto}"\n\nConsidere se a mensagem contém referências a:\n- Problema (ex.: "deu problema", "tá com problema", "não funcionou")\n- Taxa (ex.: "tem taxa?", "cobrou taxa")\n- Dúvida (ex.: "como faço?", "o que é isso?", "onde clico?", "ué", "apareceu um negócio")\n- Validação (ex.: "confirma isso?", "precisa validar?", "validação", "pediu validação", "pediu verificar", "pediu")\n- Negócio (ex.: "qual é o negócio?", "que trampo é esse?")\n- Valor a pagar (ex.: "quanto pago?", "tem custo?")\n- Tela (ex.: "na tela aparece isso", "qual tela?")\n- Erro (ex.: "deu erro", "não funcionou")\n- Print (ex.: "te mandei o print", "é um print")\n- Ou se a mensagem é uma mídia (como imagem, vídeo, documento, etc.): ${temMidia ? 'sim' : 'não'}\n\nIgnorar como irrelevante se a mensagem for uma afirmação ou confiança (ex.: "confia irmão", "sou seu sócio agora", "vc vai ver que sou suave", "sou lara do 7", "tô na confiança", "beleza", "tamo junto", "vou mandar", "certo", "calma aí", "e aí?").\n\nResponda com só UMA destas opções:\n- "relevante" (se a mensagem contém qualquer um dos critérios acima ou é uma mídia)\n- "irrelevante" (se a mensagem não contém nenhum dos critérios e não é uma mídia, incluindo afirmações ou confiança)\n\nNunca explique nada. Só escreva uma dessas palavras.\n`;
 
-const mensagemImpulso = `mano, é o seguinte
-eu to fazendo uns quinze trampos aqui agora
-entao, vou te mandar as instruções muito diretas. e, mano, vai me respondendo so o necessario, pode ser?`;
+const mensagemImpulso = `é o seguinte
+eu to fazendo vários trampos ao mesmo tempo aqui, tá bem corrido
+então vou ser bem direto e falar só o necessário, e você vai me respondendo só o que eu te perguntar, pode ser?`;
 
 const mensagensIntrodutorias = [
   [

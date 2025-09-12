@@ -178,7 +178,7 @@ async function processarMensagensPendentes(contato) {
       if (!estado.aberturaConcluida) {
         const grupo1 = ['salve', 'e aí', 'eae'];
         const grupo2 = ['tô precisando de um lara pra agora', 'preciso de um lara pra agora', 'preciso de lara agora', 'tô precisando de lara agora'];
-        const grupo3 = ['tá disponível?', 'vai poder fazer o trampo?', 'vai poder fazer o trampo agora?', 'bora fazer esse trampo agora?', 'vamos fazer esse trampo agora?'];
+        const grupo3 = ['tá disponível?', 'vai poder fazer o trampo?', 'bora fazer esse trampo?', 'vamos fazer esse trampo?'];
         const resposta = [
           grupo1[Math.floor(Math.random() * grupo1.length)],
           grupo2[Math.floor(Math.random() * grupo2.length)],
@@ -682,7 +682,7 @@ async function processarMensagensPendentes(contato) {
       console.log("[" + contato + "] Etapa encerrada");
       const grupo1 = ['salve', 'e aí', 'eae'];
       const grupo2 = ['tô precisando de um lara pra agora', 'preciso de um lara pra agora', 'preciso de lara agora', 'tô precisando de lara agora'];
-      const grupo3 = ['tá disponível?', 'vai poder fazer o trampo?', 'vai poder fazer o trampo agora?', 'bora fazer esse trampo agora?', 'vamos fazer esse trampo agora?'];
+      const grupo3 = ['tá disponível?', 'vai poder fazer o trampo?', 'bora fazer esse trampo?', 'vamos fazer esse trampo?'];
       const resposta = [
         grupo1[Math.floor(Math.random() * grupo1.length)],
         grupo2[Math.floor(Math.random() * grupo2.length)],
