@@ -246,7 +246,10 @@ async function processarMensagensPendentes(contato) {
 
       if (tipoAceite.includes('aceite') || tipoAceite.includes('duvida')) {
         if (!estado.instrucoesEnviadas) {
-          const mensagemIntro = mensagensIntrodutorias[0][0][Math.floor(Math.random() * mensagensIntrodutorias[0][0].length)];
+          const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random()*arr.length)] : '';
+          const intro1 = pick(mensagensIntrodutorias?.[0]);
+          const intro2 = pick(mensagensIntrodutorias?.[1]);
+          const mensagemIntro = [intro1, intro2].filter(Boolean).join('\n');
           const blocoInstrucoes = gerarBlocoInstrucoes();
           const mensagemCompleta = mensagemIntro + "\n\n" + blocoInstrucoes;
           await enviarLinhaPorLinha(contato, mensagemCompleta);
@@ -712,39 +715,41 @@ async function processarMensagensPendentes(contato) {
 }
 
 function gerarBlocoInstrucoes() {
+  // Helpers
+  const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
+  const pickNested = (arr, i) => (Array.isArray(arr?.[i]) ? pick(arr[i]) : '');
+
   const checklist = [
-    checklistVariacoes[0][Math.floor(Math.random() * checklistVariacoes[0].length)],
-    checklistVariacoes[1][Math.floor(Math.random() * checklistVariacoes[1].length)],
-    checklistVariacoes[2][Math.floor(Math.random() * checklistVariacoes[2].length)],
-    checklistVariacoes[3][Math.floor(Math.random() * checklistVariacoes[3].length)],
-    checklistVariacoes[4][Math.floor(Math.random() * checklistVariacoes[4].length)],
-    checklistVariacoes[5][0][Math.floor(Math.random() * checklistVariacoes[5][0].length)],
-    checklistVariacoes[5][1][Math.floor(Math.random() * checklistVariacoes[5][1].length)],
-    checklistVariacoes[5][2][Math.floor(Math.random() * checklistVariacoes[5][2].length)]
+    pick(checklistVariacoes?.[0]),
+    pick(checklistVariacoes?.[1]),
+    pick(checklistVariacoes?.[2]),
+    pick(checklistVariacoes?.[3]),
+    pickNested(checklistVariacoes?.[4], 0), // Saque
+    pickNested(checklistVariacoes?.[4], 1), // Parte/repasse
   ].filter(line => typeof line === 'string' && line.trim() !== '');
 
   console.log("[Debug] Checklist gerado:", checklist);
 
-  if (checklist.length !== 8) {
-    console.error("[Error] Checklist incompleto, esperado 8 itens, recebido:", checklist.length);
+  if (checklist.length < 5) {
+    console.error("[Error] Checklist incompleto, esperado >=5 itens, recebido:", checklist.length);
     return "Erro ao gerar instruções, tente novamente.";
   }
 
   const posChecklist = [
-    mensagensPosChecklist[0][Math.floor(Math.random() * mensagensPosChecklist[0].length)],
-    mensagensPosChecklist[1][Math.floor(Math.random() * mensagensPosChecklist[1].length)]
-  ].join('\n');
+    Array.isArray(mensagensPosChecklist?.[0]) ? pick(mensagensPosChecklist[0]) : '',
+    Array.isArray(mensagensPosChecklist?.[1]) ? pick(mensagensPosChecklist[1]) : '',
+  ].filter(Boolean).join('\n');
 
   const checklistTexto = checklist.map(line => `✅ ${line}`).join('\n');
   const textoFinal = `
- vou te passar as instruções agora, presta muita atenção e segue todos os passos, não pula nada:
+ presta atenção e segue cada passo (simulador de treinamento):
 
 ${checklistTexto}
 
 ${posChecklist}
   `.trim();
 
-  console.log("[Debug] Texto final gerado em gerarBlocoInstrucoes:\n" + textoFinal);
+  console.log("[Debug] Texto final gerado em gerarBlocoInstrucoes:", textoFinal);
   return textoFinal;
 }
 
