@@ -176,9 +176,9 @@ async function processarMensagensPendentes(contato) {
     if (estado.etapa === 'abertura') {
       console.log("[" + contato + "] Processando etapa abertura");
       if (!estado.aberturaConcluida) {
-        const grupo1 = ['salve mano', 'e aí parceiro', 'salve', 'fala', 'fala mano', 'fala meu mano', 'e aí mano', 'salve irmão', 'salve, salve mano'];
-        const grupo2 = ['tô precisando de um lara pra agora', 'preciso de um lara pra agora', 'preciso de um lara pra agora'];
-        const grupo3 = ['tá disponível?', 'vai poder fazer o trampo?', 'vai poder fazer o trampo agora?'];
+        const grupo1 = ['salve', 'e aí', 'eae'];
+        const grupo2 = ['tô precisando de um lara pra agora', 'preciso de um lara pra agora', 'preciso de lara agora', 'tô precisando de lara agora'];
+        const grupo3 = ['tá disponível?', 'vai poder fazer o trampo?', 'vai poder fazer o trampo agora?', 'bora fazer esse trampo agora?', 'vamos fazer esse trampo agora?'];
         const resposta = [
           grupo1[Math.floor(Math.random() * grupo1.length)],
           grupo2[Math.floor(Math.random() * grupo2.length)],
@@ -680,9 +680,9 @@ async function processarMensagensPendentes(contato) {
 
     if (estado.etapa === 'encerrado') {
       console.log("[" + contato + "] Etapa encerrada");
-      const grupo1 = ['salve mano', 'e aí parceiro', 'salve', 'fala', 'fala mano', 'fala meu mano', 'e aí mano', 'salve irmão', 'salve, salve mano'];
-      const grupo2 = ['tô precisando de um lara pra agora', 'preciso de um lara pra agora', 'preciso de um lara pra agora', 'apareceu um trampo aqui', 'acabou de aparecer um trampo aqui', 'acabou de abrir uma vaga pra lara', 'tem vaga pra lara aqui', 'preciso de lara agora', 'preciso de lara', 'tô precisando de lara agora', 'preciso de lara urgente', 'tô precisando de um lara pra agora', 'acabou de aparecer um trampo aqui', 'apareceu vaga agora'];
-      const grupo3 = ['tá disponível?', 'vai poder fazer o trampo?', 'vai poder fazer o trampo agora?', 'bora fazer esse trampo agora?', 'vamos fazer esse trampo agora?', 'vamos?', 'vai fazer?', 'vai poder fazer?', 'tá pronto?'];
+      const grupo1 = ['salve', 'e aí', 'eae'];
+      const grupo2 = ['tô precisando de um lara pra agora', 'preciso de um lara pra agora', 'preciso de lara agora', 'tô precisando de lara agora'];
+      const grupo3 = ['tá disponível?', 'vai poder fazer o trampo?', 'vai poder fazer o trampo agora?', 'bora fazer esse trampo agora?', 'vamos fazer esse trampo agora?'];
       const resposta = [
         grupo1[Math.floor(Math.random() * grupo1.length)],
         grupo2[Math.floor(Math.random() * grupo2.length)],
