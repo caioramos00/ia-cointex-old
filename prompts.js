@@ -45,21 +45,63 @@ então vou ser bem direto e falar só o necessário, e você vai me respondendo 
 
 const mensagensIntrodutorias = [
   [
-    ['antes de mais nada, já salva meu contato', 'antes de mais nada, salva meu contato', 'já deixa meu contato salvo aí', 'antes de tudo, já salva meu contato']
-  ]
+    'antes de mais nada, já salva meu contato',
+    'antes de mais nada, já deixa meu contato salvo aí',
+    'antes de mais nada, já me adiciona aí nos seus contatos',
+  ],
+  [
+    'pq se aparecer mais um trampo, eu já passo pra você',
+    'porque se aparecer mais um trampo hoje eu já te passo',
+    'se aparecer mais um trampo hoje, você já faz também',
+  ],
 ];
 
 const checklistVariacoes = [
-  ['vou te passar as instruções', 'vou te explicar como funciona', 'vou te falar como funciona', 'vou te explicar como funciona agora'],
-  ['arruma uma conta com pelo menos 5 mil de limite no pix', 'arruma uma conta com pelo menos 5000 de limite no pix', 'vc tem que ter uma conta com pelo menos 5000 de limite no pix', 'a sua conta vai ter que ter pelo menos 5000 de limite no pix'],
-  ['pode ser qualquer banco', 'qualquer banco', 'tanto faz o banco', 'banco físico ou digital'],
-  ['se tiver como, desativa o wi-fi e ativa só os dados móveis', 'se der, desativa o wi-fi e ativa os dados móveis', 'se conseguir, desliga o wi-fi e liga os dados móveis', 'se puder, desliga o wi-fi e liga o 5g'],
-  ['vou te mandar uma conta com usuário e senha pra acessar', 'vou te passar os dados pra vc acessar uma conta', 'vou te mandar os dados de acesso da conta pra entrar', 'vou te passar usuário e senha de uma conta', 'vou te mandar os dados de login pra entrar na conta'],
+  // (0) Pré-requisito (PIX ativo)
   [
-    ['vc vai sacar R$ 5000 dessa conta pra sua conta de recebimento', 'vc vai sacar R$ 5000 dessa conta pra sua conta de recebimento', 'vc vai sacar R$ 5000 do saldo disponível lá pra sua conta bancária'],
-    ['sua parte vai ser R$ 2000 nesse trampo, e vc vai mandar o restante pra gente assim que cair', 'sua parte nesse trampo é de R$ 2000, manda o restante pra minha conta assim que cair', 'vc fica com R$ 2000 desse trampo, o resto manda pra gente assim que cair', 'sua parte é R$ 2000, o restante manda pra minha conta logo que cair'],
-    ['sem gracinha', 'certo pelo certo', 'sem sumir depois']
-  ]
+    'você precisa ter uma conta com pix ativo pra receber o dinheiro',
+    'você tem que ter uma conta com pix ativo pra receber o dinheiro',
+    'você precisa de uma conta com pix ativo pra receber o dinheiro',
+  ],
+
+  // (1) Banco
+  [
+    'pode ser qualquer banco, físico ou digital, tanto faz',
+    'pode ser banco físico ou digital, tanto faz',
+    'pode ser qualquer tipo de banco, físico ou digital',
+  ],
+
+  // (2) Conexão (inalterado)
+  [
+    'se tiver como, desativa o wi-fi e ativa só os dados móveis',
+    'se der, desativa o wi-fi e ativa os dados móveis',
+    'se conseguir, desliga o wi-fi e liga os dados móveis',
+    'se puder, desliga o wi-fi e liga o 5g',
+  ],
+
+  // (3) Acesso (credenciais)
+  [
+    'vou te passar o email e a senha de uma conta pra você entrar',
+    'vou te passar o email e a senha de uma conta pra você acessar',
+    'vou te passar o email e a senha de uma conta pra vc entrar',
+  ],
+
+  // (4) Bloco final (sem "reforço")
+  [
+    // Saque
+    [
+      'vc vai sacar R$ 5000 dessa conta pra sua conta de recebimento',
+      'vc vai sacar R$ 5000 dessa conta pra sua conta de recebimento',
+      'vc vai sacar R$ 5000 do saldo disponível lá pra sua conta bancária',
+    ],
+    // Parte / repasse
+    [
+      'sua parte vai ser R$ 2000 nesse trampo, e vc vai mandar o restante pra gente assim que cair',
+      'sua parte nesse trampo é de R$ 2000, manda o restante pra minha conta assim que cair',
+      'vc fica com R$ 2000 desse trampo, o resto manda pra gente assim que cair',
+      'sua parte é R$ 2000, o restante manda pra minha conta logo que cair',
+    ],
+  ],
 ];
 
 const mensagensPosChecklist = [

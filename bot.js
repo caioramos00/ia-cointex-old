@@ -737,7 +737,7 @@ function gerarBlocoInstrucoes() {
 
   const checklistTexto = checklist.map(line => `✅ ${line}`).join('\n');
   const textoFinal = `
-⚠ presta atenção e segue cada passo, não pula nada:
+ vou te passar as instruções agora, presta muita atenção e segue todos os passos, não pula nada:
 
 ${checklistTexto}
 
