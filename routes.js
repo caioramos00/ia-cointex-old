@@ -178,6 +178,31 @@ function setupRoutes(app, path, processarMensagensPendentes, inicializarEstado, 
                                 }
                             }
 
+                            try {
+                                const wa_id = (value?.contacts && value.contacts[0]?.wa_id) || msg.from || '';
+                                const profile_name = (value?.contacts && value.contacts[0]?.profile?.name) || '';
+                                const contactPayload = {
+                                    wa_id,
+                                    phone_number_id: value?.metadata?.phone_number_id || '',
+                                    display_phone_number: value?.metadata?.display_phone_number || '',
+                                    tid,                                           // pode vir da landing (TID no texto) ou vazio
+                                    ctwa_clid: is_ctwa ? (referral.ctwa_clid || '') : '',
+                                    timestamp: msg.timestamp || '',
+                                    wamid: msg.id || '',
+                                    profile_name
+                                    // test_event_code: 'SEU_TEST_CODE' // opcional, só se quiser testar no Events Manager
+                                };
+
+                                await axios.post(`${LANDING_URL}/capi/contact`, contactPayload);
+                                console.log(`[Webhook] Contact enviado ao distribuidor:`, {
+                                    wa_id: contactPayload.wa_id,
+                                    tid: contactPayload.tid,
+                                    ctwa: is_ctwa
+                                });
+                            } catch (err) {
+                                console.error('[Webhook] Falha ao enviar Contact ao distribuidor:', err.message);
+                            }
+
                             if (!estadoContatos[contato]) {
                                 inicializarEstado(contato, tid, click_type);  // Atualizado: Passa tid e click_type
                                 await criarUsuarioDjango(contato);

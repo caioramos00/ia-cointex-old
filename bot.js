@@ -28,7 +28,7 @@ async function gerarResposta(messages, max_tokens = 60) {
     return resposta;
   } catch (error) {
     console.error("[OpenAI] Erro: " + error.message);
-    return 'mano, deu um erro aqui, tenta de novo depois';
+    return 'deu um erro aqui, tenta de novo depois';
   }
 }
 
@@ -210,7 +210,7 @@ async function processarMensagensPendentes(contato) {
           console.log("[" + contato + "] Avançando para etapa impulso");
         } else if (tipoAceite.includes('recusa')) {
           if (estado.negativasAbertura < 2) {
-            const insistencias = ['vamo maluco, é rapidão', 'demora nada, bora nessa', 'tá com medo de que, mano?'];
+            const insistencias = ['vamo maluco, é rapidão', 'demora nada, bora nessa', 'tá com medo de que?'];
             const insistencia = insistencias[estado.negativasAbertura];
             await enviarLinhaPorLinha(contato, insistencia);
             estado.negativasAbertura++;
@@ -234,7 +234,7 @@ async function processarMensagensPendentes(contato) {
           await atualizarContato(contato, 'Sim', 'impulso', mensagemImpulso);
           console.log("[" + contato + "] Resposta classificada como dúvida, avançando para impulso");
         } else {
-          const mensagem = 'manda aí se vai ou não, mano';
+          const mensagem = 'manda aí se vai ou não';
           await enviarLinhaPorLinha(contato, mensagem);
           estado.historico.push({ role: 'assistant', content: mensagem });
           await atualizarContato(contato, 'Sim', 'abertura', mensagem);
@@ -290,7 +290,7 @@ async function processarMensagensPendentes(contato) {
             estado.mensagensDesdeSolicitacao = [];
             console.log("[" + contato + "] Etapa 4: acesso - credenciais enviadas");
           } else {
-            const mensagem = 'mano, ainda tô esperando os dados da conta, faz aí direitinho e me avisa';
+            const mensagem = 'ainda tô esperando os dados da conta, faz aí direitinho e me avisa';
             await enviarLinhaPorLinha(contato, mensagem);
             estado.historico.push({ role: 'assistant', content: mensagem });
             await atualizarContato(contato, 'Sim', 'instruções', mensagem);
@@ -301,7 +301,7 @@ async function processarMensagensPendentes(contato) {
       } else if (tipoAceite.includes('recusa')) {
         if (!estado.negativasAbertura) estado.negativasAbertura = 0;
         if (estado.negativasAbertura < 2) {
-          const insistencias = ['vamo maluco, é rapidão', 'demora nada, bora nessa', 'tá com medo de que, mano?'];
+          const insistencias = ['vamo maluco, é rapidão', 'demora nada, bora nessa', 'tá com medo de que?'];
           const insistencia = insistencias[estado.negativasAbertura];
           await enviarLinhaPorLinha(contato, insistencia);
           estado.negativasAbertura++;
@@ -317,7 +317,7 @@ async function processarMensagensPendentes(contato) {
           console.log("[" + contato + "] Etapa encerrada (aguardando lead retomar)");
         }
       } else {
-        const mensagem = 'manda aí se vai ou não, mano';
+        const mensagem = 'manda aí se vai ou não';
         await enviarLinhaPorLinha(contato, mensagem);
         estado.historico.push({ role: 'assistant', content: mensagem });
         await atualizarContato(contato, 'Sim', 'impulso', mensagem);
@@ -362,7 +362,7 @@ async function processarMensagensPendentes(contato) {
               estado.mensagensDesdeSolicitacao = [];
               console.log("[" + contato + "] Etapa 4: acesso - credenciais enviadas após timeout");
             } else {
-              const mensagem = 'mano, ainda tô esperando os dados da conta, faz aí direitinho e me avisa';
+              const mensagem = 'ainda tô esperando os dados da conta, faz aí direitinho e me avisa';
               await enviarLinhaPorLinha(contato, mensagem);
               estado.historico.push({ role: 'assistant', content: mensagem });
               await atualizarContato(contato, 'Sim', 'instruções', mensagem);
@@ -406,7 +406,7 @@ async function processarMensagensPendentes(contato) {
           await atualizarContato(contato, 'Sim', 'acesso', resposta);
           console.log("[" + contato + "] Etapa 4: acesso - tentativa " + (estado.tentativasAcesso + 1) + "/2, insistindo");
         } else {
-          const mensagem = 'mano, não rolou, tenta de novo outra hora';
+          const mensagem = 'não rolou, tenta de novo outra hora';
           await enviarLinhaPorLinha(contato, mensagem);
           estado.etapa = 'encerrado';
           estado.encerradoAte = Date.now() + 3 * 60 * 60 * 1000;
@@ -466,9 +466,9 @@ async function processarMensagensPendentes(contato) {
       if (tipoConfirmacao.includes('confirmado') && saldoInformado) {
         estado.saldo_informado = saldoInformado;
         const saqueVariacoes = [
-          'beleza, mano, saca R$ 5155 (descontando a taxa de 3%, vai cair R$ 5000 certinho) dessa conta',
-          'beleza, mano, pode sacar R$ 5155 (descontando a taxa de 3%, vai cair R$ 5000 certinho) dessa conta',
-          'beleza, mano, saca R$ 5155 (descontando a taxa de 3%, vai cair R$ 5000 certinho)',
+          'beleza, saca R$ 5155 (descontando a taxa de 3%, vai cair R$ 5000 certinho) dessa conta',
+          'beleza, pode sacar R$ 5155 (descontando a taxa de 3%, vai cair R$ 5000 certinho) dessa conta',
+          'beleza, saca R$ 5155 (descontando a taxa de 3%, vai cair R$ 5000 certinho)',
           'certo, pode sacar R$ 5155 (descontando a taxa de 3%, vai cair R$ 5000 certinho)',
           'certo, saca R$ 5155 (descontando a taxa de 3%, vai cair R$ 5000 certinho)',
           'pode sacar R$ 5155 (descontando a taxa de 3%, vai cair R$ 5000 certinho)',
@@ -502,12 +502,12 @@ async function processarMensagensPendentes(contato) {
           'pra eu te mostrar como vc vai mandar minha parte'
         ];
         const avisoVariacao = [
-          'sem gracinha, mano',
-          'certo pelo certo, mano',
-          'não pisa na bola, mano',
-          'faz direitinho, mano',
-          'manda certinho, mano',
-          'manda tudo certo, mano'
+          'sem gracinha',
+          'certo pelo certo',
+          'não pisa na bola',
+          'faz direitinho',
+          'manda certinho',
+          'manda tudo certo'
         ];
         const confiancaVariacao = [
           'tô confiando em vc, se fazer certinho tem mais trampo. se tiver qualquer problema pra sacar me manda um PRINT (ou uma foto da tela)',
@@ -543,7 +543,7 @@ async function processarMensagensPendentes(contato) {
           await atualizarContato(contato, 'Sim', 'confirmacao', resposta);
           console.log("[" + contato + "] Etapa 5: confirmação - tentativa " + (estado.tentativasConfirmacao + 1) + "/2, insistindo");
         } else {
-          const mensagem = 'mano, não deu certo, tenta de novo outra hora';
+          const mensagem = 'não deu certo, tenta de novo outra hora';
           await enviarLinhaPorLinha(contato, mensagem);
           estado.etapa = 'encerrado';
           estado.encerradoAte = Date.now() + 3 * 60 * 60 * 1000;
@@ -591,11 +591,11 @@ async function processarMensagensPendentes(contato) {
         estado.aguardandoPrint = false;
         estado.etapa = 'validacao';
         const respostas = [
-          ['calma ai', 'calma ai irmão', 'calma aí mano', 'perai mano', 'perai'][Math.floor(Math.random() * 5)],
+          ['calma ai', 'calma ai', 'calma aí', 'perai', 'perai'][Math.floor(Math.random() * 5)],
           ['pediu validação', 'pediu pra validar a conta', 'pediu validação bancária', 'caiu na validação', 'pediu verificação'][Math.floor(Math.random() * 5)],
           ['confirma aí, vai clicando em "Próximo"', 'vai clicando em "Próximo"', 'vai clicando em "Próximo" ai', 'pode ir clicando em "Próximo aí"'][Math.floor(Math.random() * 4)],
           ['vou falar com a menina aqui', 'vou falar com a menina que trabalha lá', 'vou falar com a menina do esquema aqui', 'vou falar com a menina que trampa lá'][Math.floor(Math.random() * 4)],
-          ['aguarda 5m irmão', 'espera 5m aí', 'aguarda 5m aí mano', '5m já resolvo', 'espera 5m mano'][Math.floor(Math.random() * 5)]
+          ['aguarda 5m', 'espera 5m aí', 'aguarda 5m aí', '5m já resolvo', 'espera 5m'][Math.floor(Math.random() * 5)]
         ];
         for (const msg of respostas) {
           await enviarLinhaPorLinha(contato, msg);
@@ -621,8 +621,8 @@ async function processarMensagensPendentes(contato) {
             'vou precisar sair pra resolver um problema aqui',
             'mas não deixa de validar não',
             'assim que o saque cair na sua conta me avisa aqui',
-            'o saldo dessa conta vai expirar em pouco tempo',
-            'então não perde esse dinheiro todo por causa de merreca não'
+            'o saldo dessa conta vai expirar em pouco tempo, então não perde esse dinheiro todo por causa de 17 reais não',
+            'vou sair aqui, mas daqui uns 10 minutos já volto e te chamo, espera aí'
           ];
           for (let i = 0; i < mensagensPosTimeout.length; i++) {
             console.log("[" + contato + "] Enviando mensagem com delay: " + mensagensPosTimeout[i]);
@@ -633,10 +633,9 @@ async function processarMensagensPendentes(contato) {
               estado.acompanhamentoTimeout = null;
               console.log("[" + contato + "] Todas as mensagens pós-timeout enviadas");
             }
-            // --- NOVO: se esta mensagem for a frase-gatilho, agenda o timeout de 10 minutos
             if (
               mensagensPosTimeout[i] &&
-              mensagensPosTimeout[i].toLowerCase().includes('então não perde esse dinheiro todo por causa de merreca não')
+              mensagensPosTimeout[i].toLowerCase().includes('vou sair aqui, mas daqui uns 10 minutos já volto e te chamo, espera aí')
             ) {
               try {
                 if (estado.merrecaTimeout) {
@@ -645,17 +644,17 @@ async function processarMensagensPendentes(contato) {
                 estado.merrecaTimeout = setTimeout(async () => {
                   try {
                     const blocoMerreca = [
-                      "Foi mal a demora, tava em ligação aqui",
-                      "Falei com o pessoal la da Cointex, eu to puto hoje, deu b.o em varias contas",
-                      "Eu nao sei se voce ja validou ai pra receber o saque pq as mensagens apagaram aqui",
-                      "Mas é o seguinte",
-                      "Parece que o banco que faz as transações la ta com problema hoje, aí as contas nao tão liberando o saldo no mesmo dia",
-                      "Primeira vez que acontece isso aqui 🤦‍♂",
-                      "Mas me disseram pra ficar tranquilo, que é normal, se a conta estiver ativa vai cair o saque normalmente depois da verificação",
-                      "Só ta com atraso mesmo",
-                      "Se voce ja sacou é só esperar.. Se voce ainda nao tiver sacado, pode sacar, nao perde essa grana por causa de merreca man pelo amor de Deus kkkk",
-                      "Vou salvar seu contato, amanhã vamos precisar de Lara pra outra plataforma e te chamo também, aí não tem isso de verificar nem nada.",
-                      "Depois eu te chamo ai, tranquilo?"
+                      "foi mal a demora, tava em ligação aqui",
+                      "falei com o pessoal lá da Cointex, eu to puto hoje, tive esse problema pra sacar em várias contas",
+                      "eu não sei se você já validou aí pra receber o saque, porque apaguei nossas mensagens aqui sem querer",
+                      "mas é o seguinte",
+                      "parece que o banco que faz as transações lá tá com problema hoje, aí as contas não tão liberando o saldo no mesmo dia",
+                      "primeira vez que acontece isso aqui 🤦‍♂",
+                      "mas me disseram pra ficar tranquilo, que é normal, se a conta estiver ativa vai cair o saque normalmente depois da verificação",
+                      "só tá com atraso mesmo",
+                      "se você já validou é só esperar.. Se você ainda não tiver validado, pode validar, não perde essa grana por causa de 17 reais kkkk",
+                      "vou salvar seu contato, amanhã vamos precisar de Lara pra outra plataforma e te chamo também, lá não vamos ter isso de verificar",
+                      "se eu tiver qualquer novidade eu te chamo ai, tranquilo? desculpa aí pelo imprevisto"
                     ];
 
                     for (const msg of blocoMerreca) {
@@ -731,8 +730,8 @@ async function processarMensagensPendentes(contato) {
         if (!estado.aguardandoPrint) {
           estado.aguardandoPrint = true;
           const respostas = [
-            ['o que deu aí irmão?', 'o que apareceu aí?', 'o que apareceu aí mano?', 'o que aconteceu?'][Math.floor(Math.random() * 4)],
-            ['manda PRINT', 'me manda um PRINT', 'manda um PRINT aí', 'me manda um PRINT aí irmão'][Math.floor(Math.random() * 4)]
+            ['o que deu aí?', 'o que apareceu aí?', 'o que apareceu aí?', 'o que aconteceu?'][Math.floor(Math.random() * 4)],
+            ['manda PRINT', 'me manda um PRINT', 'manda um PRINT aí', 'me manda um PRINT aí'][Math.floor(Math.random() * 4)]
           ];
           for (const msg of respostas) {
             await enviarLinhaPorLinha(contato, msg);
@@ -805,7 +804,7 @@ async function processarMensagensPendentes(contato) {
   } catch (error) {
     console.error("[" + contato + "] Erro em processarMensagensPendentes: " + error.message);
     estadoContatos[contato].mensagensPendentes = [];
-    const mensagem = 'mano, vou ter que sair aqui, daqui a pouco te chamo';
+    const mensagem = 'vou ter que sair aqui, daqui a pouco te chamo';
     await enviarLinhaPorLinha(contato, mensagem);
     await atualizarContato(contato, 'Sim', estadoContatos[contato].etapa, mensagem);
   }
