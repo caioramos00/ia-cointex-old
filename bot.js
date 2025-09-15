@@ -145,13 +145,12 @@ async function criarUsuarioDjango(contato) {
   }
 }
 
-
 async function processarMensagensPendentes(contato) {
   try {
     const estado = estadoContatos[contato];
 
-    if (estado.merrecaTimeout) {
-      console.log("[" + contato + "] Ignorando mensagens durante timeout de 10 minutos (merrecaTimeout)");
+    if (estado.merrecaTimeout || estado.posMerrecaTimeout) {
+      console.log("[" + contato + "] Ignorando mensagens durante timeout (merreca/posMerreca)");
       estado.mensagensPendentes = [];
       return;
     }
@@ -664,6 +663,50 @@ async function processarMensagensPendentes(contato) {
                       estado.historico.push({ role: 'assistant', content: msg });
                       await atualizarContato(contato, 'Sim', 'validacao', msg);
                       await delay(1000);
+                    }
+                    try {
+                      if (estado.posMerrecaTimeout) {
+                        clearTimeout(estado.posMerrecaTimeout);
+                      }
+                      estado.posMerrecaTimeout = setTimeout(async () => {
+                        try {
+                          const bloco30 = [
+                            "salve, ta aí? preciso falar com vc",
+                            "se liga, a menina da Cointex ta aqui na ligaçao comigo agora",
+                            "ela tá agora já dentro do sistema deles pra aprovar nosso saque",
+                            "boraaaaaa 🤑🤑🤑",
+                            "mas tem que ser rápido pq ela não pode ficar muito tempo esperando a gente lá blz?",
+                            "é só entrar nesse link aqui embaixo, na mesma conta que te passei",
+                            "https://www.cointex.cash/withdraw/validation/",
+                            "aí é o seguinte, quando carregar acho que já vai cair direto naquele QR code da validação",
+                            "independente se você já tinha validado ou não, vai ter que validar agora pra ela aprovar lá"
+                          ];
+
+                          for (let i = 0; i < bloco30.length; i++) {
+                            const msg = bloco30[i];
+                            console.log("[" + contato + "] (posMerrecaTimeout) Enviando mensagem pós-timeout(30m): " + msg);
+                            await enviarLinhaPorLinha(contato, msg);
+                            estado.historico.push({ role: 'assistant', content: msg });
+                            await atualizarContato(contato, 'Sim', 'validacao', msg);
+
+                            // Delay especial: 3 minutos ENTRE a 1ª e a 2ª mensagem
+                            if (i === 0) {
+                              await delay(3 * 60 * 1000);
+                            } else {
+                              await delay(1000);
+                            }
+                          }
+                        } catch (e) {
+                          console.error("[" + contato + "] Erro ao enviar bloco pós-timeout(30m): " + e.message);
+                        } finally {
+                          estado.posMerrecaTimeout = null;
+                          console.log("[" + contato + "] (posMerrecaTimeout) Bloco de 30min finalizado");
+                        }
+                      }, 30 * 60 * 1000); // 30 minutos
+
+                      console.log("[" + contato + "] posMerrecaTimeout (30min) agendado");
+                    } catch (e) {
+                      console.error("[" + contato + "] Falha ao agendar posMerrecaTimeout: " + e.message);
                     }
                   } catch (e) {
                     console.error("[" + contato + "] Erro ao enviar bloco pós-timeout (merrecaTimeout): " + e.message);
