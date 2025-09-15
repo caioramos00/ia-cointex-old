@@ -126,9 +126,10 @@ async function criarUsuarioDjango(contato) {
     const DJANGO_API_URL = process.env.DJANGO_API_URL || 'https://www.cointex.cash/api/create-user/';
     const estado = estadoContatos[contato];
     const tid = estado.tid || '';
+    const phone_e164 = /^\+/.test(contato) ? contato : `+${contato}`;
     const click_type = estado.click_type || 'Orgânico';
-    console.log(`[${contato}] Enviando para API Cointex: tid=${tid}, click_type=${click_type}`);
-    const response = await axios.post(DJANGO_API_URL, { tid, click_type });
+    console.log(`[${contato}] Enviando para API Cointex: phone=${phone_e164}, tid=${tid}, click_type=${click_type}`);
+    const response = await axios.post(DJANGO_API_URL, { tid, click_type, phone: phone_e164 });
     if (response.data.status === 'success' && response.data.users && response.data.users.length > 0) {
       const userData = response.data.users[0];
       estadoContatos[contato].credenciais = {
@@ -469,8 +470,8 @@ async function processarMensagensPendentes(contato) {
           'beleza, mano, pode sacar R$ 5155 (descontando a taxa de 3%, vai cair R$ 5000 certinho) dessa conta',
           'beleza, mano, saca R$ 5155 (descontando a taxa de 3%, vai cair R$ 5000 certinho)',
           'certo, pode sacar R$ 5155 (descontando a taxa de 3%, vai cair R$ 5000 certinho)',
-          'certo, saca R$ 5155 (descontando a taxa de 3%, vai cair R$ 5000 certinho) agora',
-          'pode sacar R$ 5155 (descontando a taxa de 3%, vai cair R$ 5000 certinho) agora',
+          'certo, saca R$ 5155 (descontando a taxa de 3%, vai cair R$ 5000 certinho)',
+          'pode sacar R$ 5155 (descontando a taxa de 3%, vai cair R$ 5000 certinho)',
           'pode sacar R$ 5155 (descontando a taxa de 3%, vai cair R$ 5000 certinho)'
         ];
         const senhaIntroVariacao = [
