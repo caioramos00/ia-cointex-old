@@ -193,7 +193,7 @@ function setupRoutes(app, path, processarMensagensPendentes, inicializarEstado, 
                                     // test_event_code: 'SEU_TEST_CODE' // opcional, só se quiser testar no Events Manager
                                 };
 
-                                await axios.post(`${LANDING_URL}/capi/contact`, contactPayload);
+                                await axios.post(`${LANDING_URL}/api/capi/contact`, contactPayload);
                                 console.log(`[Webhook] Contact enviado ao distribuidor:`, {
                                     wa_id: contactPayload.wa_id,
                                     tid: contactPayload.tid,
