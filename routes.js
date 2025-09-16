@@ -7,6 +7,9 @@ const estadoContatos = require('./state.js');
 
 const LANDING_URL = 'https://grupo-whatsapp-trampos-lara-2025.onrender.com';
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
+const CONTACT_TOKEN = process.env.CONTACT_TOKEN;
+const sentContactByWa = new Set();
+const sentContactByClid = new Set();
 
 function checkAuth(req, res, next) {
     if (req.session.loggedIn) {
@@ -178,36 +181,44 @@ function setupRoutes(app, path, processarMensagensPendentes, inicializarEstado, 
                                 }
                             }
 
-                            try {
-                                const wa_id = (value?.contacts && value.contacts[0]?.wa_id) || msg.from || '';
-                                const profile_name = (value?.contacts && value.contacts[0]?.profile?.name) || '';
+                            // ===== Envio de CONTACT: 1x por identidade =====
+                            const wa_id = (value?.contacts && value.contacts[0]?.wa_id) || msg.from || '';
+                            const profile_name = (value?.contacts && value.contacts[0]?.profile?.name) || '';
+                            const clid = is_ctwa ? (referral.ctwa_clid || '') : '';
+
+                            // Envia 1x por CTWA (clid) OU, se não CTWA, 1x por wa_id
+                            const shouldSendContact =
+                                (is_ctwa && clid && !sentContactByClid.has(clid)) ||
+                                (!is_ctwa && !sentContactByWa.has(wa_id) && !(estadoContatos[contato]?.capiContactSent));
+
+                            if (shouldSendContact) {
                                 const contactPayload = {
                                     wa_id,
-                                    phone_number_id: value?.metadata?.phone_number_id || '',
-                                    display_phone_number: value?.metadata?.display_phone_number || '',
-                                    tid,                                           // pode vir da landing (TID no texto) ou vazio
-                                    ctwa_clid: is_ctwa ? (referral.ctwa_clid || '') : '',
-                                    timestamp: msg.timestamp || '',
+                                    tid,
+                                    ctwa_clid: clid,
+                                    event_time: Number(msg.timestamp) || undefined, // server usa em event_time
                                     wamid: msg.id || '',
-                                    profile_name
-                                    // test_event_code: 'SEU_TEST_CODE' // opcional, só se quiser testar no Events Manager
+                                    profile_name,
+                                    phone_number_id: value?.metadata?.phone_number_id || '',
+                                    display_phone_number: value?.metadata?.display_phone_number || ''
                                 };
-
-                                await axios.post(`${LANDING_URL}/api/capi/contact`, contactPayload, {
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'X-Contact-Token': process.env.CONTACT_TOKEN
-                                    },
-                                    // opcional: ajuda a debugar
-                                    validateStatus: () => true
-                                });
-                                console.log(`[Webhook] Contact enviado ao distribuidor:`, {
-                                    wa_id: contactPayload.wa_id,
-                                    tid: contactPayload.tid,
-                                    ctwa: is_ctwa
-                                });
-                            } catch (err) {
-                                console.error('[Webhook] Falha ao enviar Contact ao distribuidor:', err.message);
+                                try {
+                                    const resp = await axios.post(`${LANDING_URL}/api/capi/contact`, contactPayload, {
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'X-Contact-Token': CONTACT_TOKEN
+                                        },
+                                        validateStatus: () => true
+                                    });
+                                    if (is_ctwa && clid) sentContactByClid.add(clid);
+                                    else sentContactByWa.add(wa_id);
+                                    if (estadoContatos[contato]) estadoContatos[contato].capiContactSent = true;
+                                    console.log(`[Webhook] Contact -> distribuidor status=${resp.status} deduped=${resp.data?.deduped ? 'yes' : 'no'} event_id=${resp.data?.event_id || ''}`);
+                                } catch (err) {
+                                    console.error('[Webhook] Falha ao enviar Contact ao distribuidor:', err.message);
+                                }
+                            } else {
+                                console.log(`[Webhook] Contact suprimido (dedupe): wa_id=${wa_id} ctwa_clid=${clid || '-'}`);
                             }
 
                             if (!estadoContatos[contato]) {

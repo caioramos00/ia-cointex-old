@@ -115,7 +115,8 @@ function inicializarEstado(contato, tid = '', click_type = 'Orgânico') {
     instrucoesCompletas: false,
     aguardandoPrint: false,
     tid: tid,
-    click_type: click_type
+    click_type: click_type,
+    capiContactSent: false
   };
   atualizarContato(contato, 'Sim', 'abertura');
   console.log(`[${contato}] Estado inicializado e contato atualizado: Sim, abertura. TID: ${tid}, click_type: ${click_type}`);
