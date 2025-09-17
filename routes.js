@@ -3,6 +3,7 @@ const express = require('express');
 const axios = require('axios');
 const { pool } = require('./db.js');
 const { delay } = require('./bot.js');
+const { getBotSettings, updateBotSettings } = require('./db.js');
 const estadoContatos = require('./state.js');
 
 const LANDING_URL = 'https://grupo-whatsapp-trampos-lara-2025.onrender.com';
@@ -43,6 +44,33 @@ function setupRoutes(app, path, processarMensagensPendentes, inicializarEstado, 
 
     app.get('/dashboard', checkAuth, (req, res) => {
         res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+    });
+
+    app.get('/admin/settings', checkAuth, async (req, res) => {
+        try {
+            const settings = await getBotSettings({ bypassCache: true });
+            res.render('settings.ejs', { settings, ok: req.query.ok === '1' });
+        } catch (e) {
+            console.error('[AdminSettings][GET]', e.message);
+            res.status(500).send('Erro ao carregar configurações.');
+        }
+    });
+
+    app.post('/admin/settings', checkAuth, async (req, res) => {
+        try {
+            const payload = {
+                identity_enabled: !!req.body.identity_enabled,
+                identity_label: (req.body.identity_label || '').trim(),
+                support_email: (req.body.support_email || '').trim() || null,
+                support_phone: (req.body.support_phone || '').trim() || null,
+                support_url: (req.body.support_url || '').trim() || null,
+            };
+            await updateBotSettings(payload);
+            res.redirect('/admin/settings?ok=1');
+        } catch (e) {
+            console.error('[AdminSettings][POST]', e.message);
+            res.status(500).send('Erro ao salvar configurações.');
+        }
     });
 
     app.get('/api/metrics', checkAuth, async (req, res) => {

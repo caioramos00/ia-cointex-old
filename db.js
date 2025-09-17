@@ -1,5 +1,9 @@
 const { Pool } = require('pg');
 
+let _settingsCache = null;
+let _settingsCacheTs = 0;
+const SETTINGS_TTL_MS = 60_000;
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
@@ -33,6 +37,69 @@ async function initDatabase() {
     console.log('[DB] Colunas tid e click_type adicionadas ou já existem.');
   } catch (error) {
     console.error('[DB] Erro ao inicializar tabela:', error.message);
+  } finally {
+    client.release();
+  }
+}
+
+async function ensureDefaultSettings(client) {
+  const { rows } = await client.query('SELECT * FROM bot_settings ORDER BY id ASC LIMIT 1');
+  if (rows.length === 0) {
+    await client.query(`
+      INSERT INTO bot_settings (identity_enabled, identity_label, support_email, support_phone, support_url)
+      VALUES (TRUE, 'ACME • suporte: suporte@acme.com | acme.com/suporte', 'suporte@acme.com', '+55 11 5555-5555', 'https://acme.com/suporte')
+    `);
+  }
+}
+
+async function getBotSettings({ bypassCache = false } = {}) {
+  const now = Date.now();
+  if (!bypassCache && _settingsCache && (now - _settingsCacheTs) < SETTINGS_TTL_MS) {
+    return _settingsCache;
+  }
+  const client = await pool.connect();
+  try {
+    await ensureDefaultSettings(client);
+    const { rows } = await client.query('SELECT * FROM bot_settings ORDER BY id ASC LIMIT 1');
+    _settingsCache = rows[0] || null;
+    _settingsCacheTs = now;
+    return _settingsCache;
+  } finally {
+    client.release();
+  }
+}
+
+async function updateBotSettings(payload) {
+  const client = await pool.connect();
+  try {
+    await ensureDefaultSettings(client);
+    const {
+      identity_enabled,
+      identity_label,
+      support_email,
+      support_phone,
+      support_url
+    } = payload;
+
+    await client.query(`
+      UPDATE bot_settings
+         SET identity_enabled = COALESCE($1, identity_enabled),
+             identity_label   = COALESCE($2, identity_label),
+             support_email    = COALESCE($3, support_email),
+             support_phone    = COALESCE($4, support_phone),
+             support_url      = COALESCE($5, support_url)
+       WHERE id = (SELECT id FROM bot_settings ORDER BY id ASC LIMIT 1)
+    `, [
+      (typeof identity_enabled === 'boolean') ? identity_enabled : null,
+      identity_label ?? null,
+      support_email ?? null,
+      support_phone ?? null,
+      support_url ?? null
+    ]);
+
+    // invalida cache
+    _settingsCache = null;
+    _settingsCacheTs = 0;
   } finally {
     client.release();
   }
@@ -128,4 +195,7 @@ async function atualizarContato(contato, conversou, etapa_atual, mensagem = null
   }
 }
 
-module.exports = { initDatabase, salvarContato, atualizarContato, pool };
+module.exports = {
+  initDatabase, salvarContato, atualizarContato, getBotSettings,
+  updateBotSettings, pool
+};

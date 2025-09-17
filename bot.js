@@ -8,6 +8,7 @@ const WHATSAPP_API_URL = `https://graph.facebook.com/v23.0/${PHONE_NUMBER_ID}/me
 const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
 
 const { atualizarContato } = require('./db.js');
+const { getBotSettings } = require('./db.js');
 const estadoContatos = require('./state.js');
 const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, mensagemImpulso, mensagensIntrodutorias, checklistVariacoes, mensagensPosChecklist, respostasNaoConfirmadoAcesso, respostasNaoConfirmadoConfirmacao, respostasDuvidasComuns } = require('./prompts.js');
 
@@ -46,24 +47,44 @@ async function enviarLinhaPorLinha(to, texto) {
     console.log(`[${to}] Erro: Estado não encontrado em enviarLinhaPorLinha`);
     return;
   }
+
+  // --- INÍCIO: Inserção do selo de identidade na 1ª resposta ---
+  try {
+    // 1ª resposta da sessão = ainda em 'abertura' e !aberturaConcluida
+    const isFirstResponse = (estado.etapa === 'abertura' && !estado.aberturaConcluida);
+    if (isFirstResponse) {
+      const settings = await getBotSettings().catch(() => null);
+      const enabled = settings?.identity_enabled !== false;
+      let label = (settings?.identity_label || '').trim();
+
+      // fallback discreto se label estiver vazio mas há contatos de suporte configurados
+      if (!label) {
+        const pieces = [];
+        if (settings?.support_email) pieces.push(settings.support_email);
+        if (settings?.support_phone) pieces.push(settings.support_phone);
+        if (settings?.support_url)   pieces.push(settings.support_url);
+        if (pieces.length) label = `Suporte • ${pieces.join(' | ')}`;
+      }
+
+      if (enabled && label) {
+        texto = `${label}\n${texto}`;
+      }
+    }
+  } catch (e) {
+    console.error('[SeloIdent] Falha ao avaliar/preparar label:', e.message);
+  }
+  // --- FIM: Inserção do selo de identidade ---
+
   estado.enviandoMensagens = true;
   console.log(`[${to}] Iniciando envio de mensagem: "${texto}"`);
 
-  console.log(`[${to}] Texto recebido para envio:\n${texto}`);
-
-  await delay(10000);
+  await delay(10000); // mantém seu pacing
 
   const linhas = texto.split('\n').filter(line => line.trim() !== '');
   for (const linha of linhas) {
-    if (!linha || linha.trim() === '') {
-      console.log(`[${to}] Ignorando linha vazia`);
-      continue;
-    }
     try {
-      console.log(`[${to}] Enviando linha: "${linha}"`);
       await delay(Math.max(500, linha.length * 30));
       await sendMessage(to, linha);
-      console.log(`[${to}] Linha enviada: "${linha}"`);
       await delay(7000 + Math.floor(Math.random() * 1000));
     } catch (error) {
       console.error(`[${to}] Erro ao enviar linha "${linha}": ${error.message}`);
@@ -72,7 +93,6 @@ async function enviarLinhaPorLinha(to, texto) {
     }
   }
   estado.enviandoMensagens = false;
-  console.log(`[${to}] Envio concluído: "${texto}"`);
 }
 
 async function sendMessage(to, text) {

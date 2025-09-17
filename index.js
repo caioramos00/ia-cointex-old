@@ -17,6 +17,9 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 const estadoContatos = require('./state.js');
 
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
+
 app.use(session({
   secret: '8065537Ncfp@',
   resave: false,
