@@ -364,64 +364,104 @@ function setupRoutes(app, path, processarMensagensPendentes, inicializarEstado, 
             res.sendStatus(404);
         }
     });
+    // --- TWILIO WEBHOOK (ENTRADA) ---
+app.post('/webhook/twilio', express.urlencoded({ extended: false }), async (req, res) => {
+  try {
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const signature = req.get('X-Twilio-Signature') || req.get('x-twilio-signature');
+    const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+
+    const isValid = twilio.validateRequest(authToken, signature, url, req.body);
+    if (!isValid) return res.sendStatus(403);
+
+    const from = (req.body.From || '').replace(/^whatsapp:/, ''); // +5511...
+    const to = (req.body.To || '').replace(/^whatsapp:/, '');
+    const text = (req.body.Body || '').trim();
+    const temMidia = false; // ajuste depois se tratar mídia por Twilio
+
+    // >>> Reaproveita o MESMO pipeline do /webhook da Meta (igual ao que você faz lá)
+    if (!estadoContatos[from]) {
+      inicializarEstado(from, '', 'Twilio');
+      await criarUsuarioDjango(from);
+      await salvarContato(from, null, text, '', 'Twilio');
+    } else {
+      await salvarContato(from, null, text, '', 'Twilio');
+    }
+    const estado = estadoContatos[from];
+    estado.mensagensPendentes.push({ texto: text || '[mídia]', temMidia });
+    if (!estado.mensagensDesdeSolicitacao.includes(text)) {
+      estado.mensagensDesdeSolicitacao.push(text);
+    }
+    estado.ultimaMensagem = Date.now();
+
+    if (estado.enviandoMensagens) {
+      console.log(`[${from}] (Twilio) Mensagem acumulada, aguardando processamento`);
+    } else {
+      const delayAleatorio = 10000 + Math.random() * 5000;
+      console.log(`[${from}] (Twilio) Aguardando ${Math.round(delayAleatorio / 1000)}s antes de processar`);
+      await delay(delayAleatorio);
+      await processarMensagensPendentes(from);
+    }
+
+    res.sendStatus(200);
+  } catch (e) {
+    console.error('[TwilioWebhook] Erro:', e.message);
+    res.sendStatus(500);
+  }
+});
+
+// --- MANYCHAT WEBHOOK (ENTRADA via External Request) ---
+app.post('/webhook/manychat', express.json(), async (req, res) => {
+  try {
+    const secret = process.env.MANYCHAT_WEBHOOK_SECRET;
+    if (secret && req.get('X-MC-Secret') !== secret) return res.sendStatus(403);
+
+    const payload = req.body || {};
+    const subscriberId = payload.subscriber_id || payload.user?.id;
+    const phone = (payload.user?.phone || payload.phone || '').replace(/^whatsapp:/, '');
+    const text = (payload.text || payload.message || '').trim();
+    const temMidia = false;
+
+    if (!subscriberId) return res.status(400).json({ error: 'subscriber_id ausente' });
+
+    // Garante que existe contato e vincula subscriber_id (se tiver telefone)
+    if (phone) {
+      await salvarContato(phone, null, text || '[mídia]', '', 'Manychat');
+      await pool.query(
+        'UPDATE contatos SET manychat_subscriber_id = $2 WHERE whatsapp = $1',
+        [phone, subscriberId]
+      );
+      if (!estadoContatos[phone]) {
+        inicializarEstado(phone, '', 'Manychat');
+        await criarUsuarioDjango(phone);
+      }
+      const estado = estadoContatos[phone];
+      estado.mensagensPendentes.push({ texto: text || '[mídia]', temMidia });
+      if (text && !estado.mensagensDesdeSolicitacao.includes(text)) {
+        estado.mensagensDesdeSolicitacao.push(text);
+      }
+      estado.ultimaMensagem = Date.now();
+
+      if (estado.enviandoMensagens) {
+        console.log(`[${phone}] (Manychat) Mensagem acumulada, aguardando processamento`);
+      } else {
+        const delayAleatorio = 10000 + Math.random() * 5000;
+        console.log(`[${phone}] (Manychat) Aguardando ${Math.round(delayAleatorio / 1000)}s antes de processar`);
+        await delay(delayAleatorio);
+        await processarMensagensPendentes(phone);
+      }
+    } else {
+      // Sem phone: só persiste o vínculo p/ futuras saídas via ManychatTransport (envio por subscriber_id)
+      console.warn('[ManychatWebhook] Sem phone no payload; armazene mapping em outra tabela se quiser.');
+    }
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[ManychatWebhook] Erro:', e.message);
+    res.sendStatus(500);
+  }
+});
+
 }
-
-router.post('/webhook/twilio', express.urlencoded({ extended: false }), async (req, res) => {
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const signature = req.get('X-Twilio-Signature') || req.get('x-twilio-signature');
-
-  // Construa a URL pública que o Twilio chama (atenção a proxies/SSL termination)
-  const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`; // veja nuances no guia da Twilio sobre SSL termination. :contentReference[oaicite:9]{index=9}
-
-  const isValid = twilio.validateRequest(authToken, signature, url, req.body);
-  if (!isValid) return res.sendStatus(403);
-
-  // Normalização (campos típicos)
-  const from = (req.body.From || '').replace(/^whatsapp:/, ''); // +5511...
-  const to = (req.body.To || '').replace(/^whatsapp:/, '');
-  const text = req.body.Body || '';
-  const messageId = req.body.MessageSid;
-
-  // Passe para seu pipeline (estado → gerarResposta → sendMessage)
-  await processIncomingMessage({
-    provider: 'twilio',
-    from, to, text,
-    message_id: messageId,
-    raw: req.body
-  });
-
-  res.sendStatus(200);
-});
-
-// routes.js (trecho)
-router.post('/webhook/manychat', express.json(), async (req, res) => {
-  const secret = process.env.MANYCHAT_WEBHOOK_SECRET;
-  if (secret && req.get('X-MC-Secret') !== secret) return res.sendStatus(403);
-
-  const payload = req.body || {};
-  const subscriberId = payload.subscriber_id || payload.user?.id;
-  const phone = payload.user?.phone || payload.phone; // se você enviar pelo External Request
-  const text = payload.text || payload.message;
-
-  if (!subscriberId) return res.status(400).json({ error: 'subscriber_id ausente' });
-
-  // Salve o vínculo subscriberId ↔ contato (telefone)
-  await upsertContato({
-    phone,
-    manychat_subscriber_id: subscriberId
-  });
-
-  await processIncomingMessage({
-    provider: 'manychat',
-    from: phone,
-    to: 'meu_canal_manychat',
-    text,
-    message_id: payload.message_id || null,
-    raw: payload
-  });
-
-  // Você pode responder imediatamente algo “ok” para o External Request
-  res.json({ ok: true });
-});
 
 module.exports = { checkAuth, setupRoutes };

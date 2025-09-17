@@ -64,9 +64,9 @@
 
                 <label>Provedor de Mensagens</label>
                 <select name="message_provider">
-                    <option value="meta" <%=s.message_provider==='meta' ? 'selected' : '' %>>Meta (direto)</option>
-                    <option value="twilio" <%=s.message_provider==='twilio' ? 'selected' : '' %>>Twilio</option>
-                    <option value="manychat" <%=s.message_provider==='manychat' ? 'selected' : '' %>>Manychat</option>
+                    <option value="meta" <%=settings.message_provider==='meta' ? 'selected' : '' %>>Meta (direto)</option>
+                    <option value="twilio" <%=settings.message_provider==='twilio' ? 'selected' : '' %>>Twilio</option>
+                    <option value="manychat" <%=settings.message_provider==='manychat' ? 'selected' : '' %>>Manychat</option>
                 </select>
 
                 <!-- Campos Twilio -->
