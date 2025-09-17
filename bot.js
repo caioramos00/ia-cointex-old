@@ -7,8 +7,7 @@ const WHATSAPP_API_URL = `https://graph.facebook.com/v23.0/${PHONE_NUMBER_ID}/me
 
 const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
 
-const { atualizarContato } = require('./db.js');
-const { getBotSettings } = require('./db.js');
+const { atualizarContato, getBotSettings, pool } = require('./db.js');
 const estadoContatos = require('./state.js');
 const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, mensagemImpulso, mensagensIntrodutorias, checklistVariacoes, mensagensPosChecklist, respostasNaoConfirmadoAcesso, respostasNaoConfirmadoConfirmacao, respostasDuvidasComuns } = require('./prompts.js');
 
@@ -48,6 +47,19 @@ async function enviarLinhaPorLinha(to, texto) {
     return;
   }
 
+  try {
+    const { rows } = await pool.query(
+      'SELECT do_not_contact FROM contatos WHERE whatsapp = $1 LIMIT 1',
+      [to]
+    );
+    if (rows[0]?.do_not_contact) {
+      console.log(`[${to}] Bloqueado (do_not_contact=true). Abortando envio.`);
+      return;
+    }
+  } catch (e) {
+    console.error(`[${to}] Falha ao checar do_not_contact: ${e.message}`);
+  }
+
   // --- INÍCIO: Inserção do selo de identidade na 1ª resposta ---
   try {
     // 1ª resposta da sessão = ainda em 'abertura' e !aberturaConcluida
@@ -62,7 +74,7 @@ async function enviarLinhaPorLinha(to, texto) {
         const pieces = [];
         if (settings?.support_email) pieces.push(settings.support_email);
         if (settings?.support_phone) pieces.push(settings.support_phone);
-        if (settings?.support_url)   pieces.push(settings.support_url);
+        if (settings?.support_url) pieces.push(settings.support_url);
         if (pieces.length) label = `Suporte • ${pieces.join(' | ')}`;
       }
 
@@ -74,6 +86,28 @@ async function enviarLinhaPorLinha(to, texto) {
     console.error('[SeloIdent] Falha ao avaliar/preparar label:', e.message);
   }
   // --- FIM: Inserção do selo de identidade ---
+
+  try {
+    const isFirstResponse = (estado.etapa === 'abertura' && !estado.aberturaConcluida);
+    if (isFirstResponse) {
+      const settings = await getBotSettings().catch(() => null);
+      const optHintEnabled = settings?.optout_hint_enabled !== false; // default ON
+      const suffix = (settings?.optout_suffix || '· se não quiser: NÃO QUERO').trim();
+
+      if (optHintEnabled && suffix) {
+        const linhasTmp = texto.split('\n');
+        // pega a última linha não-vazia (sua "linha 3")
+        let idx = linhasTmp.length - 1;
+        while (idx >= 0 && !linhasTmp[idx].trim()) idx--;
+        if (idx >= 0 && !linhasTmp[idx].includes(suffix)) {
+          linhasTmp[idx] = `${linhasTmp[idx]} ${suffix}`;
+          texto = linhasTmp.join('\n');
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[OptOutHint] Falha ao anexar sufixo:', e.message);
+  }
 
   estado.enviandoMensagens = true;
   console.log(`[${to}] Iniciando envio de mensagem: "${texto}"`);

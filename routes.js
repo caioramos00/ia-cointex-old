@@ -2,7 +2,7 @@ const path = require('path');
 const express = require('express');
 const axios = require('axios');
 const { pool } = require('./db.js');
-const { delay } = require('./bot.js');
+const { delay, sendMessage } = require('./bot.js');
 const { getBotSettings, updateBotSettings } = require('./db.js');
 const estadoContatos = require('./state.js');
 
@@ -19,6 +19,27 @@ function checkAuth(req, res, next) {
         res.redirect('/login');
     }
 }
+
+function norm(s = '') {
+    return s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
+}
+
+// Palavras/frases de OPT-OUT (as que você definiu)
+const OPTOUT_TOKENS = new Set([
+    'sair', 'parar', 'cancelar', 'remover', 'nao quero'
+]);
+
+const OPTOUT_PHRASES = [
+    'nao quero receber',
+    'para de enviar',
+    'chega',
+    'para com isso',
+    'tira meu numero',
+    'nao quero mais'
+];
+
+// Re-opt-in (estrito): "BORA"
+const REOPTIN_RX = /^\s*bora\s*$/i;
 
 function setupRoutes(app, path, processarMensagensPendentes, inicializarEstado, criarUsuarioDjango, salvarContato, VERIFY_TOKEN, estadoContatos) {
     app.use('/public', express.static(path.join(__dirname, 'public')));
@@ -64,6 +85,8 @@ function setupRoutes(app, path, processarMensagensPendentes, inicializarEstado, 
                 support_email: (req.body.support_email || '').trim() || null,
                 support_phone: (req.body.support_phone || '').trim() || null,
                 support_url: (req.body.support_url || '').trim() || null,
+                optout_hint_enabled: !!req.body.optout_hint_enabled,
+                optout_suffix: (req.body.optout_suffix || '· se não quiser: NÃO QUERO').trim()
             };
             await updateBotSettings(payload);
             res.redirect('/admin/settings?ok=1');
@@ -174,6 +197,62 @@ function setupRoutes(app, path, processarMensagensPendentes, inicializarEstado, 
                             let texto = msg.type === 'text' ? msg.text.body.trim() : '[mídia]';
                             const temMidia = msg.type !== 'text';
                             console.log(`[${contato}] Recebido: "${texto}"`);
+
+                            // ======= OPT-OUT / RE-OPT-IN =======
+                            try {
+                                const n = norm(texto);
+
+                                // 1) Checa re-opt-in primeiro: se contato está bloqueado e disse "BORA"
+                                const { rows: flags } = await pool.query(
+                                    'SELECT do_not_contact FROM contatos WHERE whatsapp = $1 LIMIT 1',
+                                    [contato]
+                                );
+                                if (flags[0]?.do_not_contact) {
+                                    if (REOPTIN_RX.test(texto)) {
+                                        await pool.query(
+                                            `UPDATE contatos
+           SET do_not_contact = FALSE,
+               do_not_contact_at = NULL,
+               do_not_contact_reason = NULL
+         WHERE whatsapp = $1`,
+                                            [contato]
+                                        );
+                                        console.log(`[${contato}] Re-opt-in por "BORA"`);
+                                        // Confirma rápido (sem delays)
+                                        await sendMessage(contato, 'fechou, voltamos então. bora.');
+                                        // continua o fluxo normal desta mensagem
+                                    } else {
+                                        // ainda bloqueado — peça confirmação curta
+                                        await sendMessage(contato, 'vc tinha parado as msgs. se quiser retomar, manda "BORA".');
+                                        return res.sendStatus(200);
+                                    }
+                                }
+
+                                // 2) Checa opt-out
+                                const isToken = OPTOUT_TOKENS.has(n);
+                                const isPhrase = OPTOUT_PHRASES.some(p => n.includes(p));
+                                if (isToken || isPhrase) {
+                                    await pool.query(
+                                        `UPDATE contatos
+          SET do_not_contact = TRUE,
+              do_not_contact_at = NOW(),
+              do_not_contact_reason = $2
+        WHERE whatsapp = $1`,
+                                        [contato, texto.slice(0, 200)]
+                                    );
+                                    console.log(`[${contato}] OPT-OUT ativado por: "${texto}"`);
+                                    // Confirmação no seu tom (sem pacing)
+                                    await sendMessage(
+                                        contato,
+                                        'tranquilo, vamos parar então, vou passar o trampo pra outra pessoa. se mudar de ideia só mandar um "BORA" aí que voltamos a fazer'
+                                    );
+                                    return res.sendStatus(200);
+                                }
+                            } catch (e) {
+                                console.error(`[${contato}] Falha no fluxo opt-in/out: ${e.message}`);
+                            }
+                            // ======= FIM OPT-OUT / RE-OPT-IN =======
+
 
                             let tid = '';
                             let click_type = 'Orgânico';
