@@ -5,6 +5,8 @@ const { pool } = require('./db.js');
 const { delay, sendMessage } = require('./bot.js');
 const { getBotSettings, updateBotSettings } = require('./db.js');
 const estadoContatos = require('./state.js');
+const twilio = require('twilio'); // npm i twilio
+const qs = require('qs');  
 
 const LANDING_URL = 'https://grupo-whatsapp-trampos-lara-2025.onrender.com';
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
@@ -363,5 +365,63 @@ function setupRoutes(app, path, processarMensagensPendentes, inicializarEstado, 
         }
     });
 }
+
+router.post('/webhook/twilio', express.urlencoded({ extended: false }), async (req, res) => {
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const signature = req.get('X-Twilio-Signature') || req.get('x-twilio-signature');
+
+  // Construa a URL pública que o Twilio chama (atenção a proxies/SSL termination)
+  const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`; // veja nuances no guia da Twilio sobre SSL termination. :contentReference[oaicite:9]{index=9}
+
+  const isValid = twilio.validateRequest(authToken, signature, url, req.body);
+  if (!isValid) return res.sendStatus(403);
+
+  // Normalização (campos típicos)
+  const from = (req.body.From || '').replace(/^whatsapp:/, ''); // +5511...
+  const to = (req.body.To || '').replace(/^whatsapp:/, '');
+  const text = req.body.Body || '';
+  const messageId = req.body.MessageSid;
+
+  // Passe para seu pipeline (estado → gerarResposta → sendMessage)
+  await processIncomingMessage({
+    provider: 'twilio',
+    from, to, text,
+    message_id: messageId,
+    raw: req.body
+  });
+
+  res.sendStatus(200);
+});
+
+// routes.js (trecho)
+router.post('/webhook/manychat', express.json(), async (req, res) => {
+  const secret = process.env.MANYCHAT_WEBHOOK_SECRET;
+  if (secret && req.get('X-MC-Secret') !== secret) return res.sendStatus(403);
+
+  const payload = req.body || {};
+  const subscriberId = payload.subscriber_id || payload.user?.id;
+  const phone = payload.user?.phone || payload.phone; // se você enviar pelo External Request
+  const text = payload.text || payload.message;
+
+  if (!subscriberId) return res.status(400).json({ error: 'subscriber_id ausente' });
+
+  // Salve o vínculo subscriberId ↔ contato (telefone)
+  await upsertContato({
+    phone,
+    manychat_subscriber_id: subscriberId
+  });
+
+  await processIncomingMessage({
+    provider: 'manychat',
+    from: phone,
+    to: 'meu_canal_manychat',
+    text,
+    message_id: payload.message_id || null,
+    raw: payload
+  });
+
+  // Você pode responder imediatamente algo “ok” para o External Request
+  res.json({ ok: true });
+});
 
 module.exports = { checkAuth, setupRoutes };

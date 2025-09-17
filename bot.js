@@ -7,6 +7,8 @@ const WHATSAPP_API_URL = `https://graph.facebook.com/v23.0/${PHONE_NUMBER_ID}/me
 
 const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
 
+const { getActiveTransport } = require('./lib/transport');
+const { getContatoByPhone } = require('./db');
 const { atualizarContato, getBotSettings, pool } = require('./db.js');
 const estadoContatos = require('./state.js');
 const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, mensagemImpulso, mensagensIntrodutorias, checklistVariacoes, mensagensPosChecklist, respostasNaoConfirmadoAcesso, respostasNaoConfirmadoConfirmacao, respostasDuvidasComuns } = require('./prompts.js');
@@ -130,21 +132,23 @@ async function enviarLinhaPorLinha(to, texto) {
 }
 
 async function sendMessage(to, text) {
-  try {
-    const response = await axios.post(WHATSAPP_API_URL, {
-      messaging_product: 'whatsapp',
-      to: to,
-      type: 'text',
-      text: { body: text }
-    }, {
-      headers: {
-        Authorization: `Bearer ${ACCESS_TOKEN}`
-      }
-    });
-    console.log(`[Envio] Mensagem enviada para ${to}: "${text}" - Status: ${response.status}`);
-  } catch (error) {
-    console.error(`[Erro] Falha ao enviar mensagem para ${to}: ${error.message}`);
+  const transport = await getActiveTransport();
+
+  if (transport.name === 'manychat') {
+    // buscamos subscriberId do contato; você já tem acesso ao telefone `to`
+    const contato = await getContatoByPhone(to);
+    const subscriberId = contato?.manychat_subscriber_id || null;
+    return transport.sendText({ subscriberId, text });
   }
+
+  if (transport.name === 'twilio') {
+    // `to` precisa vir sem "whatsapp:" e no formato +E164
+    const sanitized = to.replace(/^whatsapp:/, '');
+    return transport.sendText({ to: sanitized, text });
+  }
+
+  // meta (padrão): do jeito que sempre foi
+  return transport.sendText({ to, text });
 }
 
 function inicializarEstado(contato, tid = '', click_type = 'Orgânico') {
