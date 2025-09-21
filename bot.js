@@ -131,23 +131,83 @@ async function enviarLinhaPorLinha(to, texto) {
   estado.enviandoMensagens = false;
 }
 
+// === ManyChat helpers ===
+async function sendManychatBatch(phone, textOrLines) {
+  // token pode vir do ENV ou do painel (/admin/settings)
+  const settings = await getBotSettings().catch(() => ({}));
+  const token =
+    process.env.MANYCHAT_API_TOKEN ||
+    process.env.MANYCHAT_API_KEY || // fallback comum
+    settings.manychat_api_token;
+
+  if (!token) throw new Error('ManyChat: token ausente (defina MANYCHAT_API_TOKEN ou salve no painel).');
+
+  // pega subscriber_id salvo no banco para este telefone
+  const contato = await getContatoByPhone(phone).catch(() => null);
+  const subscriberId =
+    contato?.manychat_subscriber_id ||
+    estadoContatos[phone]?.manychat_subscriber_id ||
+    null;
+
+  if (!subscriberId) throw new Error('ManyChat: subscriberId ausente para este contato.');
+
+  const lines = Array.isArray(textOrLines)
+    ? textOrLines
+    : String(textOrLines).split('\n').map(s => s.trim()).filter(Boolean);
+
+  const messages = lines.slice(0, 10).map(t => ({ type: 'text', text: t }));
+  if (!messages.length) return { skipped: true };
+
+  const url = 'https://api.manychat.com/fb/sending/sendContent';
+  const body = {
+    subscriber_id: Number(subscriberId),
+    data: {
+      version: 'v2',
+      content: { messages }
+    }
+  };
+
+  // logs resumidos para debug
+  console.log('[ManyChat][sendContent] URL:', url);
+  console.log('[ManyChat][sendContent] Body:', JSON.stringify({
+    subscriber_id: body.subscriber_id,
+    data: { version: 'v2', content: { messages: messages.map(m => ({ type: m.type, text: m.text.slice(0, 120) })) } }
+  }));
+
+  const resp = await axios.post(url, body, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json'
+    },
+    validateStatus: () => true
+  });
+
+  console.log('[ManyChat][sendContent] HTTP', resp.status, resp.data);
+
+  if (resp.status >= 400 || resp.data?.status === 'error') {
+    throw new Error(`ManyChat sendContent falhou: HTTP ${resp.status} ${JSON.stringify(resp.data)}`);
+  }
+  return resp.data;
+}
+
 async function sendMessage(to, text) {
   const { mod: transport, settings } = await getActiveTransport();
 
   if (transport.name === 'manychat') {
-    // buscamos subscriberId do contato; você já tem acesso ao telefone `to`
-    const contato = await getContatoByPhone(to);
-    const subscriberId = contato?.manychat_subscriber_id || null;
-    return transport.sendText({ subscriberId, text }, settings);
+    // aceita string com quebras de linha ou array de linhas
+    const lines = Array.isArray(text)
+      ? text
+      : String(text).split('\n').map(s => s.trim()).filter(Boolean);
+    return await sendManychatBatch(to, lines);
   }
 
   if (transport.name === 'twilio') {
-    // `to` precisa vir sem "whatsapp:" e no formato +E164
     const sanitized = to.replace(/^whatsapp:/, '');
     return transport.sendText({ to: sanitized, text }, settings);
   }
 
-  // meta (padrão): do jeito que sempre foi
+  // meta (padrão)
   return transport.sendText({ to, text }, settings);
 }
 
