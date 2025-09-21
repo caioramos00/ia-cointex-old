@@ -43,30 +43,31 @@ async function initDatabase() {
 }
 
 async function ensureDefaultSettings(client) {
-  const { rows } = await client.query('SELECT * FROM bot_settings ORDER BY id ASC LIMIT 1');
-  if (rows.length === 0) {
-    await client.query(`
-      INSERT INTO bot_settings (identity_enabled, identity_label, support_email, support_phone, support_url)
-      VALUES (TRUE, 'ACME • suporte: suporte@acme.com | acme.com/suporte', 'suporte@acme.com', '+55 11 5555-5555', 'https://acme.com/suporte')
-    `);
+  const { rows } = await client.query('SELECT id FROM bot_settings ORDER BY id ASC LIMIT 1');
+  if (!rows.length) {
+    await client.query("INSERT INTO bot_settings (message_provider) VALUES ('meta')");
   }
 }
 
-async function getBotSettings({ bypassCache = false } = {}) {
+async function getBotSettings() {
   const now = Date.now();
-  if (!bypassCache && _settingsCache && (now - _settingsCacheTs) < SETTINGS_TTL_MS) {
-    return _settingsCache;
-  }
-  const client = await pool.connect();
-  try {
-    await ensureDefaultSettings(client);
-    const { rows } = await client.query('SELECT * FROM bot_settings ORDER BY id ASC LIMIT 1');
-    _settingsCache = rows[0] || null;
-    _settingsCacheTs = now;
-    return _settingsCache;
-  } finally {
-    client.release();
-  }
+  if (_settingsCache && now - _settingsCacheTs < SETTINGS_TTL_MS) return _settingsCache;
+
+  const { rows } = await pool.query(`
+    SELECT
+      id, message_provider,
+      twilio_account_sid, twilio_auth_token, twilio_messaging_service_sid, twilio_from,
+      manychat_api_token, manychat_fallback_flow_id, manychat_webhook_secret,
+      identity_enabled, identity_label, support_email, support_phone, support_url,
+      optout_hint_enabled, optout_suffix,
+      updated_at
+    FROM bot_settings
+    ORDER BY id ASC
+    LIMIT 1
+  `);
+  _settingsCache = rows[0] || { message_provider: 'meta' };
+  _settingsCacheTs = now;
+  return _settingsCache;
 }
 
 async function getContatoByPhone(phone) {
@@ -82,6 +83,7 @@ async function updateBotSettings(payload) {
   const client = await pool.connect();
   try {
     await ensureDefaultSettings(client);
+
     const {
       identity_enabled, identity_label, support_email, support_phone, support_url,
       optout_hint_enabled, optout_suffix,
@@ -110,23 +112,23 @@ async function updateBotSettings(payload) {
        WHERE id = (SELECT id FROM bot_settings ORDER BY id ASC LIMIT 1)
     `, [
       (typeof identity_enabled === 'boolean') ? identity_enabled : null,
-      identity_label ?? null,
-      support_email ?? null,
-      support_phone ?? null,
-      support_url ?? null,
+      identity_label || null,
+      support_email || null,
+      support_phone || null,
+      support_url || null,
       (typeof optout_hint_enabled === 'boolean') ? optout_hint_enabled : null,
-      optout_suffix ?? null,
-      message_provider ?? null,
-      twilio_account_sid ?? null,
-      twilio_auth_token ?? null,
-      twilio_messaging_service_sid ?? null,
-      twilio_from ?? null,
-      manychat_api_token ?? null,
-      manychat_fallback_flow_id ?? null,
-      manychat_webhook_secret ?? null
+      optout_suffix || null,
+      message_provider || null,
+      twilio_account_sid || null,
+      twilio_auth_token || null,
+      twilio_messaging_service_sid || null,
+      twilio_from || null,
+      manychat_api_token || null,
+      manychat_fallback_flow_id || null,
+      manychat_webhook_secret || null
     ]);
 
-    // invalida cache para refletir imediato
+    // invalidar cache para refletir imediatamente no app
     _settingsCache = null;
     _settingsCacheTs = 0;
   } finally {
