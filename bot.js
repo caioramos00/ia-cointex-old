@@ -243,25 +243,51 @@ function inicializarEstado(contato, tid = '', click_type = 'Orgânico') {
 async function criarUsuarioDjango(contato) {
   try {
     const DJANGO_API_URL = process.env.DJANGO_API_URL || 'https://www.cointex.cash/api/create-user/';
-    const estado = estadoContatos[contato];
-    const tid = estado.tid || '';
+
+    const st = estadoContatos[contato] || {};
+    const tid = st.tid || '';
+    const click_type = st.click_type || 'Orgânico';
+
+    // normaliza para E.164 com +
     const phone_e164 = /^\+/.test(contato) ? contato : `+${contato}`;
-    const click_type = estado.click_type || 'Orgânico';
-    console.log(`[${contato}] Enviando para API Cointex: phone=${phone_e164}, tid=${tid}, click_type=${click_type}`);
-    const response = await axios.post(DJANGO_API_URL, { tid, click_type, phone: phone_e164 });
-    if (response.data.status === 'success' && response.data.users && response.data.users.length > 0) {
-      const userData = response.data.users[0];
-      estadoContatos[contato].credenciais = {
-        username: userData.email,
-        password: userData.password,
-        link: userData.login_url
-      };
-      console.log(`[${contato}] Usuário criado em background: ${userData.email}`);
-    } else {
-      console.error(`[${contato}] API retornou status inválido ou sem users: ${JSON.stringify(response.data)}`);
+
+    const body = {
+      tid,
+      click_type,
+      phone_number: phone_e164
+    };
+
+    console.log(`[${contato}] Enviando para API Cointex:`, JSON.stringify(body));
+
+    const resp = await axios.post(DJANGO_API_URL, body, {
+      headers: { 'Content-Type': 'application/json' },
+      validateStatus: () => true
+    });
+
+    console.log(`[${contato}] Cointex HTTP ${resp.status}`, resp.data);
+
+    if (resp.status < 200 || resp.status >= 300) {
+      throw new Error(`Cointex retornou ${resp.status}`);
     }
-  } catch (error) {
-    console.error(`[${contato}] Erro na API Django: ${error.message}`);
+
+    const data = resp.data || {};
+    if (data.status === 'success' && Array.isArray(data.users) && data.users[0]) {
+      const u = data.users[0];
+      estadoContatos[contato].credenciais = {
+        username: u.email,
+        password: u.password,
+        link: u.login_url
+      };
+      console.log(`[${contato}] Usuário criado: ${u.email}`);
+    } else {
+      console.error(`[${contato}] Resposta inesperada da API Cointex: ${JSON.stringify(data)}`);
+    }
+  } catch (err) {
+    if (err.response) {
+      console.error(`[${contato}] Erro na API Django: HTTP ${err.response.status} ${JSON.stringify(err.response.data)}`);
+    } else {
+      console.error(`[${contato}] Erro na API Django: ${err.message}`);
+    }
   }
 }
 
