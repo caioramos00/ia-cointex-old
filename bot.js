@@ -132,23 +132,23 @@ async function enviarLinhaPorLinha(to, texto) {
 }
 
 async function sendMessage(to, text) {
-  const transport = await getActiveTransport();
+  const { mod: transport, settings } = await getActiveTransport();
 
   if (transport.name === 'manychat') {
     // buscamos subscriberId do contato; você já tem acesso ao telefone `to`
     const contato = await getContatoByPhone(to);
     const subscriberId = contato?.manychat_subscriber_id || null;
-    return transport.sendText({ subscriberId, text });
+    return transport.sendText({ subscriberId, text }, settings);
   }
 
   if (transport.name === 'twilio') {
     // `to` precisa vir sem "whatsapp:" e no formato +E164
     const sanitized = to.replace(/^whatsapp:/, '');
-    return transport.sendText({ to: sanitized, text });
+    return transport.sendText({ to: sanitized, text }, settings);
   }
 
   // meta (padrão): do jeito que sempre foi
-  return transport.sendText({ to, text });
+  return transport.sendText({ to, text }, settings);
 }
 
 function inicializarEstado(contato, tid = '', click_type = 'Orgânico') {

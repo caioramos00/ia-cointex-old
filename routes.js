@@ -88,7 +88,15 @@ function setupRoutes(app, path, processarMensagensPendentes, inicializarEstado, 
                 support_phone: (req.body.support_phone || '').trim() || null,
                 support_url: (req.body.support_url || '').trim() || null,
                 optout_hint_enabled: !!req.body.optout_hint_enabled,
-                optout_suffix: (req.body.optout_suffix || '· se não quiser: NÃO QUERO').trim()
+                optout_suffix: (req.body.optout_suffix || '· se não quiser: NÃO QUERO').trim(),
+                message_provider: (req.body.message_provider || 'meta').toLowerCase(),
+                twilio_account_sid: (req.body.twilio_account_sid || '').trim() || null,
+                twilio_auth_token: (req.body.twilio_auth_token || '').trim() || null,
+                twilio_messaging_service_sid: (req.body.twilio_messaging_service_sid || '').trim() || null,
+                twilio_from: (req.body.twilio_from || '').trim() || null,
+                manychat_api_token: (req.body.manychat_api_token || '').trim() || null,
+                manychat_fallback_flow_id: (req.body.manychat_fallback_flow_id || '').trim() || null,
+                manychat_webhook_secret: (req.body.manychat_webhook_secret || '').trim() || null
             };
             await updateBotSettings(payload);
             res.redirect('/admin/settings?ok=1');
@@ -206,7 +214,7 @@ function setupRoutes(app, path, processarMensagensPendentes, inicializarEstado, 
 
                                 // 1) Checa re-opt-in primeiro: se contato está bloqueado e disse "BORA"
                                 const { rows: flags } = await pool.query(
-                                    'SELECT do_not_contact FROM contatos WHERE whatsapp = $1 LIMIT 1',
+                                    'SELECT do_not_contact FROM contatos WHERE id = $1 LIMIT 1',
                                     [contato]
                                 );
                                 if (flags[0]?.do_not_contact) {
@@ -216,7 +224,7 @@ function setupRoutes(app, path, processarMensagensPendentes, inicializarEstado, 
            SET do_not_contact = FALSE,
                do_not_contact_at = NULL,
                do_not_contact_reason = NULL
-         WHERE whatsapp = $1`,
+         WHERE id = $1`,
                                             [contato]
                                         );
                                         console.log(`[${contato}] Re-opt-in por "BORA"`);
@@ -239,7 +247,7 @@ function setupRoutes(app, path, processarMensagensPendentes, inicializarEstado, 
           SET do_not_contact = TRUE,
               do_not_contact_at = NOW(),
               do_not_contact_reason = $2
-        WHERE whatsapp = $1`,
+        WHERE id = $1`,
                                         [contato, texto.slice(0, 200)]
                                     );
                                     console.log(`[${contato}] OPT-OUT ativado por: "${texto}"`);
@@ -413,7 +421,8 @@ app.post('/webhook/twilio', express.urlencoded({ extended: false }), async (req,
 // --- MANYCHAT WEBHOOK (ENTRADA via External Request) ---
 app.post('/webhook/manychat', express.json(), async (req, res) => {
   try {
-    const secret = process.env.MANYCHAT_WEBHOOK_SECRET;
+    const s = await getBotSettings().catch(() => ({}));
+    const secret = process.env.MANYCHAT_WEBHOOK_SECRET || s.manychat_webhook_secret;
     if (secret && req.get('X-MC-Secret') !== secret) return res.sendStatus(403);
 
     const payload = req.body || {};
@@ -428,7 +437,7 @@ app.post('/webhook/manychat', express.json(), async (req, res) => {
     if (phone) {
       await salvarContato(phone, null, text || '[mídia]', '', 'Manychat');
       await pool.query(
-        'UPDATE contatos SET manychat_subscriber_id = $2 WHERE whatsapp = $1',
+        'UPDATE contatos SET manychat_subscriber_id = $2 WHERE id = $1',
         [phone, subscriberId]
       );
       if (!estadoContatos[phone]) {

@@ -71,22 +71,23 @@
 
                 <!-- Campos Twilio -->
                 <div data-provider="twilio" class="provider-fields">
-                    <input name="twilio_account_sid" value="<%= settings.messagetwilio_account_sid || '' %>"
+                    <input name="twilio_account_sid" value="<%= settings.twilio_account_sid || '' %>"
                         placeholder="TWILIO_ACCOUNT_SID" />
-                    <input name="twilio_auth_token" value="<%= settings.messagetwilio_auth_token || '' %>"
+                    <input name="twilio_auth_token" value="<%= settings.twilio_auth_token || '' %>"
                         placeholder="TWILIO_AUTH_TOKEN" />
-                    <input name="twilio_messaging_service_sid" value="<%= settings.messagetwilio_messaging_service_sid || '' %>"
+                    <input name="twilio_messaging_service_sid" value="<%= settings.twilio_messaging_service_sid || '' %>"
                         placeholder="TWILIO_MESSAGING_SERVICE_SID (opcional)" />
-                    <input name="twilio_from" value="<%= settings.messagetwilio_from || '' %>"
+                    <input name="twilio_from" value="<%= settings.twilio_from || '' %>"
                         placeholder="TWILIO_FROM (whatsapp:+... se não usar service)" />
                 </div>
 
                 <!-- Campos Manychat -->
                 <div data-provider="manychat" class="provider-fields">
-                    <input name="manychat_api_token" value="<%= settings.messagemanychat_api_token || '' %>"
+                    <input name="manychat_api_token" value="<%= settings.manychat_api_token || '' %>"
                         placeholder="MANYCHAT_API_TOKEN" />
-                    <input name="manychat_fallback_flow_id" value="<%= settings.messagemanychat_fallback_flow_id || '' %>"
+                    <input name="manychat_fallback_flow_id" value="<%= settings.manychat_fallback_flow_id || '' %>"
                         placeholder="MANYCHAT_FALLBACK_FLOW_ID (flow com template)" />
+                        <input name="manychat_webhook_secret" value="<%= settings.manychat_webhook_secret || '' %>" placeholder="MANYCHAT_WEBHOOK_SECRET" />
                 </div>
 
                 <div class="col-12">

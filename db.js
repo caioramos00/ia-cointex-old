@@ -69,6 +69,15 @@ async function getBotSettings({ bypassCache = false } = {}) {
   }
 }
 
+async function getContatoByPhone(phone) {
+  const id = String(phone || '').replace(/\D/g, '');
+  const client = await pool.connect();
+  try {
+    const { rows } = await client.query('SELECT * FROM contatos WHERE id = $1 LIMIT 1', [id]);
+    return rows[0] || null;
+  } finally { client.release(); }
+}
+
 async function updateBotSettings(payload) {
   const client = await pool.connect();
   try {
@@ -87,7 +96,17 @@ async function updateBotSettings(payload) {
              identity_label   = COALESCE($2, identity_label),
              support_email    = COALESCE($3, support_email),
              support_phone    = COALESCE($4, support_phone),
-             support_url      = COALESCE($5, support_url)
+             support_url      = COALESCE($5, support_url),
+            optout_hint_enabled = COALESCE($6, optout_hint_enabled),
+             optout_suffix    = COALESCE($7, optout_suffix),
+            message_provider = COALESCE($8, message_provider),
+            twilio_account_sid = COALESCE($9, twilio_account_sid),
+            twilio_auth_token = COALESCE($10, twilio_auth_token),
+            twilio_messaging_service_sid = COALESCE($11, twilio_messaging_service_sid),
+            twilio_from = COALESCE($12, twilio_from),
+            manychat_api_token = COALESCE($13, manychat_api_token),
+            manychat_fallback_flow_id = COALESCE($14, manychat_fallback_flow_id),
+            manychat_webhook_secret = COALESCE($15, manychat_webhook_secret)
        WHERE id = (SELECT id FROM bot_settings ORDER BY id ASC LIMIT 1)
     `, [
       (typeof identity_enabled === 'boolean') ? identity_enabled : null,
@@ -195,7 +214,4 @@ async function atualizarContato(contato, conversou, etapa_atual, mensagem = null
   }
 }
 
-module.exports = {
-  initDatabase, salvarContato, atualizarContato, getBotSettings,
-  updateBotSettings, pool
-};
+module.exports = { initDatabase, salvarContato, atualizarContato, getBotSettings, updateBotSettings, pool, getContatoByPhone };
