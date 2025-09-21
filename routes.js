@@ -532,7 +532,7 @@ app.post('/webhook/manychat', express.json(), async (req, res) => {
       state.aberturaConcluida = true;
       state.historico = state.historico || [];
       state.historico.push({ role: 'assistant', content: reply });
-      await atualizarContato(phone, 'Sim', 'abertura', reply);
+      await salvarContato(phone, null, reply, '', 'Manychat');
       console.log(`[${phone}] Respondendo via Dynamic Block v2 (primeira mensagem)`);
     } catch (e) {
       console.warn(`[${phone}] Falha ao atualizar estado/DB após primeira resposta:`, e.message);
