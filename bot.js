@@ -51,7 +51,7 @@ async function enviarLinhaPorLinha(to, texto) {
 
   try {
     const { rows } = await pool.query(
-      'SELECT do_not_contact FROM contatos WHERE whatsapp = $1 LIMIT 1',
+      'SELECT do_not_contact FROM contatos WHERE id = $1 LIMIT 1',
       [to]
     );
     if (rows[0]?.do_not_contact) {

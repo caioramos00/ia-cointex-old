@@ -424,58 +424,47 @@ app.post('/webhook/twilio', express.urlencoded({ extended: false }), async (req,
   }
 });
 
-// --- MANYCHAT WEBHOOK (ENTRADA via External Request) ---
 app.post('/webhook/manychat', express.json(), async (req, res) => {
-  try {
-    const s = await getBotSettings().catch(() => ({}));
-    const secret = process.env.MANYCHAT_WEBHOOK_SECRET || s.manychat_webhook_secret;
-    if (secret && req.get('X-MC-Secret') !== secret) return res.sendStatus(403);
+  // 0) valida segredo
+  const s = await getBotSettings().catch(() => ({}));
+  const secret = process.env.MANYCHAT_WEBHOOK_SECRET || s.manychat_webhook_secret;
+  if (secret && req.get('X-MC-Secret') !== secret) return res.sendStatus(401);
 
-    const payload = req.body || {};
-    const subscriberId = payload.subscriber_id || payload.user?.id;
-    const phone = (payload.user?.phone || payload.phone || '').replace(/^whatsapp:/, '');
-    const text = (payload.text || payload.message || '').trim();
-    const temMidia = false;
+  // 1) capture payload e **ACK IMEDIATO**
+  const payload = req.body || {};
+  res.status(200).end(); // <-- responde já (ManyChat tem ~10s de timeout)
 
-    if (!subscriberId) return res.status(400).json({ error: 'subscriber_id ausente' });
+  // 2) continue em background
+  (async () => {
+    try {
+      const phone = String(payload?.user?.phone || '').replace(/\D/g, '');
+      const text  = (payload?.text || '').trim();
+      const subscriberId = payload?.subscriber_id || null;
 
-    // Garante que existe contato e vincula subscriber_id (se tiver telefone)
-    if (phone) {
-      await salvarContato(phone, null, text || '[mídia]', '', 'Manychat');
-      await pool.query(
-        'UPDATE contatos SET manychat_subscriber_id = $2 WHERE id = $1',
-        [phone, subscriberId]
+      // vincula subscriber ao contato se houver dados válidos
+      if (subscriberId && phone) {
+        await pool.query(
+          'UPDATE contatos SET manychat_subscriber_id = $2 WHERE id = $1',
+          [phone, subscriberId]
+        );
+      }
+
+      await salvarContato(
+        phone,
+        null,
+        text || (payload?.media?.url ? '[mídia]' : ''),
+        null,
+        'Manychat'
       );
-      if (!estadoContatos[phone]) {
-        inicializarEstado(phone, '', 'Manychat');
-        await criarUsuarioDjango(phone);
-      }
-      const estado = estadoContatos[phone];
-      estado.mensagensPendentes.push({ texto: text || '[mídia]', temMidia });
-      if (text && !estado.mensagensDesdeSolicitacao.includes(text)) {
-        estado.mensagensDesdeSolicitacao.push(text);
-      }
-      estado.ultimaMensagem = Date.now();
 
-      if (estado.enviandoMensagens) {
-        console.log(`[${phone}] (Manychat) Mensagem acumulada, aguardando processamento`);
-      } else {
-        const delayAleatorio = 10000 + Math.random() * 5000;
-        console.log(`[${phone}] (Manychat) Aguardando ${Math.round(delayAleatorio / 1000)}s antes de processar`);
-        await delay(delayAleatorio);
-        await processarMensagensPendentes(phone);
-      }
-    } else {
-      // Sem phone: só persiste o vínculo p/ futuras saídas via ManychatTransport (envio por subscriber_id)
-      console.warn('[ManychatWebhook] Sem phone no payload; armazene mapping em outra tabela se quiser.');
+      // dispara seu pipeline normal
+      await processarMensagensPendentes(phone);
+    } catch (e) {
+      console.error('[ManyChat webhook bg] erro:', e);
     }
-
-    res.json({ ok: true });
-  } catch (e) {
-    console.error('[ManychatWebhook] Erro:', e.message);
-    res.sendStatus(500);
-  }
+  })();
 });
+
 
 }
 
