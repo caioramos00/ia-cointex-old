@@ -83,11 +83,11 @@ async function updateBotSettings(payload) {
   try {
     await ensureDefaultSettings(client);
     const {
-      identity_enabled,
-      identity_label,
-      support_email,
-      support_phone,
-      support_url
+      identity_enabled, identity_label, support_email, support_phone, support_url,
+      optout_hint_enabled, optout_suffix,
+      message_provider,
+      twilio_account_sid, twilio_auth_token, twilio_messaging_service_sid, twilio_from,
+      manychat_api_token, manychat_fallback_flow_id, manychat_webhook_secret
     } = payload;
 
     await client.query(`
@@ -97,26 +97,36 @@ async function updateBotSettings(payload) {
              support_email    = COALESCE($3, support_email),
              support_phone    = COALESCE($4, support_phone),
              support_url      = COALESCE($5, support_url),
-            optout_hint_enabled = COALESCE($6, optout_hint_enabled),
+             optout_hint_enabled = COALESCE($6, optout_hint_enabled),
              optout_suffix    = COALESCE($7, optout_suffix),
-            message_provider = COALESCE($8, message_provider),
-            twilio_account_sid = COALESCE($9, twilio_account_sid),
-            twilio_auth_token = COALESCE($10, twilio_auth_token),
-            twilio_messaging_service_sid = COALESCE($11, twilio_messaging_service_sid),
-            twilio_from = COALESCE($12, twilio_from),
-            manychat_api_token = COALESCE($13, manychat_api_token),
-            manychat_fallback_flow_id = COALESCE($14, manychat_fallback_flow_id),
-            manychat_webhook_secret = COALESCE($15, manychat_webhook_secret)
+             message_provider = COALESCE($8, message_provider),
+             twilio_account_sid = COALESCE($9, twilio_account_sid),
+             twilio_auth_token = COALESCE($10, twilio_auth_token),
+             twilio_messaging_service_sid = COALESCE($11, twilio_messaging_service_sid),
+             twilio_from = COALESCE($12, twilio_from),
+             manychat_api_token = COALESCE($13, manychat_api_token),
+             manychat_fallback_flow_id = COALESCE($14, manychat_fallback_flow_id),
+             manychat_webhook_secret = COALESCE($15, manychat_webhook_secret)
        WHERE id = (SELECT id FROM bot_settings ORDER BY id ASC LIMIT 1)
     `, [
       (typeof identity_enabled === 'boolean') ? identity_enabled : null,
       identity_label ?? null,
       support_email ?? null,
       support_phone ?? null,
-      support_url ?? null
+      support_url ?? null,
+      (typeof optout_hint_enabled === 'boolean') ? optout_hint_enabled : null,
+      optout_suffix ?? null,
+      message_provider ?? null,
+      twilio_account_sid ?? null,
+      twilio_auth_token ?? null,
+      twilio_messaging_service_sid ?? null,
+      twilio_from ?? null,
+      manychat_api_token ?? null,
+      manychat_fallback_flow_id ?? null,
+      manychat_webhook_secret ?? null
     ]);
 
-    // invalida cache
+    // invalida cache para refletir imediato
     _settingsCache = null;
     _settingsCacheTs = 0;
   } finally {

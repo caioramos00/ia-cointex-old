@@ -79,32 +79,38 @@ function setupRoutes(app, path, processarMensagensPendentes, inicializarEstado, 
         }
     });
 
-    app.post('/admin/settings', checkAuth, async (req, res) => {
-        try {
-            const payload = {
-                identity_enabled: !!req.body.identity_enabled,
-                identity_label: (req.body.identity_label || '').trim(),
-                support_email: (req.body.support_email || '').trim() || null,
-                support_phone: (req.body.support_phone || '').trim() || null,
-                support_url: (req.body.support_url || '').trim() || null,
-                optout_hint_enabled: !!req.body.optout_hint_enabled,
-                optout_suffix: (req.body.optout_suffix || '· se não quiser: NÃO QUERO').trim(),
-                message_provider: (req.body.message_provider || 'meta').toLowerCase(),
-                twilio_account_sid: (req.body.twilio_account_sid || '').trim() || null,
-                twilio_auth_token: (req.body.twilio_auth_token || '').trim() || null,
-                twilio_messaging_service_sid: (req.body.twilio_messaging_service_sid || '').trim() || null,
-                twilio_from: (req.body.twilio_from || '').trim() || null,
-                manychat_api_token: (req.body.manychat_api_token || '').trim() || null,
-                manychat_fallback_flow_id: (req.body.manychat_fallback_flow_id || '').trim() || null,
-                manychat_webhook_secret: (req.body.manychat_webhook_secret || '').trim() || null
-            };
-            await updateBotSettings(payload);
-            res.redirect('/admin/settings?ok=1');
-        } catch (e) {
-            console.error('[AdminSettings][POST]', e.message);
-            res.status(500).send('Erro ao salvar configurações.');
-        }
-    });
+
+app.post('/admin/settings', express.urlencoded({ extended: true }), async (req, res) => {
+  try {
+    const payload = {
+      identity_enabled: req.body.identity_enabled === 'on',
+      identity_label: (req.body.identity_label || '').trim(),
+      support_email: (req.body.support_email || '').trim(),
+      support_phone: (req.body.support_phone || '').trim(),
+      support_url: (req.body.support_url || '').trim(),
+      optout_hint_enabled: req.body.optout_hint_enabled === 'on',
+      optout_suffix: (req.body.optout_suffix || '').trim(),
+
+      // provider + credenciais
+      message_provider: (req.body.message_provider || 'meta').toLowerCase(),
+
+      twilio_account_sid: (req.body.twilio_account_sid || '').trim(),
+      twilio_auth_token: (req.body.twilio_auth_token || '').trim(),
+      twilio_messaging_service_sid: (req.body.twilio_messaging_service_sid || '').trim(),
+      twilio_from: (req.body.twilio_from || '').trim(),
+
+      manychat_api_token: (req.body.manychat_api_token || '').trim(),
+      manychat_fallback_flow_id: (req.body.manychat_fallback_flow_id || '').trim(),
+      manychat_webhook_secret: (req.body.manychat_webhook_secret || '').trim(),
+    };
+
+    await updateBotSettings(payload);
+    res.redirect('/admin/settings?ok=1');
+  } catch (e) {
+    console.error('[AdminSettings][POST] erro:', e);
+    res.status(500).send('Erro ao salvar configurações');
+  }
+});
 
     app.get('/api/metrics', checkAuth, async (req, res) => {
         const client = await pool.connect();
