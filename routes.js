@@ -17,6 +17,33 @@ const CONTACT_TOKEN = process.env.CONTACT_TOKEN;
 const sentContactByWa = new Set();
 const sentContactByClid = new Set();
 
+async function bootstrapFromManychat(phone, subscriberId, inicializarEstado, salvarContato, criarUsuarioDjango, estadoContatos) {
+  // Preferimos o phone (p/ WhatsApp + criação de usuário). Se não vier, caímos no ID do ManyChat.
+  const idContato = phone || `mc:${subscriberId}`;
+
+  // Garante estado em 'abertura' e click_type = 'Manychat'
+  if (!estadoContatos[idContato]) {
+    inicializarEstado(idContato, '', 'Manychat');
+  } else {
+    const st = estadoContatos[idContato];
+    st.etapa = 'abertura';
+    st.aberturaConcluida = false;
+    st.click_type = 'Manychat';
+  }
+
+  // Salva/atualiza contato no DB com click_type correto
+  await salvarContato(idContato, null, null, '', 'Manychat').catch(() => { });
+
+  // Cria usuário no Django (se tivermos telefone válido)
+  if (phone) {
+    criarUsuarioDjango(idContato).catch((e) =>
+      console.error(`[${idContato}] criarUsuarioDjango erro:`, e?.response?.data || e.message)
+    );
+  }
+
+  return idContato;
+}
+
 function checkAuth(req, res, next) {
   if (req.session.loggedIn) next();
   else res.redirect('/login');
@@ -585,6 +612,45 @@ function setupRoutes(
       console.warn('[ManyChat] Telefone ausente. Cancelando processamento.');
       return res.status(200).json({ ok: true });
     }
+
+    // Bootstrap: estado 'abertura' + salvar contato + criação de usuário no Django
+    const idContato = await bootstrapFromManychat(
+      phone,
+      subscriberId,
+      inicializarEstado,
+      salvarContato,
+      criarUsuarioDjango,
+      estadoContatos
+    );
+
+    // (se você vinculava subscriberId ao contato quando phone existe, mantenha como já está)
+    if (subscriberId && phone) {
+      try {
+        await pool.query(
+          'UPDATE contatos SET manychat_subscriber_id = $2 WHERE id = $1',
+          [phone, subscriberId]
+        );
+        console.log('[ManyChat] subscriber_id vinculado ao contato', { phone, subscriberId });
+      } catch (e) {
+        console.error('[ManyChat] Falha ao vincular subscriber_id:', e.message);
+      }
+    }
+
+    // NADA de enviar "mensagemImpulso" aqui.
+    // Apenas agende o processamento normal — isso mandará as mensagens variáveis da abertura.
+    setTimeout(async () => {
+      try {
+        const delayAleatorio = 10000 + Math.random() * 5000;
+        console.log(`[${idContato}] (ManyChat) aguardando ${Math.round(delayAleatorio / 1000)}s para processar`);
+        await delay(delayAleatorio);
+        await processarMensagensPendentes(idContato);
+      } catch (e) {
+        console.error('[ManyChat webhook bg] erro:', e);
+      }
+    }, 0);
+
+    return res.sendStatus(200);
+
 
     // 2) Vincula subscriber_id no banco
     if (subscriberId) {
