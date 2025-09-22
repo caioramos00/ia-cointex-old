@@ -8,7 +8,6 @@ const qs = require('qs');
 const { pool } = require('./db.js');
 const { delay, sendMessage } = require('./bot.js');
 const { getBotSettings, updateBotSettings } = require('./db.js');
-const estadoContatos = require('./state.js');
 
 const LANDING_URL = 'https://grupo-whatsapp-trampos-lara-2025.onrender.com';
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
@@ -30,7 +29,44 @@ function onlyDigits(v) {
   return String(v || '').replace(/\D/g, '');
 }
 
-// Palavras/frases de OPT-OUT
+/**
+ * BOOTSTRAP MANYCHAT:
+ * - Garante estado em 'abertura' (aberturaConcluida = false) e click_type = 'Manychat'
+ * - Salva/atualiza contato
+ * - Cria usuário no Django se houver telefone
+ */
+async function bootstrapFromManychat(
+  phone,
+  subscriberId,
+  inicializarEstado,
+  salvarContato,
+  criarUsuarioDjango,
+  estado
+) {
+  const idContato = phone || `mc:${subscriberId}`;
+
+  if (!estado[idContato]) {
+    inicializarEstado(idContato, '', 'Manychat');
+  } else {
+    const st = estado[idContato];
+    st.etapa = 'abertura';
+    st.aberturaConcluida = false;
+    st.click_type = 'Manychat';
+  }
+
+  // garante registro do contato
+  await salvarContato(idContato, null, null, '', 'Manychat').catch(() => {});
+
+  // cria usuário no Django (se tiver telefone)
+  if (phone) {
+    criarUsuarioDjango(idContato).catch((e) =>
+      console.error(`[${idContato}] criarUsuarioDjango erro:`, e?.response?.data || e.message)
+    );
+  }
+
+  return idContato;
+}
+
 const OPTOUT_TOKENS = new Set(['sair', 'parar', 'cancelar', 'remover', 'nao quero']);
 const OPTOUT_PHRASES = [
   'nao quero receber',
@@ -60,7 +96,7 @@ function setupRoutes(
   criarUsuarioDjango,
   salvarContato,
   VERIFY_TOKEN,
-  estado,
+  estado
 ) {
   // static
   app.use('/public', express.static(pathModule.join(__dirname, 'public')));
@@ -81,7 +117,7 @@ function setupRoutes(
     res.redirect('/login');
   });
   app.get('/dashboard', checkAuth, (req, res) =>
-    res.sendFile(pathModule.join(__dirname, 'public', 'dashboard.html')),
+    res.sendFile(pathModule.join(__dirname, 'public', 'dashboard.html'))
   );
 
   app.get('/admin/settings', checkAuth, async (req, res) => {
@@ -131,14 +167,14 @@ function setupRoutes(
     const client = await pool.connect();
     try {
       const activeRes = await client.query(
-        "SELECT COUNT(*) FROM contatos WHERE status = 'ativo' AND ultima_interacao > NOW() - INTERVAL '10 minutes'",
+        "SELECT COUNT(*) FROM contatos WHERE status = 'ativo' AND ultima_interacao > NOW() - INTERVAL '10 minutes'"
       );
       const totalContatosRes = await client.query('SELECT COUNT(*) FROM contatos');
       const messagesReceivedRes = await client.query(
-        'SELECT SUM(jsonb_array_length(historico)) AS total FROM contatos',
+        'SELECT SUM(jsonb_array_length(historico)) AS total FROM contatos'
       );
       const messagesSentRes = await client.query(
-        'SELECT SUM(jsonb_array_length(historico_interacoes)) AS total FROM contatos',
+        'SELECT SUM(jsonb_array_length(historico_interacoes)) AS total FROM contatos'
       );
       const stagesRes = await client.query('SELECT etapa_atual, COUNT(*) FROM contatos GROUP BY etapa_atual');
 
@@ -169,7 +205,7 @@ function setupRoutes(
     try {
       const resQuery = await client.query(
         'SELECT id, etapa_atual, ultima_interacao FROM contatos ORDER BY ultima_interacao DESC LIMIT $1 OFFSET $2',
-        [limit, page * limit],
+        [limit, page * limit]
       );
       res.json(resQuery.rows);
     } catch (error) {
@@ -250,7 +286,7 @@ function setupRoutes(
             // 1) Re-opt-in
             const { rows: flags } = await pool.query(
               'SELECT do_not_contact FROM contatos WHERE id = $1 LIMIT 1',
-              [contato],
+              [contato]
             );
             if (flags[0]?.do_not_contact) {
               if (REOPTIN_RX.test(texto)) {
@@ -260,7 +296,7 @@ function setupRoutes(
                          do_not_contact_at = NULL,
                          do_not_contact_reason = NULL
                    WHERE id = $1`,
-                  [contato],
+                  [contato]
                 );
                 console.log(`[${contato}] Re-opt-in por "BORA"`);
                 await sendMessage(contato, 'fechou, voltamos então. bora.');
@@ -280,12 +316,12 @@ function setupRoutes(
                        do_not_contact_at = NOW(),
                        do_not_contact_reason = $2
                  WHERE id = $1`,
-                [contato, texto.slice(0, 200)],
+                [contato, texto.slice(0, 200)]
               );
               console.log(`[${contato}] OPT-OUT ativado por: "${texto}"`);
               await sendMessage(
                 contato,
-                'tranquilo, vamos parar então, vou passar o trampo pra outra pessoa. se mudar de ideia só mandar um "BORA" aí que voltamos a fazer',
+                'tranquilo, vamos parar então, vou passar o trampo pra outra pessoa. se mudar de ideia só mandar um "BORA" aí que voltamos a fazer'
               );
               return res.sendStatus(200);
             }
@@ -360,9 +396,8 @@ function setupRoutes(
               else sentContactByWa.add(wa_id);
               if (estado[contato]) estado[contato].capiContactSent = true;
               console.log(
-                `[Webhook] Contact -> distribuidor status=${resp.status} deduped=${
-                  resp.data?.deduped ? 'yes' : 'no'
-                } event_id=${resp.data?.event_id || ''}`,
+                `[Webhook] Contact -> distribuidor status=${resp.status} deduped=${resp.data?.deduped ? 'yes' : 'no'
+                } event_id=${resp.data?.event_id || ''}`
               );
             } catch (err) {
               console.error('[Webhook] Falha ao enviar Contact ao distribuidor:', err.message);
@@ -391,7 +426,7 @@ function setupRoutes(
           } else {
             const delayAleatorio = 10000 + Math.random() * 5000;
             console.log(
-              `[${contato}] Aguardando ${Math.round(delayAleatorio / 1000)} segundos antes de processar a mensagem`,
+              `[${contato}] Aguardando ${Math.round(delayAleatorio / 1000)} segundos antes de processar a mensagem`
             );
             await delay(delayAleatorio);
             console.log(`[${contato}] Processando mensagem após atraso`);
@@ -450,13 +485,15 @@ function setupRoutes(
   /**
    * MANYCHAT - Dynamic Content v2 (primeira resposta)
    * Use este endpoint no bloco: WhatsApp → Conteúdo Dinâmico
+   *
+   * Importante: NÃO marcamos 'aberturaConcluida' aqui para que o bot envie
+   * as mensagens variáveis da abertura normalmente via processarMensagensPendentes.
    */
   app.post('/manychat/reply', express.json(), async (req, res) => {
     try {
       const body = req.body || {};
       console.log('[ManyChat/DC] Raw payload:', JSON.stringify(body));
 
-      // Alguns templates enviam "contact", outros "user" / "subscriber_id"
       const subscriberId =
         body.subscriber_id ||
         body?.contact?.id ||
@@ -473,17 +510,21 @@ function setupRoutes(
         '';
       const phone = onlyDigits(rawPhone);
 
-      // Garante que temos um identificador mínimo
       if (!phone && !subscriberId) {
         console.warn('[ManyChat/DC] Sem phone/subscriber_id. Retornando 204.');
         return res.status(204).end();
       }
 
-      // Inicializa/amarra estado e subscriber
-      const idContato = phone || `mc:${subscriberId}`;
-      if (!estadoContatos[idContato]) {
-        inicializarEstado(idContato, '', 'Manychat');
-      }
+      // Inicializa/amarra estado e cria usuário (sem concluir abertura!)
+      const idContato = await bootstrapFromManychat(
+        phone,
+        subscriberId,
+        inicializarEstado,
+        salvarContato,
+        criarUsuarioDjango,
+        estado
+      );
+
       if (subscriberId && phone) {
         try {
           await pool.query('UPDATE contatos SET manychat_subscriber_id = $2 WHERE id = $1', [phone, subscriberId]);
@@ -493,37 +534,13 @@ function setupRoutes(
         }
       }
 
-      // Gera a resposta inicial (curta)
-      const reply = buildOpeningReply();
-
-      // Atualiza estado/DB em background (não bloqueia)
-      (async () => {
-        try {
-          const st = (estadoContatos[idContato] ||= {});
-          st.aberturaConcluida = true;
-          st.historico = st.historico || [];
-          st.historico.push({ role: 'assistant', content: reply });
-          await salvarContato(idContato, null, reply, '', 'Manychat');
-          console.log(`[${idContato}] Primeira resposta registrada`);
-        } catch (e) {
-          console.warn(`[${idContato}] Falha ao registrar primeira resposta:`, e.message);
-        }
-      })();
-
-      // Retorna JSON do Dynamic Content v2 (WhatsApp)
-      const messages = reply
-        .split('\n')
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .slice(0, 10)
-        .map((t) => ({ type: 'text', text: t }));
+      // Resposta mínima só para satisfazer o DC v2 (o bot mandará a abertura real)
+      const ack = 'ok, já te respondo aqui';
+      const messages = [{ type: 'text', text: ack }];
 
       return res.status(200).json({
         version: 'v2',
-        content: {
-          type: 'whatsapp',
-          messages,
-        },
+        content: { type: 'whatsapp', messages },
       });
     } catch (e) {
       console.error('[ManyChat/DC] Erro:', e);
@@ -534,136 +551,99 @@ function setupRoutes(
     }
   });
 
-  /**
-   * MANYCHAT - Webhook de ingestão (todas as mensagens do usuário)
-   * Use este endpoint em um passo “Requisição HTTP” após o Dynamic Content, ou
-   * no seu fluxo de encaminhamento.
-   */
-app.post('/webhook/manychat', express.json(), async (req, res) => {
-  const settings = await getBotSettings().catch(() => ({}));
-  const secret = process.env.MANYCHAT_WEBHOOK_SECRET || settings.manychat_webhook_secret;
-  if (secret && req.get('X-MC-Secret') !== secret) {
-    return res.sendStatus(401);
-  }
+  app.post('/webhook/manychat', express.json(), async (req, res) => {
+    const settings = await getBotSettings().catch(() => ({}));
+    const secret = process.env.MANYCHAT_WEBHOOK_SECRET || settings.manychat_webhook_secret;
+    if (secret && req.get('X-MC-Secret') !== secret) {
+      return res.sendStatus(401);
+    }
 
-  const payload = req.body || {};
-  console.log('[ManyChat] Headers:', {
-    ua: req.get('User-Agent') || req.get('user-agent'),
-    contentType: req.get('Content-Type') || req.get('content-type'),
-    secretPresent: !!req.get('X-MC-Secret'),
-  });
-  console.log('[ManyChat] Raw payload:', JSON.stringify(payload));
+    const payload = req.body || {};
+    console.log('[ManyChat] Headers:', {
+      ua: req.get('User-Agent') || req.get('user-agent'),
+      contentType: req.get('Content-Type') || req.get('content-type'),
+      secretPresent: !!req.get('X-MC-Secret'),
+    });
+    console.log('[ManyChat] Raw payload:', JSON.stringify(payload));
 
-  // Aviso se vierem placeholders não renderizados
-  const hasPlaceholders = JSON.stringify(payload).includes('{{') || JSON.stringify(payload).includes('}}');
-  if (hasPlaceholders) {
-    console.warn('[ManyChat] Aviso: placeholders {{...}} detectados no payload');
-  }
+    // Aviso se vierem placeholders não renderizados
+    const hasPlaceholders = JSON.stringify(payload).includes('{{') || JSON.stringify(payload).includes('}}');
+    if (hasPlaceholders) {
+      console.warn('[ManyChat] Aviso: placeholders {{...}} detectados no payload');
+    }
 
-  // 1) Extração flexível
-  const subscriberId = payload.subscriber_id || payload?.contact?.id || null;
+    // 1) Extração flexível
+    const subscriberId = payload.subscriber_id || payload?.contact?.id || null;
 
-  const textInRaw = (payload.text || payload.last_text_input || '');
-  const textIn = typeof textInRaw === 'string' ? textInRaw.trim() : '';
+    const textInRaw = payload.text || payload.last_text_input || '';
+    const textIn = typeof textInRaw === 'string' ? textInRaw.trim() : '';
 
-  const full = payload.full_contact || {};
-  const rawPhone =
-    payload?.user?.phone ||
-    payload?.contact?.phone ||
-    payload?.contact?.wa_id ||
-    (full?.whatsapp && full.whatsapp.id) ||
-    full?.phone ||
-    payload?.phone ||
-    '';
-  const phone = onlyDigits(rawPhone);
+    const full = payload.full_contact || {};
+    const rawPhone =
+      payload?.user?.phone ||
+      payload?.contact?.phone ||
+      payload?.contact?.wa_id ||
+      (full?.whatsapp && full.whatsapp.id) ||
+      full?.phone ||
+      payload?.phone ||
+      '';
+    const phone = onlyDigits(rawPhone);
 
-  // last_reply_type pode vir como placeholder; trate com cuidado
-  const lastTypeRaw = (payload.last_reply_type || '').toString().toLowerCase();
-  const lastType = lastTypeRaw.includes('{{') ? '' : lastTypeRaw;
-  const temMidia = lastType && lastType !== 'text';
+    // last_reply_type pode vir como placeholder; trate com cuidado
+    const lastTypeRaw = (payload.last_reply_type || '').toString().toLowerCase();
+    const lastType = lastTypeRaw.includes('{{') ? '' : lastTypeRaw;
+    const temMidia = lastType && lastType !== 'text';
 
-  if (!phone) {
-    console.warn('[ManyChat] Telefone ausente. Cancelando processamento.');
+    if (!phone) {
+      console.warn('[ManyChat] Telefone ausente. Cancelando processamento.');
+      return res.status(200).json({ ok: true });
+    }
+
+    // 2) Bootstrap (estado + contato + criação de usuário)
+    const idContato = await bootstrapFromManychat(
+      phone,
+      subscriberId,
+      inicializarEstado,
+      salvarContato,
+      criarUsuarioDjango,
+      estado
+    );
+
+    // 3) Vincula subscriber_id se disponível
+    if (subscriberId && phone) {
+      try {
+        await pool.query('UPDATE contatos SET manychat_subscriber_id = $2 WHERE id = $1', [phone, subscriberId]);
+        console.log('[ManyChat] subscriber_id vinculado ao contato', { phone, subscriberId });
+      } catch (e) {
+        console.error('[ManyChat] Falha ao vincular subscriber_id:', e.message);
+      }
+    }
+
+    // 4) Enfileira o texto recebido (se houver) e salva no histórico
+    const textoRecebido = textIn || (temMidia ? '[mídia]' : '');
+    await salvarContato(idContato, null, textoRecebido, '', 'Manychat');
+    const st = estado[idContato];
+    st.mensagensPendentes.push({ texto: textoRecebido, temMidia });
+    if (textoRecebido && !st.mensagensDesdeSolicitacao.includes(textoRecebido)) {
+      st.mensagensDesdeSolicitacao.push(textoRecebido);
+    }
+    st.ultimaMensagem = Date.now();
+
+    // 5) Dispara processamento — isso enviará as mensagens variáveis da ABERTURA
+    setTimeout(async () => {
+      try {
+        const delayAleatorio = 10000 + Math.random() * 5000;
+        console.log(`[${idContato}] (ManyChat) aguardando ${Math.round(delayAleatorio / 1000)}s para processar`);
+        await delay(delayAleatorio);
+        await processarMensagensPendentes(idContato);
+      } catch (e) {
+        console.error('[ManyChat webhook bg] erro:', e);
+      }
+    }, 0);
+
+    // ACK imediato
     return res.status(200).json({ ok: true });
-  }
-
-  // 2) Vincula subscriber_id no banco
-  if (subscriberId) {
-    try {
-      await pool.query('UPDATE contatos SET manychat_subscriber_id = $2 WHERE id = $1', [phone, subscriberId]);
-      console.log('[ManyChat] subscriber_id vinculado ao contato', { phone, subscriberId });
-    } catch (e) {
-      console.warn('[ManyChat] Falha ao vincular subscriber_id:', e.message);
-    }
-  }
-
-  // 3) ACK imediato (ManyChat tem timeout curto)
-  res.status(200).json({ ok: true });
-
-  // 4) Continua em background
-  (async () => {
-    try {
-      // cria/atualiza contato
-      if (!estado[phone]) {
-        inicializarEstado(phone, '', 'Manychat'); // tid vazio
-        await salvarContato(phone, null, textIn || (temMidia ? '[mídia]' : ''), '', 'Manychat');
-      } else {
-        await salvarContato(phone, null, textIn || (temMidia ? '[mídia]' : ''), estado[phone].tid || '', 'Manychat');
-      }
-
-      // garante estado padrão
-      const st = (estado[phone] ||= {
-        etapa: 'abertura',
-        historico: [],
-        encerrado: false,
-        ultimaMensagem: Date.now(),
-        credenciais: null,
-        mensagensPendentes: [],
-        mensagensDesdeSolicitacao: [],
-        negativasAbertura: 0,
-        aberturaConcluida: false,
-        instrucoesEnviadas: false,
-        encerradoAte: null,
-        aguardandoAcompanhamento: false,
-        tentativasAcesso: 0,
-        tentativasConfirmacao: 0,
-        saldo_informado: null,
-        mensagemDelayEnviada: false,
-        enviandoMensagens: false,
-        instrucoesCompletas: false,
-        aguardandoPrint: false,
-        tid: '',
-        click_type: 'Manychat',
-        capiContactSent: false,
-      });
-
-      // >>> chave pra não reenviar a "mensagem inicial"
-      if (st.etapa === 'abertura' && !st.aberturaConcluida) {
-        st.aberturaConcluida = true; // ManyChat já respondeu
-        console.log(`[${phone}] (Manychat) Marcando abertura como concluída para evitar reenvio de abertura.`);
-      }
-
-      // enfileira e processa
-      st.mensagensPendentes.push({ texto: textIn || (temMidia ? '[mídia]' : ''), temMidia });
-      if (textIn && !st.mensagensDesdeSolicitacao.includes(textIn)) st.mensagensDesdeSolicitacao.push(textIn);
-      st.ultimaMensagem = Date.now();
-
-      if (st.enviandoMensagens) {
-        console.log(`[${phone}] (Manychat) Mensagem acumulada, aguardando processamento`);
-        return;
-      }
-
-      const delayAleatorio = 10000 + Math.random() * 5000;
-      console.log(`[${phone}] (Manychat) Aguardando ${Math.round(delayAleatorio / 1000)}s antes de processar`);
-      await delay(delayAleatorio);
-
-      await processarMensagensPendentes(phone);
-    } catch (e) {
-      console.error('[ManyChat webhook bg] erro:', e);
-    }
-  })();
-});
-
+  });
 }
 
 module.exports = { checkAuth, setupRoutes };
