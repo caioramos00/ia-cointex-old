@@ -131,65 +131,98 @@ async function enviarLinhaPorLinha(to, texto) {
   estado.enviandoMensagens = false;
 }
 
-// === ManyChat helpers ===
+// bot.js (substitua a função inteira)
 async function sendManychatBatch(phone, textOrLines) {
-  // token pode vir do ENV ou do painel (/admin/settings)
   const settings = await getBotSettings().catch(() => ({}));
   const token =
     process.env.MANYCHAT_API_TOKEN ||
-    process.env.MANYCHAT_API_KEY || // fallback comum
+    process.env.MANYCHAT_API_KEY ||
     settings.manychat_api_token;
+  if (!token) throw new Error('ManyChat: token ausente');
 
-  if (!token) throw new Error('ManyChat: token ausente (defina MANYCHAT_API_TOKEN ou salve no painel).');
-
-  // pega subscriber_id salvo no banco para este telefone
   const contato = await getContatoByPhone(phone).catch(() => null);
   const subscriberId =
     contato?.manychat_subscriber_id ||
     estadoContatos[phone]?.manychat_subscriber_id ||
     null;
-
   if (!subscriberId) throw new Error('ManyChat: subscriberId ausente para este contato.');
 
   const lines = Array.isArray(textOrLines)
     ? textOrLines
     : String(textOrLines).split('\n').map(s => s.trim()).filter(Boolean);
-
   const messages = lines.slice(0, 10).map(t => ({ type: 'text', text: t }));
   if (!messages.length) return { skipped: true };
 
-  const url = 'https://api.manychat.com/fb/sending/sendContent';
-  const body = {
-    subscriber_id: Number(subscriberId),
-    data: {
-      version: 'v2',
-      content: { messages }
-    }
+  // shape V2 correto -> content.type: 'whatsapp'
+  const v2 = {
+    version: 'v2',
+    content: { type: 'whatsapp', messages }
   };
+  const basePayload = { subscriber_id: Number(subscriberId), data: v2 };
 
-  // logs resumidos para debug
-  console.log('[ManyChat][sendContent] URL:', url);
-  console.log('[ManyChat][sendContent] Body:', JSON.stringify({
-    subscriber_id: body.subscriber_id,
-    data: { version: 'v2', content: { messages: messages.map(m => ({ type: m.type, text: m.text.slice(0, 120) })) } }
-  }));
-
-  const resp = await axios.post(url, body, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json'
-    },
-    validateStatus: () => true
-  });
-
-  console.log('[ManyChat][sendContent] HTTP', resp.status, resp.data);
-
-  if (resp.status >= 400 || resp.data?.status === 'error') {
-    throw new Error(`ManyChat sendContent falhou: HTTP ${resp.status} ${JSON.stringify(resp.data)}`);
+  async function postMC(path, payload, label) {
+    const url = `https://api.manychat.com${path}`;
+    console.log(`[ManyChat][${label}] POST ${url}`);
+    console.log(`[ManyChat][${label}] Payload: ${JSON.stringify(payload)}`);
+    const resp = await axios.post(url, payload, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json'
+      },
+      validateStatus: () => true
+    });
+    console.log(`[ManyChat][${label}] HTTP ${resp.status} Body: ${JSON.stringify(resp.data)}`);
+    if (resp.status >= 400 || resp.data?.status === 'error') {
+      const err = new Error(`${label} falhou: HTTP ${resp.status} ${JSON.stringify(resp.data)}`);
+      err.httpStatus = resp.status;
+      err.body = resp.data;
+      throw err;
+    }
+    return resp.data;
   }
-  return resp.data;
+
+  // 1) tenta canal WhatsApp; se não existir na conta, cai pro "fb"
+  try {
+    try {
+      return await postMC('/whatsapp/sending/sendContent', basePayload, 'sendContent/wa');
+    } catch (e) {
+      if (e.httpStatus === 404 || e.httpStatus === 405) {
+        return await postMC('/fb/sending/sendContent', basePayload, 'sendContent/fb');
+      }
+      throw e;
+    }
+  } catch (e) {
+    // 2) se estourou janela de 24h (3011), usa Flow com template
+    const code = e.body?.code;
+    const msg = (e.body?.message || '').toLowerCase();
+    const is24h = code === 3011 || msg.includes('24') || msg.includes('tag') || msg.includes('window');
+
+    if (!is24h) throw e;
+
+    const flowNs =
+      settings.manychat_fallback_flow_id ||
+      process.env.MANYCHAT_FALLBACK_FLOW_ID; // ex.: "content:123456"
+    if (!flowNs) {
+      throw new Error('ManyChat: fora da janela e MANYCHAT_FALLBACK_FLOW_ID não configurado.');
+    }
+
+    const flowPayload = { subscriber_id: Number(subscriberId), flow_ns: flowNs };
+    try {
+      try {
+        return await postMC('/whatsapp/sending/sendFlow', flowPayload, 'sendFlow/wa');
+      } catch (e2) {
+        if (e2.httpStatus === 404 || e2.httpStatus === 405) {
+          return await postMC('/fb/sending/sendFlow', flowPayload, 'sendFlow/fb');
+        }
+        throw e2;
+      }
+    } catch (e3) {
+      throw e3;
+    }
+  }
 }
+
 
 async function sendMessage(to, text) {
   const { mod: transport, settings } = await getActiveTransport();
