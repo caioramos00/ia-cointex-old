@@ -131,7 +131,6 @@ async function enviarLinhaPorLinha(to, texto) {
   estado.enviandoMensagens = false;
 }
 
-// bot.js (substitua a função inteira)
 async function sendManychatBatch(phone, textOrLines) {
   const settings = await getBotSettings().catch(() => ({}));
   const token =
@@ -153,12 +152,10 @@ async function sendManychatBatch(phone, textOrLines) {
   const messages = lines.slice(0, 10).map(t => ({ type: 'text', text: t }));
   if (!messages.length) return { skipped: true };
 
-  // shape V2 correto -> content.type: 'whatsapp'
-  const v2 = {
-    version: 'v2',
-    content: { type: 'whatsapp', messages }
+  const basePayload = {
+    subscriber_id: Number(subscriberId),
+    data: { version: 'v2', content: { type: 'whatsapp', messages } }
   };
-  const basePayload = { subscriber_id: Number(subscriberId), data: v2 };
 
   async function postMC(path, payload, label) {
     const url = `https://api.manychat.com${path}`;
@@ -172,9 +169,11 @@ async function sendManychatBatch(phone, textOrLines) {
       },
       validateStatus: () => true
     });
-    console.log(`[ManyChat][${label}] HTTP ${resp.status} Body: ${JSON.stringify(resp.data)}`);
+    const brief = typeof resp.data === 'string' ? resp.data.slice(0, 300) : resp.data;
+    console.log(`[ManyChat][${label}] HTTP ${resp.status} Body: ${JSON.stringify(brief)}`);
+
     if (resp.status >= 400 || resp.data?.status === 'error') {
-      const err = new Error(`${label} falhou: HTTP ${resp.status} ${JSON.stringify(resp.data)}`);
+      const err = new Error(`${label} falhou: HTTP ${resp.status}`);
       err.httpStatus = resp.status;
       err.body = resp.data;
       throw err;
@@ -182,47 +181,26 @@ async function sendManychatBatch(phone, textOrLines) {
     return resp.data;
   }
 
-  // 1) tenta canal WhatsApp; se não existir na conta, cai pro "fb"
   try {
-    try {
-      return await postMC('/whatsapp/sending/sendContent', basePayload, 'sendContent/wa');
-    } catch (e) {
-      if (e.httpStatus === 404 || e.httpStatus === 405) {
-        return await postMC('/fb/sending/sendContent', basePayload, 'sendContent/fb');
-      }
-      throw e;
-    }
+    // ✅ SEMPRE usar o namespace /fb (mesmo pro WhatsApp)
+    return await postMC('/fb/sending/sendContent', basePayload, 'sendContent/fb');
   } catch (e) {
-    // 2) se estourou janela de 24h (3011), usa Flow com template
+    // Janela de 24h estourada → usar Flow (template)
     const code = e.body?.code;
     const msg = (e.body?.message || '').toLowerCase();
-    const is24h = code === 3011 || msg.includes('24') || msg.includes('tag') || msg.includes('window');
+    const is24h = code === 3011 || /24|window|tag/.test(msg);
 
     if (!is24h) throw e;
 
-    const flowNs =
-      settings.manychat_fallback_flow_id ||
-      process.env.MANYCHAT_FALLBACK_FLOW_ID; // ex.: "content:123456"
+    const flowNs = settings.manychat_fallback_flow_id || process.env.MANYCHAT_FALLBACK_FLOW_ID;
     if (!flowNs) {
       throw new Error('ManyChat: fora da janela e MANYCHAT_FALLBACK_FLOW_ID não configurado.');
     }
 
     const flowPayload = { subscriber_id: Number(subscriberId), flow_ns: flowNs };
-    try {
-      try {
-        return await postMC('/whatsapp/sending/sendFlow', flowPayload, 'sendFlow/wa');
-      } catch (e2) {
-        if (e2.httpStatus === 404 || e2.httpStatus === 405) {
-          return await postMC('/fb/sending/sendFlow', flowPayload, 'sendFlow/fb');
-        }
-        throw e2;
-      }
-    } catch (e3) {
-      throw e3;
-    }
+    return await postMC('/fb/sending/sendFlow', flowPayload, 'sendFlow/fb');
   }
 }
-
 
 async function sendMessage(to, text) {
   const { mod: transport, settings } = await getActiveTransport();
