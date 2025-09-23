@@ -30,10 +30,11 @@ function onlyDigits(v) {
 }
 
 /**
- * BOOTSTRAP MANYCHAT:
- * - Garante estado em 'abertura' (aberturaConcluida = false) e click_type = 'Manychat'
+ * BOOTSTRAP MANYCHAT (corrigido anti-loop):
+ * - Cria estado em 'abertura' (aberturaConcluida=false) APENAS se contato ainda não existir
+ * - Se já existir, NÃO muda etapa/click_type/aberturaConcluida (evita reiniciar a abertura)
  * - Salva/atualiza contato
- * - Cria usuário no Django se houver telefone
+ * - Cria usuário no Django apenas se não houver credenciais no estado
  */
 async function bootstrapFromManychat(
   phone,
@@ -46,22 +47,27 @@ async function bootstrapFromManychat(
   const idContato = phone || `mc:${subscriberId}`;
 
   if (!estado[idContato]) {
+    // Primeiro contato: inicia em abertura pendente
     inicializarEstado(idContato, '', 'Manychat');
   } else {
+    // Contato já existe: NÃO resetar etapa/aberturaConcluida
     const st = estado[idContato];
-    st.etapa = 'abertura';
-    st.aberturaConcluida = false;
-    st.click_type = 'Manychat';
+    // Garante o click_type como Manychat apenas se estiver vazio
+    if (!st.click_type) st.click_type = 'Manychat';
   }
 
   // garante registro do contato
   await salvarContato(idContato, null, null, '', 'Manychat').catch(() => {});
 
-  // cria usuário no Django (se tiver telefone)
-  if (phone) {
-    criarUsuarioDjango(idContato).catch((e) =>
-      console.error(`[${idContato}] criarUsuarioDjango erro:`, e?.response?.data || e.message)
-    );
+  // cria usuário no Django apenas se ainda não existir no estado
+  const stNow = estado[idContato];
+  const alreadyHasCreds = !!(stNow && stNow.credenciais);
+  if (phone && !alreadyHasCreds) {
+    try {
+      await criarUsuarioDjango(idContato);
+    } catch (e) {
+      console.error(`[${idContato}] criarUsuarioDjango erro:`, e?.response?.data || e.message);
+    }
   }
 
   return idContato;
@@ -80,7 +86,7 @@ const OPTOUT_PHRASES = [
 // Re-opt-in (estrito): "BORA"
 const REOPTIN_RX = /^\s*bora\s*$/i;
 
-// 1ª resposta (neutra e curtinha) — ajuste o texto para o seu uso LEGÍTIMO
+// 1ª resposta (neutra e curtinha)
 function buildOpeningReply() {
   const a = ['eae', 'salve', 'oi'];
   const b = ['recebi sua msg', 'tô aqui', 'fala comigo'];
@@ -599,7 +605,7 @@ function setupRoutes(
       return res.status(200).json({ ok: true });
     }
 
-    // 2) Bootstrap (estado + contato + criação de usuário)
+    // 2) Bootstrap (estado + contato + criação de usuário - sem resetar etapa)
     const idContato = await bootstrapFromManychat(
       phone,
       subscriberId,
@@ -629,7 +635,7 @@ function setupRoutes(
     }
     st.ultimaMensagem = Date.now();
 
-    // 5) Dispara processamento — isso enviará as mensagens variáveis da ABERTURA
+    // 5) Dispara processamento — enviará abertura (se pendente) ou seguirá na etapa atual
     setTimeout(async () => {
       try {
         const delayAleatorio = 10000 + Math.random() * 5000;
