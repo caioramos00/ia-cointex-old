@@ -15,6 +15,8 @@ const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirma
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+const URL_RX = /https?:\/\/\S+/i;
+
 async function gerarResposta(messages, max_tokens = 60) {
   try {
     console.log("[OpenAI] Enviando requisição: " + JSON.stringify(messages, null, 2));
@@ -594,9 +596,9 @@ async function processarMensagensPendentes(contato) {
     if (estado.etapa === 'confirmacao') {
       console.log("[" + contato + "] Etapa 5: confirmação");
       const mensagensTextoConfirmacao = estado.mensagensDesdeSolicitacao.join('\n');
-      const temMidia = mensagensPacote.some(msg => msg.temMidia);
+      const temMidiaConfirmacao = mensagensPacote.some(msg => msg.temMidia);
       let tipoConfirmacao;
-      if (temMidia) {
+      if (temMidiaConfirmacao) {
         tipoConfirmacao = 'confirmado';
         console.log("[" + contato + "] Mídia detectada, classificando como confirmado automaticamente");
       } else {
@@ -605,15 +607,21 @@ async function processarMensagensPendentes(contato) {
 
       let saldoInformado = null;
       if (tipoConfirmacao.includes('confirmado')) {
-        const possivelValor = estado.mensagensDesdeSolicitacao
+        const candidatos = estado.mensagensDesdeSolicitacao
           .slice()
           .reverse()
-          .find(msg => msg.match(/[\d.,]+/) && !msg.includes('[mídia]'));
-        if (possivelValor) {
-          saldoInformado = possivelValor;
-        } else if (temMidia) {
-          saldoInformado = 'R$ 5000';
-          console.log("[" + contato + "] Mídia sem valor em texto; usando saldo default: " + saldoInformado);
+          .filter(msg => !msg.includes('[mídia]') && !URL_RX.test(msg))
+          .map(msg => {
+            const m = msg.match(/(\d{1,3}(\.\d{3})*|\d+)(,\d{2})?/);
+            return m ? m[0] : null;
+          })
+          .filter(Boolean);
+
+        if (candidatos[0]) {
+          saldoInformado = candidatos[0].replace(/\./g, '').replace(',', '.');
+        } else if (temMidiaConfirmacao) {
+          saldoInformado = '5000';
+          console.log(`[${contato}] Mídia sem valor em texto; usando saldo default: ${saldoInformado}`);
         }
       }
 

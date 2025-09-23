@@ -29,13 +29,22 @@ function onlyDigits(v) {
   return String(v || '').replace(/\D/g, '');
 }
 
-/**
- * BOOTSTRAP MANYCHAT (corrigido anti-loop):
- * - Cria estado em 'abertura' (aberturaConcluida=false) APENAS se contato ainda não existir
- * - Se já existir, NÃO muda etapa/click_type/aberturaConcluida (evita reiniciar a abertura)
- * - Salva/atualiza contato
- * - Cria usuário no Django apenas se não houver credenciais no estado
- */
+const URL_RX = /https?:\/\/\S+/i;
+const IMG_EXT_RX = /\.(jpg|jpeg|png|webp|gif|heic|heif|bmp|tif|tiff)(\?|#|$)/i;
+const IMG_HOST_HINTS = ['manybot-files.s3', 'manibot-files.s3', 'manychat'];
+
+function extractFirstUrl(s = '') {
+  const m = String(s || '').match(URL_RX);
+  return m ? m[0] : '';
+}
+
+function isLikelyImageUrl(text = '') {
+  const u = extractFirstUrl(text);
+  if (!u) return false;
+  if (IMG_EXT_RX.test(u)) return true;
+  return IMG_HOST_HINTS.some(h => u.includes(h));
+}
+
 async function bootstrapFromManychat(
   phone,
   subscriberId,
@@ -57,7 +66,7 @@ async function bootstrapFromManychat(
   }
 
   // garante registro do contato
-  await salvarContato(idContato, null, null, '', 'Manychat').catch(() => {});
+  await salvarContato(idContato, null, null, '', 'Manychat').catch(() => { });
 
   // cria usuário no Django apenas se ainda não existir no estado
   const stNow = estado[idContato];
@@ -595,10 +604,10 @@ function setupRoutes(
       '';
     const phone = onlyDigits(rawPhone);
 
-    // last_reply_type pode vir como placeholder; trate com cuidado
     const lastTypeRaw = (payload.last_reply_type || '').toString().toLowerCase();
     const lastType = lastTypeRaw.includes('{{') ? '' : lastTypeRaw;
-    const temMidia = lastType && lastType !== 'text';
+    const temMidiaDetectadaPorUrl = isLikelyImageUrl(textIn);
+    const temMidia = (lastType && lastType !== 'text') || temMidiaDetectadaPorUrl;
 
     if (!phone) {
       console.warn('[ManyChat] Telefone ausente. Cancelando processamento.');
