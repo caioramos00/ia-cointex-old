@@ -38,14 +38,32 @@ function extractFirstUrl(s = '') {
   return m ? m[0] : '';
 }
 
-function isLikelyImageUrl(text = '') {
-  const u = extractFirstUrl(text);
-  if (!u) return false;
-  if (IMG_EXT_RX.test(u)) return true;
-  return IMG_HOST_HINTS.some(h => u.includes(h));
+function isLikelyMediaUrl(s = '') {
+  const url = String(s || '').trim();
+
+  // tem que se parecer com uma URL "pura"
+  if (!/^https?:\/\/\S+$/i.test(url)) return false;
+
+  // extensões comuns de mídia/arquivo
+  if (/\.(jpe?g|png|gif|webp|bmp|heic|heif|mp4|mov|m4v|avi|mkv|mp3|m4a|ogg|wav|opus|pdf|docx?|xlsx?|pptx?)($|\?)/i.test(url)) {
+    return true;
+  }
+
+  // hosts comuns do ManyChat/WhatsApp/CDNs (heurística)
+  const knownHosts = [
+    'manybot-files.s3.',   // ManyChat S3
+    'cdn.manychat.com',    // (exemplo)
+    'mmg.whatsapp.net',    // WA media
+    'lookaside.fbsbx.com', // proxys do Meta
+  ];
+  try {
+    const { host } = new URL(url);
+    if (knownHosts.some(h => host.includes(h))) return true;
+  } catch (_) {}
+
+  return false;
 }
 
-// SUBSTITUIR a função existente
 async function bootstrapFromManychat(
   phone,
   subscriberId,
@@ -617,10 +635,7 @@ function setupRoutes(
       '';
     const phone = onlyDigits(rawPhone);
 
-    const lastTypeRaw = (payload.last_reply_type || '').toString().toLowerCase();
-    const lastType = lastTypeRaw.includes('{{') ? '' : lastTypeRaw;
-    const temMidiaDetectadaPorUrl = isLikelyImageUrl(textIn);
-    const temMidia = (lastType && lastType !== 'text') || temMidiaDetectadaPorUrl;
+    const temMidia = isLikelyMediaUrl(textIn);
 
     if (!phone) {
       console.warn('[ManyChat] Telefone ausente. Cancelando processamento.');
@@ -695,8 +710,7 @@ function setupRoutes(
       }
     }
 
-    // 5) Enfileira o texto recebido e SALVA histórico preservando TID/click_type corretos
-    const textoRecebido = textIn || (temMidia ? '[mídia]' : '');
+    const textoRecebido = (temMidia && !textIn) ? '[mídia]' : textIn;
     const st = estado[idContato] || {};
     await salvarContato(
       idContato,
