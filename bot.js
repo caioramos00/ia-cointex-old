@@ -64,7 +64,6 @@ async function enviarLinhaPorLinha(to, texto) {
     console.error(`[${to}] Falha ao checar do_not_contact: ${e.message}`);
   }
 
-  // --- INÍCIO: Inserção do selo de identidade na 1ª resposta ---
   try {
     // 1ª resposta da sessão = ainda em 'abertura' e !aberturaConcluida
     const isFirstResponse = (estado.etapa === 'abertura' && !estado.aberturaConcluida);
