@@ -12,7 +12,6 @@
  *   # Também pode passar a URL via --url=...
  *   node scripts/wipe-contact.js 5511999999999 --url="postgresql://user:pass@host/db" --yes
  */
-
 const { Pool } = require('pg');
 const readline = require('readline');
 
