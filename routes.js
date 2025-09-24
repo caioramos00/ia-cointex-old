@@ -7,7 +7,7 @@ const qs = require('qs');
 
 const { pool } = require('./db.js');
 const { delay, sendMessage } = require('./bot.js');
-const { getBotSettings, updateBotSettings } = require('./db.js');
+const { getBotSettings, updateBotSettings, getContatoByPhone } = require('./db.js');
 
 const LANDING_URL = 'https://grupo-whatsapp-trampos-lara-2025.onrender.com';
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
@@ -45,31 +45,43 @@ function isLikelyImageUrl(text = '') {
   return IMG_HOST_HINTS.some(h => u.includes(h));
 }
 
+// SUBSTITUIR a função existente
 async function bootstrapFromManychat(
   phone,
   subscriberId,
   inicializarEstado,
   salvarContato,
   criarUsuarioDjango,
-  estado
+  estado,
+  // ▼ NOVO: valores decididos antes no handler
+  initialTid = '',
+  initialClickType = 'Orgânico'
 ) {
   const idContato = phone || `mc:${subscriberId}`;
 
   if (!estado[idContato]) {
-    // Primeiro contato: inicia em abertura pendente
-    inicializarEstado(idContato, '', 'Manychat');
+    // Primeiro contato: inicia já com TID/click_type corretos
+    inicializarEstado(idContato, initialTid, initialClickType);
   } else {
-    // Contato já existe: NÃO resetar etapa/aberturaConcluida
+    // Contato já existe em memória: só preenche se estiver vazio
     const st = estado[idContato];
-    // Garante o click_type como Manychat apenas se estiver vazio
-    if (!st.click_type) st.click_type = 'Manychat';
+    if (!st.tid && initialTid) {
+      st.tid = initialTid;
+      st.click_type = initialClickType || 'Orgânico';
+    }
   }
 
-  // garante registro do contato
-  await salvarContato(idContato, null, null, '', 'Manychat').catch(() => { });
+  // garante registro do contato sem sobrescrever com valores errados
+  const stNow = estado[idContato] || {};
+  await salvarContato(
+    idContato,
+    null,
+    null,
+    stNow.tid || initialTid || '',
+    stNow.click_type || initialClickType || 'Orgânico'
+  ).catch(() => { });
 
   // cria usuário no Django apenas se ainda não existir no estado
-  const stNow = estado[idContato];
   const alreadyHasCreds = !!(stNow && stNow.credenciais);
   if (phone && !alreadyHasCreds) {
     try {
@@ -567,6 +579,7 @@ function setupRoutes(
   });
 
   app.post('/webhook/manychat', express.json(), async (req, res) => {
+    // 0) Segurança do webhook
     const settings = await getBotSettings().catch(() => ({}));
     const secret = process.env.MANYCHAT_WEBHOOK_SECRET || settings.manychat_webhook_secret;
     if (secret && req.get('X-MC-Secret') !== secret) {
@@ -587,7 +600,7 @@ function setupRoutes(
       console.warn('[ManyChat] Aviso: placeholders {{...}} detectados no payload');
     }
 
-    // 1) Extração flexível
+    // 1) Extração flexível de campos
     const subscriberId = payload.subscriber_id || payload?.contact?.id || null;
 
     const textInRaw = payload.text || payload.last_text_input || '';
@@ -614,37 +627,95 @@ function setupRoutes(
       return res.status(200).json({ ok: true });
     }
 
-    // 2) Bootstrap (estado + contato + criação de usuário - sem resetar etapa)
+    // 2) DETECÇÃO de TID e click_type (espelha fluxo Cloud API)
+    // 2.1) Tenta extrair do texto padrão "[TID: XYZ]"
+    let detectedTid = '';
+    let detectedClickType = 'Orgânico';
+    const tidMatch = (textIn || '').match(/\[TID:\s*([\w-]+)\]/i);
+    if (tidMatch && tidMatch[1]) {
+      detectedTid = tidMatch[1];
+      detectedClickType = 'Landing';
+    }
+
+    // 2.2) Opcional: ManyChat pode enviar custom 'clid'/'tid' no payload
+    if (!detectedTid) {
+      const mcTid = payload?.clid || payload?.tid;
+      if (mcTid) {
+        detectedTid = String(mcTid);
+        detectedClickType = 'Landing';
+      }
+    }
+
+    // 2.3) PRESERVAR o que já existe no DB (prioridade ao que já estava correto)
+    let finalTid = detectedTid;
+    let finalClickType = detectedClickType; // 'Landing' se achou TID; senão 'Orgânico'
+    try {
+      const existing = await getContatoByPhone(phone);
+      if (existing) {
+        // Se já havia TID salvo, preserva
+        if (existing.tid) finalTid = existing.tid;
+
+        // Se já havia click_type específico (ex.: 'CTWA' ou 'Landing'), preserva
+        if (existing.click_type && existing.click_type !== 'Orgânico') {
+          finalClickType = existing.click_type;
+        } else {
+          // Se estava 'Orgânico' e agora detectamos TID, vira 'Landing'
+          finalClickType = finalTid ? 'Landing' : 'Orgânico';
+        }
+      }
+    } catch (e) {
+      console.warn('[ManyChat] getContatoByPhone falhou; seguindo com detectados:', e.message);
+    }
+
+    console.log('[ManyChat] Origem detectada:', { finalTid, finalClickType });
+
+    // 3) Bootstrap (estado + contato + criação de usuário) com TID/click_type corretos
+    //    IMPORTANTE: requer a versão atualizada de bootstrapFromManychat
     const idContato = await bootstrapFromManychat(
       phone,
       subscriberId,
       inicializarEstado,
       salvarContato,
       criarUsuarioDjango,
-      estado
+      estado,
+      finalTid,
+      finalClickType
     );
 
-    // 3) Vincula subscriber_id se disponível
+    // 4) Vincula subscriber_id se disponível
     if (subscriberId && phone) {
       try {
-        await pool.query('UPDATE contatos SET manychat_subscriber_id = $2 WHERE id = $1', [phone, subscriberId]);
+        await pool.query(
+          'UPDATE contatos SET manychat_subscriber_id = $2 WHERE id = $1',
+          [phone, subscriberId]
+        );
         console.log('[ManyChat] subscriber_id vinculado ao contato', { phone, subscriberId });
       } catch (e) {
         console.error('[ManyChat] Falha ao vincular subscriber_id:', e.message);
       }
     }
 
-    // 4) Enfileira o texto recebido (se houver) e salva no histórico
+    // 5) Enfileira o texto recebido e SALVA histórico preservando TID/click_type corretos
     const textoRecebido = textIn || (temMidia ? '[mídia]' : '');
-    await salvarContato(idContato, null, textoRecebido, '', 'Manychat');
-    const st = estado[idContato];
-    st.mensagensPendentes.push({ texto: textoRecebido, temMidia });
-    if (textoRecebido && !st.mensagensDesdeSolicitacao.includes(textoRecebido)) {
-      st.mensagensDesdeSolicitacao.push(textoRecebido);
-    }
-    st.ultimaMensagem = Date.now();
+    const st = estado[idContato] || {};
+    await salvarContato(
+      idContato,
+      null,
+      textoRecebido,
+      st.tid || finalTid || '',
+      st.click_type || finalClickType || 'Orgânico'
+    );
 
-    // 5) Dispara processamento — enviará abertura (se pendente) ou seguirá na etapa atual
+    // Atualiza estado de mensagens
+    if (!estado[idContato]) estado[idContato] = { mensagensPendentes: [], mensagensDesdeSolicitacao: [] };
+    const stNow = estado[idContato];
+    stNow.mensagensPendentes.push({ texto: textoRecebido, temMidia });
+    if (textoRecebido && !stNow.mensagensDesdeSolicitacao.includes(textoRecebido)) {
+      stNow.mensagensDesdeSolicitacao.push(textoRecebido);
+    }
+    stNow.ultimaMensagem = Date.now();
+
+    // 6) Dispara processamento — abertura (se pendente) ou etapa atual
     setTimeout(async () => {
       try {
         const delayAleatorio = 10000 + Math.random() * 5000;
@@ -656,7 +727,7 @@ function setupRoutes(
       }
     }, 0);
 
-    // ACK imediato
+    // 7) ACK imediato
     return res.status(200).json({ ok: true });
   });
 }

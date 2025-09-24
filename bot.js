@@ -429,7 +429,7 @@ async function processarMensagensPendentes(contato) {
 
           if (estado.credenciais && estado.credenciais.username && estado.credenciais.password && estado.credenciais.link) {
             const mensagensAcesso = [
-              'vamos começar, tá bom?',
+              'vamos começar, beleza?',
               'não manda áudio e só responde com o que eu pedir',
               "USUÁRIO: ",
               estado.credenciais.username,
@@ -501,7 +501,7 @@ async function processarMensagensPendentes(contato) {
             console.log("[" + contato + "] Timeout de 5 minutos expirado - avançando para acesso");
             if (estado.credenciais && estado.credenciais.username && estado.credenciais.password && estado.credenciais.link) {
               const mensagensAcesso = [
-                'vamos começar, tá bom?',
+                'vamos começar, beleza?',
                 'não manda áudio e só responde com o que eu pedir',
                 `USUÁRIO:`,
                 `${estado.credenciais.username}`,
