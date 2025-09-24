@@ -16,6 +16,22 @@ const CONTACT_TOKEN = process.env.CONTACT_TOKEN;
 const sentContactByWa = new Set();
 const sentContactByClid = new Set();
 
+const LOG_LEVEL = (process.env.LOG_LEVEL || 'info').toLowerCase(); // debug|info|warn|error
+const isDebug = () => LOG_LEVEL === 'debug';
+
+function maskPhone(p) {
+  const s = String(p || '');
+  if (s.length < 6) return '***';
+  return s.slice(0, 2) + '*****' + s.slice(-2);
+}
+function mcLog(level, msg, data) {
+  const lv = level.toLowerCase();
+  const order = { debug: 10, info: 20, warn: 30, error: 40 };
+  if ((order[lv] || 20) < (order[LOG_LEVEL] || 20)) return;
+  if (data) console[lv === 'debug' ? 'log' : lv](`[ManyChat] ${msg}`, data);
+  else console[lv === 'debug' ? 'log' : lv](`[ManyChat] ${msg}`);
+}
+
 function checkAuth(req, res, next) {
   if (req.session.loggedIn) next();
   else res.redirect('/login');
@@ -59,7 +75,7 @@ function isLikelyMediaUrl(s = '') {
   try {
     const { host } = new URL(url);
     if (knownHosts.some(h => host.includes(h))) return true;
-  } catch (_) {}
+  } catch (_) { }
 
   return false;
 }
@@ -597,6 +613,23 @@ function setupRoutes(
   });
 
   app.post('/webhook/manychat', express.json(), async (req, res) => {
+    // Helpers locais de log (enxutos)
+    const LOG_LEVEL = (process.env.LOG_LEVEL || 'info').toLowerCase(); // debug|info|warn|error
+    const isDebug = LOG_LEVEL === 'debug';
+    const mcLog = (level, msg, data) => {
+      const order = { debug: 10, info: 20, warn: 30, error: 40 };
+      const curr = order[LOG_LEVEL] || 20;
+      const need = order[level] || 20;
+      if (need < curr) return;
+      if (data) console[level === 'debug' ? 'log' : level](`[ManyChat] ${msg}`, data);
+      else console[level === 'debug' ? 'log' : level](`[ManyChat] ${msg}`);
+    };
+    const maskPhone = (p) => {
+      const s = String(p || '');
+      if (s.length < 6) return '***';
+      return s.slice(0, 2) + '*****' + s.slice(-2);
+    };
+
     // 0) Segurança do webhook
     const settings = await getBotSettings().catch(() => ({}));
     const secret = process.env.MANYCHAT_WEBHOOK_SECRET || settings.manychat_webhook_secret;
@@ -605,18 +638,7 @@ function setupRoutes(
     }
 
     const payload = req.body || {};
-    console.log('[ManyChat] Headers:', {
-      ua: req.get('User-Agent') || req.get('user-agent'),
-      contentType: req.get('Content-Type') || req.get('content-type'),
-      secretPresent: !!req.get('X-MC-Secret'),
-    });
-    console.log('[ManyChat] Raw payload:', JSON.stringify(payload));
-
-    // Aviso se vierem placeholders não renderizados
-    const hasPlaceholders = JSON.stringify(payload).includes('{{') || JSON.stringify(payload).includes('}}');
-    if (hasPlaceholders) {
-      console.warn('[ManyChat] Aviso: placeholders {{...}} detectados no payload');
-    }
+    if (isDebug) mcLog('debug', 'Payload bruto', payload);
 
     // 1) Extração flexível de campos
     const subscriberId = payload.subscriber_id || payload?.contact?.id || null;
@@ -635,10 +657,11 @@ function setupRoutes(
       '';
     const phone = onlyDigits(rawPhone);
 
+    // Mídia: heurística por URL (sem last_reply_type)
     const temMidia = isLikelyMediaUrl(textIn);
 
     if (!phone) {
-      console.warn('[ManyChat] Telefone ausente. Cancelando processamento.');
+      mcLog('warn', 'Telefone ausente. Ignorando evento.');
       return res.status(200).json({ ok: true });
     }
 
@@ -654,7 +677,7 @@ function setupRoutes(
 
     // 2.2) Opcional: ManyChat pode enviar custom 'clid'/'tid' no payload
     if (!detectedTid) {
-      const mcTid = payload?.clid || payload?.tid;
+      const mcTid = payload?.clid || payload?.tid || payload?.meta?.tid || payload?.meta?.clid;
       if (mcTid) {
         detectedTid = String(mcTid);
         detectedClickType = 'Landing';
@@ -667,25 +690,28 @@ function setupRoutes(
     try {
       const existing = await getContatoByPhone(phone);
       if (existing) {
-        // Se já havia TID salvo, preserva
-        if (existing.tid) finalTid = existing.tid;
-
-        // Se já havia click_type específico (ex.: 'CTWA' ou 'Landing'), preserva
+        if (existing.tid) finalTid = existing.tid; // preserva TID já salvo
         if (existing.click_type && existing.click_type !== 'Orgânico') {
-          finalClickType = existing.click_type;
+          finalClickType = existing.click_type; // preserva click_type específico (CTWA/Landing)
         } else {
-          // Se estava 'Orgânico' e agora detectamos TID, vira 'Landing'
           finalClickType = finalTid ? 'Landing' : 'Orgânico';
         }
       }
     } catch (e) {
-      console.warn('[ManyChat] getContatoByPhone falhou; seguindo com detectados:', e.message);
+      mcLog('warn', 'getContatoByPhone falhou; seguindo com detectados', { err: e.message });
     }
 
-    console.log('[ManyChat] Origem detectada:', { finalTid, finalClickType });
+    // Log único e limpo do evento
+    mcLog('info', 'Evento recebido', {
+      phone: maskPhone(phone),
+      subscriberId,
+      hasText: !!textIn,
+      hasMedia: temMidia,
+      tid: finalTid || '',
+      clickType: finalClickType
+    });
 
     // 3) Bootstrap (estado + contato + criação de usuário) com TID/click_type corretos
-    //    IMPORTANTE: requer a versão atualizada de bootstrapFromManychat
     const idContato = await bootstrapFromManychat(
       phone,
       subscriberId,
@@ -704,12 +730,13 @@ function setupRoutes(
           'UPDATE contatos SET manychat_subscriber_id = $2 WHERE id = $1',
           [phone, subscriberId]
         );
-        console.log('[ManyChat] subscriber_id vinculado ao contato', { phone, subscriberId });
+        if (isDebug) mcLog('debug', 'subscriber_id vinculado', { phone: maskPhone(phone), subscriberId });
       } catch (e) {
-        console.error('[ManyChat] Falha ao vincular subscriber_id:', e.message);
+        mcLog('error', 'Falha ao vincular subscriber_id', { err: e.message });
       }
     }
 
+    // 5) Salva histórico (preservando TID/click_type corretos)
     const textoRecebido = (temMidia && !textIn) ? '[mídia]' : textIn;
     const st = estado[idContato] || {};
     await salvarContato(
@@ -733,17 +760,18 @@ function setupRoutes(
     setTimeout(async () => {
       try {
         const delayAleatorio = 10000 + Math.random() * 5000;
-        console.log(`[${idContato}] (ManyChat) aguardando ${Math.round(delayAleatorio / 1000)}s para processar`);
+        if (isDebug) mcLog('debug', `Delay para processar ~${Math.round(delayAleatorio / 1000)}s`, { idContato });
         await delay(delayAleatorio);
         await processarMensagensPendentes(idContato);
       } catch (e) {
-        console.error('[ManyChat webhook bg] erro:', e);
+        mcLog('error', 'Erro no processamento assíncrono', { err: e.message });
       }
     }, 0);
 
     // 7) ACK imediato
     return res.status(200).json({ ok: true });
   });
+
 }
 
 module.exports = { checkAuth, setupRoutes };
