@@ -833,7 +833,6 @@ app.post('/webhook/manychat', express.json(), async (req, res) => {
   return res.status(200).json({ ok: true, reqId });
 });
 
-
 }
 
 module.exports = { checkAuth, setupRoutes };
