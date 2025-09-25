@@ -406,11 +406,25 @@ function setupRoutes(
 
           // Landing TID
           if (!is_ctwa && msg.type === 'text') {
-            const tidMatch = texto.match(/\[TID:\s*([\w]+)\]/i);
+            const tidMatch = texto.match(/\[TID:\s*([A-Za-z0-9_-]{6,64})\]/i);
             if (tidMatch && tidMatch[1]) {
-              tid = tidMatch[1];
+              tid = tidMatch[1]; // mantém como veio
               click_type = 'Landing';
-              console.log(`[Webhook] Landing detectada para ${contato}: TID=${tid}`);
+            }
+          }
+
+          if (!is_ctwa && msg.type === 'text' && !tid) {
+            // tira invisíveis (zero-width, marks, bidi) e normaliza
+            const stripInvis = (s) =>
+              String(s || '')
+                .normalize('NFKC')
+                .replace(/[\u200B-\u200F\uFEFF\u202A-\u202E]/g, '');
+            const t = stripInvis(texto);
+            const firstLine = (t.split(/\r?\n/)[0] || '').trim();
+            const m2 = /^[a-f0-9]{16}$/i.exec(firstLine);
+            if (m2) {
+              tid = m2[0]; // mantém como veio
+              click_type = 'Landing';
             }
           }
 
@@ -612,226 +626,230 @@ function setupRoutes(
     }
   });
 
-app.post('/webhook/manychat', express.json(), async (req, res) => {
-  // ===== utilitários de log (verbose c/ níveis e reqId) =====
-  const LOG_LEVEL = (process.env.LOG_LEVEL || 'info').toLowerCase(); // debug|info|warn|error
-  const ORDER = { debug: 10, info: 20, warn: 30, error: 40 };
-  const want = ORDER[LOG_LEVEL] || 20;
-  const log = (level, msg, data) => {
-    const need = ORDER[level] || 20;
-    if (need < want) return;
-    if (data) console[level === 'debug' ? 'log' : level](`[ManyChat] ${reqId} ${msg}`, data);
-    else console[level === 'debug' ? 'log' : level](`[ManyChat] ${reqId} ${msg}`);
-  };
-  const mask = (s, keepStart = 2, keepEnd = 2) => {
-    if (!s) return '';
-    const str = String(s);
-    if (str.length <= keepStart + keepEnd) return '*'.repeat(str.length);
-    return str.slice(0, keepStart) + '*'.repeat(Math.max(0, str.length - keepStart - keepEnd)) + str.slice(-keepEnd);
-  };
-  const trunc = (s, n = 120) => {
-    const str = String(s || '');
-    return str.length <= n ? str : str.slice(0, n) + '…';
-  };
-  const reqId = `mc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  app.post('/webhook/manychat', express.json(), async (req, res) => {
+    // ===== utilitários de log (verbose c/ níveis e reqId) =====
+    const LOG_LEVEL = (process.env.LOG_LEVEL || 'info').toLowerCase(); // debug|info|warn|error
+    const ORDER = { debug: 10, info: 20, warn: 30, error: 40 };
+    const want = ORDER[LOG_LEVEL] || 20;
+    const log = (level, msg, data) => {
+      const need = ORDER[level] || 20;
+      if (need < want) return;
+      if (data) console[level === 'debug' ? 'log' : level](`[ManyChat] ${reqId} ${msg}`, data);
+      else console[level === 'debug' ? 'log' : level](`[ManyChat] ${reqId} ${msg}`);
+    };
+    const mask = (s, keepStart = 2, keepEnd = 2) => {
+      if (!s) return '';
+      const str = String(s);
+      if (str.length <= keepStart + keepEnd) return '*'.repeat(str.length);
+      return str.slice(0, keepStart) + '*'.repeat(Math.max(0, str.length - keepStart - keepEnd)) + str.slice(-keepEnd);
+    };
+    const trunc = (s, n = 120) => {
+      const str = String(s || '');
+      return str.length <= n ? str : str.slice(0, n) + '…';
+    };
+    const reqId = `mc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 
-  // ===== headers básicos + rede =====
-  const ip = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').toString();
-  const method = req.method;
-  const path = req.originalUrl || req.url;
-  const ua = req.get('User-Agent') || req.get('user-agent') || '';
-  const ct = req.get('Content-Type') || req.get('content-type') || '';
-  log('info', `hit ${method} ${path}`, { ip, ua: trunc(ua, 80), contentType: ct });
+    // ===== headers básicos + rede =====
+    const ip = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').toString();
+    const method = req.method;
+    const path = req.originalUrl || req.url;
+    const ua = req.get('User-Agent') || req.get('user-agent') || '';
+    const ct = req.get('Content-Type') || req.get('content-type') || '';
+    log('info', `hit ${method} ${path}`, { ip, ua: trunc(ua, 80), contentType: ct });
 
-  // ===== 0) Segurança do webhook (log antes do 401) =====
-  const settings = await getBotSettings().catch(() => ({}));
-  const secretConfigured = process.env.MANYCHAT_WEBHOOK_SECRET || settings.manychat_webhook_secret || '';
-  const headerSecret = req.get('X-MC-Secret') || '';
-  if (!secretConfigured) {
-    log('warn', 'Webhook sem secret configurado (MANYCHAT_WEBHOOK_SECRET ou settings.manychat_webhook_secret ausente).');
-  } else {
-    const match = headerSecret && headerSecret === secretConfigured;
-    log('debug', 'Auth check', {
-      headerPresent: !!headerSecret,
-      headerLen: headerSecret ? headerSecret.length : 0,
-      secretConfigured: !!secretConfigured,
-      // nunca logar o valor bruto: mostramos só máscara e se bateu
-      headerMask: mask(headerSecret, 1, 1),
-      configuredMask: mask(secretConfigured, 1, 1),
-      match
-    });
-    if (!match) {
-      log('warn', 'Auth FAIL: X-MC-Secret ausente/incorreto — retornando 401.');
-      return res.sendStatus(401);
-    }
-  }
-
-  // ===== 1) Payload bruto (apenas em debug) =====
-  const payload = req.body || {};
-  log('debug', 'Payload bruto', payload);
-
-  // ===== 2) Extração flexível de campos (com logs) =====
-  const subscriberId = payload.subscriber_id || payload?.contact?.id || null;
-
-  const textInRaw = payload.text || payload.last_text_input || '';
-  const textIn = typeof textInRaw === 'string' ? textInRaw.trim() : '';
-
-  // rastrear de onde veio o telefone
-  const full = payload.full_contact || {};
-  let rawPhone = '';
-  let phoneSrc = '';
-  const phoneCandidates = [
-    ['payload.user.phone', payload?.user?.phone],
-    ['payload.contact.phone', payload?.contact?.phone],
-    ['payload.contact.wa_id', payload?.contact?.wa_id],
-    ['full_contact.whatsapp.id', (full?.whatsapp && full.whatsapp.id)],
-    ['full_contact.phone', full?.phone],
-    ['payload.phone', payload?.phone],
-  ];
-  for (const [src, val] of phoneCandidates) {
-    if (val) { rawPhone = val; phoneSrc = src; break; }
-  }
-  const phone = onlyDigits(rawPhone);
-
-  // Mídia: heurística por URL (sem last_reply_type)
-  const temMidia = isLikelyMediaUrl(textIn);
-
-  log('info', 'Extracted fields', {
-    subscriberId,
-    phoneSrc,
-    phoneMask: mask(phone),
-    hasText: !!textIn,
-    textPreview: trunc(textIn, 100),
-    hasMedia: temMidia
-  });
-
-  if (!phone) {
-    log('warn', 'Telefone ausente após extração — ignorando evento.');
-    return res.status(200).json({ ok: true, ignored: 'no-phone' });
-  }
-
-  // ===== 3) DETECÇÃO de TID e click_type (espelha fluxo Cloud API) =====
-  let detectedTid = '';
-  let detectedClickType = 'Orgânico';
-
-  const tidMatch = (textIn || '').match(/\[TID:\s*([\w-]+)\]/i);
-  if (tidMatch && tidMatch[1]) {
-    detectedTid = tidMatch[1];
-    detectedClickType = 'Landing';
-    log('info', 'TID detectado via texto', { tid: detectedTid });
-  }
-
-  if (!detectedTid) {
-    const mcTid = payload?.clid || payload?.tid || payload?.meta?.tid || payload?.meta?.clid;
-    if (mcTid) {
-      detectedTid = String(mcTid);
-      detectedClickType = 'Landing';
-      log('info', 'TID detectado via payload', { tid: detectedTid });
-    }
-  }
-
-  // ===== 4) Preservar o que já existe no DB (com logs) =====
-  let finalTid = detectedTid;
-  let finalClickType = detectedClickType; // 'Landing' se achou TID; senão 'Orgânico'
-  try {
-    const existing = await getContatoByPhone(phone);
-    if (existing) {
-      log('debug', 'Contato existente no DB', {
-        existingTid: existing.tid || '',
-        existingClickType: existing.click_type || ''
+    // ===== 0) Segurança do webhook (log antes do 401) =====
+    const settings = await getBotSettings().catch(() => ({}));
+    const secretConfigured = process.env.MANYCHAT_WEBHOOK_SECRET || settings.manychat_webhook_secret || '';
+    const headerSecret = req.get('X-MC-Secret') || '';
+    if (!secretConfigured) {
+      log('warn', 'Webhook sem secret configurado (MANYCHAT_WEBHOOK_SECRET ou settings.manychat_webhook_secret ausente).');
+    } else {
+      const match = headerSecret && headerSecret === secretConfigured;
+      log('debug', 'Auth check', {
+        headerPresent: !!headerSecret,
+        headerLen: headerSecret ? headerSecret.length : 0,
+        secretConfigured: !!secretConfigured,
+        // nunca logar o valor bruto: mostramos só máscara e se bateu
+        headerMask: mask(headerSecret, 1, 1),
+        configuredMask: mask(secretConfigured, 1, 1),
+        match
       });
-      if (existing.tid) finalTid = existing.tid; // preserva TID já salvo
-      if (existing.click_type && existing.click_type !== 'Orgânico') {
-        finalClickType = existing.click_type; // preserva click_type específico (CTWA/Landing)
-      } else {
-        finalClickType = finalTid ? 'Landing' : 'Orgânico';
+      if (!match) {
+        log('warn', 'Auth FAIL: X-MC-Secret ausente/incorreto — retornando 401.');
+        return res.sendStatus(401);
       }
     }
-  } catch (e) {
-    log('warn', 'getContatoByPhone falhou; seguindo com detectados', { err: e.message });
-  }
 
-  log('info', 'Origem consolidada', { tid: finalTid || '', clickType: finalClickType });
+    // ===== 1) Payload bruto (apenas em debug) =====
+    const payload = req.body || {};
+    log('debug', 'Payload bruto', payload);
 
-  // ===== 5) Bootstrap (estado + contato + criação de usuário) =====
-  let idContato = '';
-  try {
-    idContato = await bootstrapFromManychat(
-      phone,
+    // ===== 2) Extração flexível de campos (com logs) =====
+    const subscriberId = payload.subscriber_id || payload?.contact?.id || null;
+
+    const textInRaw = payload.text || payload.last_text_input || '';
+    const textIn = typeof textInRaw === 'string' ? textInRaw.trim() : '';
+
+    // rastrear de onde veio o telefone
+    const full = payload.full_contact || {};
+    let rawPhone = '';
+    let phoneSrc = '';
+    const phoneCandidates = [
+      ['payload.user.phone', payload?.user?.phone],
+      ['payload.contact.phone', payload?.contact?.phone],
+      ['payload.contact.wa_id', payload?.contact?.wa_id],
+      ['full_contact.whatsapp.id', (full?.whatsapp && full.whatsapp.id)],
+      ['full_contact.phone', full?.phone],
+      ['payload.phone', payload?.phone],
+    ];
+    for (const [src, val] of phoneCandidates) {
+      if (val) { rawPhone = val; phoneSrc = src; break; }
+    }
+    const phone = onlyDigits(rawPhone);
+
+    // Mídia: heurística por URL (sem last_reply_type)
+    const temMidia = isLikelyMediaUrl(textIn);
+
+    log('info', 'Extracted fields', {
       subscriberId,
-      inicializarEstado,
-      salvarContato,
-      criarUsuarioDjango,
-      estado,
-      finalTid,
-      finalClickType
-    );
-    log('debug', 'Bootstrap concluído', { idContato });
-  } catch (e) {
-    log('error', 'Erro no bootstrapFromManychat', { err: e.message });
-    // ainda assim damos ACK para não gerar retries infinitos no provedor
-  }
+      phoneSrc,
+      phoneMask: mask(phone),
+      hasText: !!textIn,
+      textPreview: trunc(textIn, 100),
+      hasMedia: temMidia
+    });
 
-  // ===== 6) Vincular subscriber_id (com logs de resultado) =====
-  if (subscriberId && phone) {
+    if (!phone) {
+      log('warn', 'Telefone ausente após extração — ignorando evento.');
+      return res.status(200).json({ ok: true, ignored: 'no-phone' });
+    }
+
+    // ===== 3) DETECÇÃO de TID e click_type (espelha fluxo Cloud API) =====
+    let detectedTid = '';
+    let detectedClickType = 'Orgânico';
+
+    const tidMatch = (textIn || '').match(/\[TID:\s*([A-Za-z0-9_-]{6,64})\]/i);
+    if (tidMatch && tidMatch[1]) {
+      detectedTid = tidMatch[1];           // mantém como veio
+      detectedClickType = 'Landing';
+    }
+
+    if (!detectedTid && textIn) {
+      const stripInvis = (s) =>
+        String(s || '')
+          .normalize('NFKC')
+          .replace(/[\u200B-\u200F\uFEFF\u202A-\u202E]/g, '');
+      const t = stripInvis(textIn);
+      const firstLine = (t.split(/\r?\n/)[0] || '').trim();
+      const m2 = /^[a-f0-9]{16}$/i.exec(firstLine);
+      if (m2) {
+        detectedTid = m2[0]; // mantém como veio
+        detectedClickType = 'Landing';
+      }
+    }
+
+    // ===== 4) Preservar o que já existe no DB (com logs) =====
+    let finalTid = detectedTid;
+    let finalClickType = detectedClickType; // 'Landing' se achou TID; senão 'Orgânico'
     try {
-      const r = await pool.query(
-        'UPDATE contatos SET manychat_subscriber_id = $2 WHERE id = $1',
-        [phone, subscriberId]
+      const existing = await getContatoByPhone(phone);
+      if (existing) {
+        log('debug', 'Contato existente no DB', {
+          existingTid: existing.tid || '',
+          existingClickType: existing.click_type || ''
+        });
+        if (existing.tid) finalTid = existing.tid; // preserva TID já salvo
+        if (existing.click_type && existing.click_type !== 'Orgânico') {
+          finalClickType = existing.click_type; // preserva click_type específico (CTWA/Landing)
+        } else {
+          finalClickType = finalTid ? 'Landing' : 'Orgânico';
+        }
+      }
+    } catch (e) {
+      log('warn', 'getContatoByPhone falhou; seguindo com detectados', { err: e.message });
+    }
+
+    log('info', 'Origem consolidada', { tid: finalTid || '', clickType: finalClickType });
+
+    // ===== 5) Bootstrap (estado + contato + criação de usuário) =====
+    let idContato = '';
+    try {
+      idContato = await bootstrapFromManychat(
+        phone,
+        subscriberId,
+        inicializarEstado,
+        salvarContato,
+        criarUsuarioDjango,
+        estado,
+        finalTid,
+        finalClickType
       );
-      log('debug', 'Vinculação subscriber_id → contato', { phoneMask: mask(phone), subscriberId, rowCount: r.rowCount });
+      log('debug', 'Bootstrap concluído', { idContato });
     } catch (e) {
-      log('error', 'Falha ao vincular subscriber_id', { err: e.message });
+      log('error', 'Erro no bootstrapFromManychat', { err: e.message });
+      // ainda assim damos ACK para não gerar retries infinitos no provedor
     }
-  }
 
-  // ===== 7) Salvar histórico (preservando TID/click_type corretos) =====
-  const textoRecebido = (temMidia && !textIn) ? '[mídia]' : textIn;
-  const st = estado[idContato] || {};
-  try {
-    await salvarContato(
-      idContato,
-      null,
-      textoRecebido,
-      st.tid || finalTid || '',
-      st.click_type || finalClickType || 'Orgânico'
-    );
-    log('debug', 'Contato salvo/atualizado', { idContato, hasText: !!textoRecebido });
-  } catch (e) {
-    log('error', 'Erro ao salvarContato', { err: e.message });
-  }
+    // ===== 6) Vincular subscriber_id (com logs de resultado) =====
+    if (subscriberId && phone) {
+      try {
+        const r = await pool.query(
+          'UPDATE contatos SET manychat_subscriber_id = $2 WHERE id = $1',
+          [phone, subscriberId]
+        );
+        log('debug', 'Vinculação subscriber_id → contato', { phoneMask: mask(phone), subscriberId, rowCount: r.rowCount });
+      } catch (e) {
+        log('error', 'Falha ao vincular subscriber_id', { err: e.message });
+      }
+    }
 
-  // ===== 8) Fila/estado de mensagens =====
-  if (!estado[idContato]) estado[idContato] = { mensagensPendentes: [], mensagensDesdeSolicitacao: [] };
-  const stNow = estado[idContato];
-  stNow.mensagensPendentes.push({ texto: textoRecebido, temMidia });
-  if (textoRecebido && !stNow.mensagensDesdeSolicitacao.includes(textoRecebido)) {
-    stNow.mensagensDesdeSolicitacao.push(textoRecebido);
-  }
-  stNow.ultimaMensagem = Date.now();
-
-  log('info', 'Mensagem enfileirada', {
-    idContato,
-    queueSize: stNow.mensagensPendentes.length,
-    hasMedia: temMidia
-  });
-
-  // ===== 9) Disparo do processamento assíncrono =====
-  setTimeout(async () => {
-    const delayAleatorio = 10000 + Math.random() * 5000;
-    log('debug', `Processamento agendado em ~${Math.round(delayAleatorio / 1000)}s`, { idContato });
+    // ===== 7) Salvar histórico (preservando TID/click_type corretos) =====
+    const textoRecebido = (temMidia && !textIn) ? '[mídia]' : textIn;
+    const st = estado[idContato] || {};
     try {
-      await delay(delayAleatorio);
-      await processarMensagensPendentes(idContato);
-      log('debug', 'processarMensagensPendentes concluído', { idContato });
+      await salvarContato(
+        idContato,
+        null,
+        textoRecebido,
+        st.tid || finalTid || '',
+        st.click_type || finalClickType || 'Orgânico'
+      );
+      log('debug', 'Contato salvo/atualizado', { idContato, hasText: !!textoRecebido });
     } catch (e) {
-      log('error', 'Erro no processamento assíncrono', { err: e.message });
+      log('error', 'Erro ao salvarContato', { err: e.message });
     }
-  }, 0);
 
-  // ===== 10) ACK imediato =====
-  return res.status(200).json({ ok: true, reqId });
-});
+    // ===== 8) Fila/estado de mensagens =====
+    if (!estado[idContato]) estado[idContato] = { mensagensPendentes: [], mensagensDesdeSolicitacao: [] };
+    const stNow = estado[idContato];
+    stNow.mensagensPendentes.push({ texto: textoRecebido, temMidia });
+    if (textoRecebido && !stNow.mensagensDesdeSolicitacao.includes(textoRecebido)) {
+      stNow.mensagensDesdeSolicitacao.push(textoRecebido);
+    }
+    stNow.ultimaMensagem = Date.now();
+
+    log('info', 'Mensagem enfileirada', {
+      idContato,
+      queueSize: stNow.mensagensPendentes.length,
+      hasMedia: temMidia
+    });
+
+    // ===== 9) Disparo do processamento assíncrono =====
+    setTimeout(async () => {
+      const delayAleatorio = 10000 + Math.random() * 5000;
+      log('debug', `Processamento agendado em ~${Math.round(delayAleatorio / 1000)}s`, { idContato });
+      try {
+        await delay(delayAleatorio);
+        await processarMensagensPendentes(idContato);
+        log('debug', 'processarMensagensPendentes concluído', { idContato });
+      } catch (e) {
+        log('error', 'Erro no processamento assíncrono', { err: e.message });
+      }
+    }, 0);
+
+    // ===== 10) ACK imediato =====
+    return res.status(200).json({ ok: true, reqId });
+  });
 
 }
 
