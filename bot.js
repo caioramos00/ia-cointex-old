@@ -2,20 +2,55 @@ const axios = require('axios');
 const OpenAI = require('openai');
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const EXTRA_FIRST_REPLY_BASE_MS = 10000;
-const EXTRA_FIRST_REPLY_JITTER_MS = 3000;
-const GLOBAL_PER_MSG_BASE_MS = 2000;
-const GLOBAL_PER_MSG_JITTER_MS = 1000;
+const EXTRA_FIRST_REPLY_BASE_MS = 45000;
+const EXTRA_FIRST_REPLY_JITTER_MS = 10000;
+const GLOBAL_PER_MSG_BASE_MS = 3000;
+const GLOBAL_PER_MSG_JITTER_MS = 1500;
 
 const { getActiveTransport } = require('./lib/transport');
 const { getContatoByPhone } = require('./db');
 const { atualizarContato, getBotSettings, pool } = require('./db.js');
+const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, mensagemImpulso, mensagensIntrodutorias, checklistVariacoes, mensagensPosChecklist, respostasNaoConfirmadoAcesso, respostasNaoConfirmadoConfirmacao, respostasDuvidasComuns, promptClassificaOptOut } = require('./prompts.js');
 const estadoContatos = require('./state.js');
-const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, mensagemImpulso, mensagensIntrodutorias, checklistVariacoes, mensagensPosChecklist, respostasNaoConfirmadoAcesso, respostasNaoConfirmadoConfirmacao, respostasDuvidasComuns } = require('./prompts.js');
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 const URL_RX = /https?:\/\/\S+/i;
+
+async function setDoNotContact(contato, value = true) {
+  try {
+    await pool.query('UPDATE contatos SET do_not_contact = $2 WHERE id = $1', [contato, !!value]);
+    console.log(`[${contato}] do_not_contact atualizado para ${!!value}`);
+  } catch (e) {
+    console.error(`[${contato}] Falha ao setar do_not_contact: ${e.message}`);
+  }
+}
+
+async function checarOptOutGlobal(contato, mensagensTexto) {
+  if (OPTOUT_RX.test(mensagensTexto)) {
+    await setDoNotContact(contato, true);
+    const st = estadoContatos[contato];
+    if (st?._timer2Abertura) clearTimeout(st._timer2Abertura);
+    if (st?.merrecaTimeout) clearTimeout(st.merrecaTimeout);
+    if (st?.posMerrecaTimeout) clearTimeout(st.posMerrecaTimeout);
+    estadoContatos[contato].etapa = 'encerrado';
+    console.log(`[${contato}] Opt-out detectado via regex → fluxo encerrado.`);
+    return true;
+  }
+  const out = await gerarResposta([{ role: 'system', content: promptClassificaOptOut(mensagensTexto) }], 6);
+  const decisao = (out || '').trim().toUpperCase();
+  if (decisao.includes('OPTOUT')) {
+    await setDoNotContact(contato, true);
+    const st = estadoContatos[contato];
+    if (st?._timer2Abertura) clearTimeout(st._timer2Abertura);
+    if (st?.merrecaTimeout) clearTimeout(st.merrecaTimeout);
+    if (st?.posMerrecaTimeout) clearTimeout(st.posMerrecaTimeout);
+    estadoContatos[contato].etapa = 'encerrado';
+    console.log(`[${contato}] Opt-out detectado via LLM → fluxo encerrado.`);
+    return true;
+  }
+  return false;
+}
 
 async function gerarResposta(messages, max_tokens = 60) {
   try {
@@ -88,7 +123,6 @@ async function enviarLinhaPorLinha(to, texto) {
   } catch (e) {
     console.error('[SeloIdent] Falha ao avaliar/preparar label:', e.message);
   }
-  // --- FIM: Inserção do selo de identidade ---
 
   try {
     const isFirstResponse = (estado.etapa === 'abertura' && !estado.aberturaConcluida);
@@ -336,11 +370,6 @@ async function processarMensagensPendentes(contato) {
     const estadoSemTimeout = Object.assign({}, estado, { acompanhamentoTimeout: estado && estado.acompanhamentoTimeout ? '[Timeout]' : null });
     console.log("[" + contato + "] Estado atual: " + JSON.stringify(estadoSemTimeout, null, 2));
 
-    if (!estado || estado.enviandoMensagens) {
-      console.log(`[${contato}] Bloqueado: estado=${!!estado}, enviandoMensagens=${estado && estado.enviandoMensagens}`);
-      return;
-    }
-
     const mensagensPacote = Array.isArray(estado.mensagensPendentes)
       ? estado.mensagensPendentes.splice(0)
       : [];
@@ -358,20 +387,22 @@ async function processarMensagensPendentes(contato) {
       return;
     }
 
+    if (await checarOptOutGlobal(contato, mensagensTexto)) {
+      await atualizarContato(contato, 'Sim', 'encerrado', '[OPTOUT]');
+      return;
+    }
+
     if (estado.etapa === 'abertura') {
       console.log("[" + contato + "] Processando etapa abertura");
 
-      // Se já concluímos a abertura e chegou resposta => ir para 'impulso'
       if (estado.aberturaConcluida && mensagensPacote.length > 0) {
         if (estado._timer2Abertura) { clearTimeout(estado._timer2Abertura); estado._timer2Abertura = null; }
         estado.etapa = 'impulso';
         await atualizarContato(contato, 'Sim', 'impulso');
         console.log(`[${contato}] Resposta após abertura → avançando para 'impulso'.`);
-        // segue o fluxo normal depois
       }
 
       if (!estado.aberturaConcluida) {
-        // --------- MONTA MSG1 ----------
         const msg1Grupo1 = ['salve', 'opa', 'slv', 'e aí', 'eae', 'eai', 'fala', 'e ai', 'e ae', 'boa', 'boaa'];
         const msg1Grupo2 = [
           'tô precisando de alguém pro trampo agora',
@@ -384,7 +415,52 @@ async function processarMensagensPendentes(contato) {
           'tenho vaga pra um trampo agora',
           'to com vaga pra um trampo',
         ];
-        const msg1Grupo3 = ['tá disponível?', 'vai poder fazer?', 'bora fazer?', 'consegue fazer?', 'vamos fazer?', 'vai fazer?', 'vai poder?', 'consegue?', 'bora?'];
+        const msg1Grupo3 = [
+          'tá disponível?',
+          'tá disponível? 🍊',
+          'tá disponível? 🍊🍊',
+          'tá disponível? 🍊🍊🍊',
+
+          'vai poder fazer?',
+          'vai poder fazer? 🍊',
+          'vai poder fazer? 🍊🍊',
+          'vai poder fazer? 🍊🍊🍊',
+
+          'bora fazer?',
+          'bora fazer? 🍊',
+          'bora fazer? 🍊🍊',
+          'bora fazer? 🍊🍊🍊',
+
+          'consegue fazer?',
+          'consegue fazer? 🍊',
+          'consegue fazer? 🍊🍊',
+          'consegue fazer? 🍊🍊🍊',
+
+          'vamos fazer?',
+          'vamos fazer? 🍊',
+          'vamos fazer? 🍊🍊',
+          'vamos fazer? 🍊🍊🍊',
+
+          'vai fazer?',
+          'vai fazer? 🍊',
+          'vai fazer? 🍊🍊',
+          'vai fazer? 🍊🍊🍊',
+
+          'vai poder?',
+          'vai poder? 🍊',
+          'vai poder? 🍊🍊',
+          'vai poder? 🍊🍊🍊',
+
+          'consegue?',
+          'consegue? 🍊',
+          'consegue? 🍊🍊',
+          'consegue? 🍊🍊🍊',
+
+          'bora?',
+          'bora? 🍊',
+          'bora? 🍊🍊',
+          'bora? 🍊🍊🍊'
+        ];
 
         const m1 = msg1Grupo1[Math.floor(Math.random() * msg1Grupo1.length)];
         const m2 = msg1Grupo2[Math.floor(Math.random() * msg1Grupo2.length)];
@@ -684,24 +760,16 @@ async function processarMensagensPendentes(contato) {
           }
         }
       } else if (tipoAceite.includes('recusa')) {
-        if (!estado.negativasAbertura) estado.negativasAbertura = 0;
-        if (estado.negativasAbertura < 2) {
-          const insistencias = ['vamo maluco, é rapidão', 'demora nada, bora nessa', 'tá com medo de que?'];
-          const insistencia = insistencias[estado.negativasAbertura];
-          await enviarLinhaPorLinha(contato, insistencia);
-          estado.negativasAbertura++;
-          estado.historico.push({ role: 'assistant', content: insistencia });
-          await atualizarContato(contato, 'Sim', 'impulso', insistencia);
-        } else {
-          const mensagem = 'quando quiser, só chamar';
-          await enviarLinhaPorLinha(contato, mensagem);
-          estado.etapa = 'encerrado';
-          estado.encerradoAte = Date.now() + 3 * 60 * 60 * 1000;
-          estado.historico.push({ role: 'assistant', content: mensagem });
-          await atualizarContato(contato, 'Sim', 'encerrado', mensagem);
-          console.log("[" + contato + "] Etapa encerrada (aguardando lead retomar)");
-        }
-      } else {
+        const msg = 'beleza, sem problema. se mudar de ideia é só chamar';
+        await enviarLinhaPorLinha(contato, msg);
+        estado.etapa = 'encerrado';
+        estado.encerradoAte = Date.now() + 24 * 60 * 60 * 1000;
+        estado.historico.push({ role: 'assistant', content: msg });
+        await atualizarContato(contato, 'Sim', 'encerrado', msg);
+        console.log("[" + contato + "] Recusa sem insistência → encerrado.");
+        return;
+      }
+      else {
         const mensagem = 'manda aí se vai ou não';
         await enviarLinhaPorLinha(contato, mensagem);
         estado.historico.push({ role: 'assistant', content: mensagem });

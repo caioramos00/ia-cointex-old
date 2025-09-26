@@ -137,4 +137,31 @@ const respostasDuvidasComuns = {
   'demora quanto': 'saca tudo agora, geralmente cai na hora. me avisa quando cair'
 };
 
-module.exports = { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, mensagemImpulso, mensagensIntrodutorias, checklistVariacoes, mensagensPosChecklist, respostasNaoConfirmadoAcesso, respostasNaoConfirmadoConfirmacao, respostasDuvidasComuns };
+function promptClassificaOptOut(texto) {
+  return `
+Tarefa: Classifique se o usuário pediu explicitamente para PARAR de receber mensagens (opt-out definitivo).
+
+Responda APENAS com UMA palavra:
+- OPTOUT  → quando houver pedido claro para parar, bloquear, remover, cancelar, sair, "não me chame", "não quero", "pare", "stop", "unsubscribe", "remova", "me tira", "excluir", etc., inclusive variações em pt/en, com gírias e abreviações.
+- CONTINUAR → quando for só recusa momentânea ("agora não", "talvez depois"), dúvida, silêncio, ou qualquer outra coisa que NÃO seja pedido claro de parar.
+
+Exemplos (→ saída):
+"não quero" → OPTOUT
+"não quero mais" → OPTOUT
+"não quero mais mensagem" → OPTOUT
+"pare de me mandar msg" → OPTOUT
+"remove meu número" → OPTOUT
+"stop" → OPTOUT
+"apaga" → OPTOUT
+"unsubscribe" → OPTOUT
+"não posso agora" → CONTINUAR
+"depois eu vejo" → CONTINUAR
+"quem é?" → CONTINUAR
+"não" (sem pedir para parar) → CONTINUAR
+
+Texto do usuário:
+${texto}
+Saída:`;
+};
+
+module.exports = { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, mensagemImpulso, mensagensIntrodutorias, checklistVariacoes, mensagensPosChecklist, respostasNaoConfirmadoAcesso, respostasNaoConfirmadoConfirmacao, respostasDuvidasComuns, promptClassificaOptOut };
