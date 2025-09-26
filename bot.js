@@ -343,7 +343,7 @@ async function processarMensagensPendentes(contato) {
     if (estado.etapa === 'abertura') {
       console.log("[" + contato + "] Processando etapa abertura");
       if (!estado.aberturaConcluida) {
-        const grupo1 = [
+        const msg1Grupo1 = [
           'salve',
           'opa',
           'slv',
@@ -356,7 +356,7 @@ async function processarMensagensPendentes(contato) {
           'boa',
           'boaa',
         ];
-        const grupo2 = [
+        const msg1Grupo2 = [
           'tô precisando de alguém pro trampo agora',
           'preciso de alguém pra um trampo agora',
           'tô precisando de alguém pra um trampo agora',
@@ -367,7 +367,7 @@ async function processarMensagensPendentes(contato) {
           'tenho vaga pra um trampo agora',
           'to com vaga pra um trampo',
         ];
-        const grupo3 = [
+        const msg1Grupo3 = [
           'tá disponível?',
           'vai poder fazer?',
           'bora fazer?',
@@ -379,12 +379,31 @@ async function processarMensagensPendentes(contato) {
           'bora?',
         ];
 
-        const m1 = grupo1[Math.floor(Math.random() * grupo1.length)];
-        const m2 = grupo2[Math.floor(Math.random() * grupo2.length)];
-        const m3 = grupo3[Math.floor(Math.random() * grupo3.length)];
+        const msg2Grupo1 = [
+          'fechou',
+          'tranquilo',
+          'da hora',
+          'massa'
+        ];
+        const msg2Grupo2 = [
+          'é rapidinho',
+          'pago agora',
+          'é coisa simples',
+          'é só seguir o passo'
+        ];
+        const msg2Grupo3 = [
+          'bora?',
+          'vamo nessa?',
+          'topa?',
+          'consegue agora?'
+        ];
+
+        const m1 = msg1Grupo1[Math.floor(Math.random() * msg1Grupo1.length)];
+        const m2 = msg1Grupo2[Math.floor(Math.random() * msg1Grupo2.length)];
+        const m3 = msg1Grupo3[Math.floor(Math.random() * msg1Grupo3.length)];
 
         // Mensagem base no formato pedido: '{msg1}, {msg2}, {msg3}'
-        let mensagem = `${m1}, ${m2}, ${m3}`;
+        let msg1 = `${m1}, ${m2}, ${m3}`;
 
         // --- Selo + Opt-out inline (sem quebras de linha) ---
         try {
@@ -404,14 +423,14 @@ async function processarMensagensPendentes(contato) {
               if (pieces.length) label = `Suporte • ${pieces.join(' | ')}`;
             }
             if (identEnabled && label) {
-              mensagem = `${label} — ${mensagem}`; // tudo na mesma linha
+              msg1 = `${label} — ${msg1}`; // tudo na mesma linha
             }
 
             // Opt-out (inline, mesma linha)
             const optHintEnabled = settings?.optout_hint_enabled !== false; // default ON
             const suffix = (settings?.optout_suffix || '· se não quiser: NÃO QUERO').trim();
-            if (optHintEnabled && suffix && !mensagem.includes(suffix)) {
-              mensagem = `${mensagem} ${suffix}`;
+            if (optHintEnabled && suffix && !msg1.includes(suffix)) {
+              msg1 = `${msg1} ${suffix}`;
             }
           }
         } catch (e) {
@@ -420,12 +439,24 @@ async function processarMensagensPendentes(contato) {
         // --- fim selo/opt-out inline ---
 
         // Envia UMA mensagem (sem quebras de linha)
-        await sendMessage(contato, mensagem);
+        await sendMessage(contato, msg1);
+
+        const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
+
+        const msg2 = `${pick(msg2Grupo1)}, ${pick(msg2Grupo2)}, ${pick(msg2Grupo3)}`;
+
+        // delay de 2.5 a 5s para não parecer bot instantâneo
+        await new Promise(r => setTimeout(r, 2500 + Math.floor(Math.random() * 2500)));
+
+        await sendMessage(contato, msg2);
+        estado.historico.push({ role: 'assistant', content: msg2 });
+        await atualizarContato(contato, 'Sim', 'abertura', msg2);
+        console.log(`[${contato}] Segunda mensagem enviada: ${msg2}`);
 
         estado.aberturaConcluida = true;
-        estado.historico.push({ role: 'assistant', content: mensagem });
-        await atualizarContato(contato, 'Sim', 'abertura', mensagem);
-        console.log("[" + contato + "] Mensagem inicial enviada (única): " + mensagem);
+        estado.historico.push({ role: 'assistant', content: msg1 });
+        await atualizarContato(contato, 'Sim', 'abertura', msg1);
+        console.log("[" + contato + "] Mensagem inicial enviada (única): " + msg1);
       } else if (mensagensPacote.length > 0) {
         // ... (restante do seu fluxo permanece igual)
       }
