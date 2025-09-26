@@ -405,7 +405,6 @@ async function processarMensagensPendentes(contato) {
 
         estado.aberturaConcluida = true;
 
-        // --------- PREPARA MSG2 (agendada) ----------
         const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
         const msg2Grupo1 = ['fechou', 'tranquilo', 'da hora', 'massa'];
         const msg2Grupo2 = ['é rapidinho', 'pago agora', 'é coisa simples', 'é só seguir o passo'];
