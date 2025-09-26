@@ -310,9 +310,14 @@ async function processarMensagensPendentes(contato) {
   try {
     const estado = estadoContatos[contato];
 
-    if (estado.merrecaTimeout || estado.posMerrecaTimeout) {
-      console.log("[" + contato + "] Ignorando mensagens durante timeout (merreca/posMerreca)");
+    if (estado && (estado.merrecaTimeout || estado.posMerrecaTimeout)) {
+      console.log(`[${contato}] Ignorando mensagens durante timeout (merreca/posMerreca)`);
       estado.mensagensPendentes = [];
+      return;
+    }
+
+    if (!estado || estado.enviandoMensagens) {
+      console.log(`[${contato}] Bloqueado: estado=${!!estado}, enviandoMensagens=${estado && estado.enviandoMensagens}`);
       return;
     }
 
@@ -320,12 +325,13 @@ async function processarMensagensPendentes(contato) {
     console.log("[" + contato + "] Estado atual: " + JSON.stringify(estadoSemTimeout, null, 2));
 
     if (!estado || estado.enviandoMensagens) {
-      console.log("[" + contato + "] Bloqueado: estado=" + (!!estado) + ", enviandoMensagens=" + (estado && estado.enviandoMensagens));
+      console.log(`[${contato}] Bloqueado: estado=${!!estado}, enviandoMensagens=${estado && estado.enviandoMensagens}`);
       return;
     }
 
-    const mensagensPacote = [...estado.mensagensPendentes];
-    estado.mensagensPendentes = [];
+    const mensagensPacote = Array.isArray(estado.mensagensPendentes)
+      ? estado.mensagensPendentes.splice(0)
+      : [];
     const mensagensTexto = mensagensPacote.map(msg => msg.texto).join('\n');
     const temMidia = mensagensPacote.some(msg => msg.temMidia);
 
@@ -342,11 +348,6 @@ async function processarMensagensPendentes(contato) {
 
     if (estado.etapa === 'abertura') {
       console.log("[" + contato + "] Processando etapa abertura");
-
-      // Drena as pendentes desta batida de processamento
-      const mensagensPacote = Array.isArray(estado.mensagensPendentes)
-        ? estado.mensagensPendentes.splice(0)
-        : [];
 
       // Se já concluímos a abertura e chegou resposta => ir para 'impulso'
       if (estado.aberturaConcluida && mensagensPacote.length > 0) {
