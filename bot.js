@@ -457,7 +457,6 @@ async function processarMensagensPendentes(contato) {
         await atualizarContato(contato, 'Sim', 'abertura', msg1);
         console.log("[" + contato + "] Mensagem inicial enviada (única): " + msg1);
       } else if (mensagensPacote.length > 0) {
-        // Usuário respondeu após a abertura → avançar para 'impulso'
         estado.etapa = 'impulso';
         console.log(`[${contato}] Resposta após abertura detectada → avançando para 'impulso'.`);
       }
