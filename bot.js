@@ -2,10 +2,10 @@ const axios = require('axios');
 const OpenAI = require('openai');
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
-const WHATSAPP_API_URL = `https://graph.facebook.com/v23.0/${PHONE_NUMBER_ID}/messages`;
-
-const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
+const EXTRA_FIRST_REPLY_BASE_MS = 10000;
+const EXTRA_FIRST_REPLY_JITTER_MS = 3000;
+const GLOBAL_PER_MSG_BASE_MS = 2000;
+const GLOBAL_PER_MSG_JITTER_MS = 1000;
 
 const { getActiveTransport } = require('./lib/transport');
 const { getContatoByPhone } = require('./db');
@@ -207,10 +207,21 @@ async function sendManychatBatch(phone, textOrLines) {
 }
 
 async function sendMessage(to, text) {
+  let extraWait =
+    GLOBAL_PER_MSG_BASE_MS + Math.floor(Math.random() * GLOBAL_PER_MSG_JITTER_MS);
+
+  const st = estadoContatos[to];
+  if (st?.primeiraRespostaPendente) {
+    extraWait +=
+      EXTRA_FIRST_REPLY_BASE_MS + Math.floor(Math.random() * EXTRA_FIRST_REPLY_JITTER_MS);
+    st.primeiraRespostaPendente = false;
+  }
+
+  await delay(extraWait);
+
   const { mod: transport, settings } = await getActiveTransport();
 
   if (transport.name === 'manychat') {
-    // aceita string com quebras de linha ou array de linhas
     const lines = Array.isArray(text)
       ? text
       : String(text).split('\n').map(s => s.trim()).filter(Boolean);
@@ -229,6 +240,7 @@ async function sendMessage(to, text) {
 function inicializarEstado(contato, tid = '', click_type = 'Orgânico') {
   estadoContatos[contato] = {
     etapa: 'abertura',
+    primeiraRespostaPendente: true,
     historico: [],
     encerrado: false,
     ultimaMensagem: Date.now(),
