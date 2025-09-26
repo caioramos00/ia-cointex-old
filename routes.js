@@ -445,7 +445,6 @@ function setupRoutes(
     }
   });
 
-  // --- Chat público do simulador (sem checkAuth) ---
   app.get('/sim/chat', async (req, res) => {
     const phone = onlyDigits(req.query.phone || '');
     if (!phone) return res.status(400).json({ error: 'phone é obrigatório' });
