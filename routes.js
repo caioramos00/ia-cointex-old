@@ -223,6 +223,227 @@ function setupRoutes(
     }
   });
 
+  // --- SIMULADOR (UI) ---
+  app.get('/simulador', (req, res) => {
+    res.type('html').send(`<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Simulador do Bot</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    body { margin:0; background:#0b1220; color:#e6ecff; }
+    .wrap { max-width: 920px; margin: 0 auto; padding: 24px; }
+    .card { background:#10192b; border:1px solid #1c2944; border-radius:16px; padding:16px; }
+    .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    input, textarea, button { border-radius:12px; border:1px solid #1c2944; background:#0e1726; color:#e6ecff; }
+    input, textarea { padding:12px; }
+    input { height:42px; }
+    textarea { width:100%; min-height:60px; resize:vertical; }
+    button { padding:12px 16px; cursor:pointer; }
+    button:hover { background:#13203a; }
+    .chat { height: 56vh; overflow:auto; padding:8px; background:#0e1726; border-radius:12px; border:1px solid #1c2944; }
+    .msg { max-width: 72%; padding:10px 12px; margin:8px 0; border-radius:14px; line-height: 1.35; white-space: pre-wrap; word-wrap: break-word; }
+    .u { background:#1a2b4d; margin-left:auto; border-top-right-radius:4px; }
+    .b { background:#13203a; margin-right:auto; border-top-left-radius:4px; }
+    .meta { opacity:.65; font-size:12px; margin-top:2px; }
+    .hdr { display:flex; gap:12px; align-items:center; margin-bottom:12px; }
+    .tag { font-size:12px; background:#0e1726; border:1px solid #1c2944; padding:2px 8px; border-radius:999px; }
+    .hr { height:1px; background:#1c2944; margin:14px -16px; }
+    a { color:#8ab4ff; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h2>Simulador do Bot</h2>
+    <div class="card">
+      <div class="hdr">
+        <div class="tag">usa /api/chat/:id</div>
+        <div class="tag">fila real + processarMensagensPendentes</div>
+      </div>
+
+      <div class="row" style="margin-bottom:12px">
+        <label style="font-size:14px; opacity:.8">ID do contato (telefone ou qualquer string estável)</label>
+        <input id="cid" placeholder="ex.: 5511940000000" style="flex:1" />
+        <button id="btnReset">Reset</button>
+      </div>
+
+      <div class="chat" id="chat"></div>
+
+      <div class="hr"></div>
+
+      <div class="row" style="gap:12px">
+        <textarea id="txt" placeholder="Digite como se fosse o usuário..."></textarea>
+      </div>
+      <div class="row" style="justify-content:space-between; margin-top:8px">
+        <div class="row" style="gap:8px">
+          <label style="font-size:13px"><input type="checkbox" id="sendMedia" /> enviar como mídia</label>
+          <label style="font-size:13px"><input type="checkbox" id="fast" /> fast (pula atrasos da rota)</label>
+        </div>
+        <div class="row" style="gap:8px">
+          <button id="btnSeedTid">Seed: [TID: ABC123]</button>
+          <button id="btnFirstLine">Seed: 16-hex na primeira linha</button>
+          <button id="btnSend">Enviar</button>
+        </div>
+      </div>
+    </div>
+
+    <p style="opacity:.7; font-size:12px; margin-top:12px">
+      Dica: o painel usa <code>/api/chat/:id</code> (que já existe) para mostrar histórico (entrada + saídas).
+      O botão <b>Reset</b> limpa o histórico só no front (não apaga do DB). Se quiser um "apagar do DB", crie um endpoint separado.
+    </p>
+  </div>
+
+<script>
+  const $ = (sel) => document.querySelector(sel);
+  const cidInput = $('#cid');
+  const chat = $('#chat');
+  const txt = $('#txt');
+  const sendBtn = $('#btnSend');
+  const seedTid = $('#btnSeedTid');
+  const seedFirst = $('#btnFirstLine');
+  const sendMedia = $('#sendMedia');
+  const fast = $('#fast');
+  const resetBtn = $('#btnReset');
+
+  const LS_KEY = 'simu.cid';
+  cidInput.value = localStorage.getItem(LS_KEY) || '';
+
+  function setCid(v) {
+    localStorage.setItem(LS_KEY, v || '');
+  }
+  cidInput.addEventListener('change', e => setCid(e.target.value.trim()));
+
+  function render(messages) {
+    chat.innerHTML = '';
+    messages.forEach(m => {
+      const div = document.createElement('div');
+      div.className = 'msg ' + (m.role === 'sent' ? 'b' : 'u');
+      div.textContent = m.texto || m.text || '';
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.textContent = new Date(m.data || Date.now()).toLocaleString();
+      div.appendChild(meta);
+      chat.appendChild(div);
+    });
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  async function load() {
+    const id = cidInput.value.trim();
+    if (!id) return;
+    try {
+      const r = await fetch('/api/chat/' + encodeURIComponent(id));
+      if (!r.ok) return;
+      const j = await r.json();
+      render(j);
+    } catch {}
+  }
+
+  setInterval(load, 1000);
+  load();
+
+  sendBtn.addEventListener('click', async () => {
+    const id = cidInput.value.trim();
+    const text = txt.value;
+    if (!id || !text) return;
+    await fetch('/simulador/send' + (fast.checked ? '?fast=1' : ''), {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ id, text, media: !!sendMedia.checked })
+    });
+    txt.value = '';
+    txt.focus();
+    setTimeout(load, 200);
+  });
+
+  seedTid.addEventListener('click', () => {
+    txt.value = (txt.value ? txt.value + '\\n' : '') + '[TID: ABC123]';
+    txt.focus();
+  });
+  seedFirst.addEventListener('click', () => {
+    txt.value = 'a1b2c3d4e5f6a7b8\\n' + (txt.value || '');
+    txt.focus();
+  });
+
+  resetBtn.addEventListener('click', () => {
+    chat.innerHTML = '';
+  });
+</script>
+</body>
+</html>`);
+  });
+
+  // --- SIMULADOR (injeção de mensagem do "usuário") ---
+  app.post('/simulador/send', express.json(), async (req, res) => {
+    try {
+      const { id, text, media } = req.body || {};
+      const contato = String(id || '').trim();
+      const texto = String(text || '').trim();
+
+      if (!contato || (!texto && !media)) {
+        return res.status(400).json({ ok: false, error: 'id e texto são obrigatórios' });
+      }
+
+      // Detecta origem (TID) como no webhook (mantendo o formato original)
+      let tid = '';
+      let click_type = 'Simulador';
+
+      if (texto) {
+        const m1 = texto.match(/\[TID:\s*([A-Za-z0-9_-]{6,64})\]/i);
+        if (m1 && m1[1]) {
+          tid = m1[1];
+          click_type = 'Landing';
+        }
+
+        if (!tid) {
+          const stripInvis = (s) => String(s || '')
+            .normalize('NFKC')
+            .replace(/[\u200B-\u200F\uFEFF\u202A-\u202E]/g, '');
+          const t = stripInvis(texto);
+          const firstLine = (t.split(/\r?\n/)[0] || '').trim();
+          const m2 = /^[a-f0-9]{16}$/i.exec(firstLine);
+          if (m2) {
+            tid = m2[0];     // mantém como veio
+            click_type = 'Landing';
+          }
+        }
+      }
+
+      // Inicializa estado (se necessário) e grava histórico de entrada
+      if (!estado[contato]) {
+        inicializarEstado(contato, tid, click_type);
+        await criarUsuarioDjango(contato).catch(() => { });
+      }
+      const txtRecebido = media && !texto ? '[mídia]' : texto;
+      await salvarContato(contato, null, txtRecebido, tid, click_type).catch(() => { });
+
+      // Enfileira e processa imediatamente (sem o atraso aleatório da rota)
+      const st = estado[contato];
+      if (!st.mensagensPendentes) st.mensagensPendentes = [];
+      if (!st.mensagensDesdeSolicitacao) st.mensagensDesdeSolicitacao = [];
+      st.mensagensPendentes.push({ texto: txtRecebido, temMidia: !!media });
+      if (txtRecebido && !st.mensagensDesdeSolicitacao.includes(txtRecebido)) {
+        st.mensagensDesdeSolicitacao.push(txtRecebido);
+      }
+      st.ultimaMensagem = Date.now();
+
+      const fast = String(req.query.fast || '') === '1';
+      if (fast) {
+        // marca no estado (caso queira, futuramente, seu bot.js pode ler e reduzir delays internos)
+        st.__simFast = true;
+      }
+
+      await processarMensagensPendentes(contato);
+
+      return res.json({ ok: true });
+    } catch (e) {
+      console.error('[Simulador] erro:', e);
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
   // ---- Metrics & Data APIs ----
   app.get('/api/metrics', checkAuth, async (req, res) => {
     const client = await pool.connect();

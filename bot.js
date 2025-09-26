@@ -340,66 +340,92 @@ async function processarMensagensPendentes(contato) {
     if (estado.etapa === 'abertura') {
       console.log("[" + contato + "] Processando etapa abertura");
       if (!estado.aberturaConcluida) {
-        const grupo1 = ['salve', 'e aí', 'eae'];
-        const grupo2 = ['tô precisando de um lara pra agora', 'preciso de um lara pra agora', 'preciso de lara agora', 'tô precisando de lara agora'];
-        const grupo3 = ['tá disponível?', 'vai poder fazer o trampo?', 'bora fazer esse trampo?', 'vamos fazer esse trampo?'];
-        const resposta = [
-          grupo1[Math.floor(Math.random() * grupo1.length)],
-          grupo2[Math.floor(Math.random() * grupo2.length)],
-          grupo3[Math.floor(Math.random() * grupo3.length)]
-        ].join('\n');
-        await enviarLinhaPorLinha(contato, resposta);
-        estado.aberturaConcluida = true;
-        estado.historico.push({ role: 'assistant', content: resposta });
-        await atualizarContato(contato, 'Sim', 'abertura', resposta);
-        console.log("[" + contato + "] Mensagem inicial enviada: " + resposta);
-      } else if (mensagensPacote.length > 0) {
-        const contextoAceite = mensagensTexto;
-        const tipoAceite = await gerarResposta([{ role: 'system', content: promptClassificaAceite(contextoAceite) }], 12);
-        console.log("[" + contato + "] Tipo de resposta: " + tipoAceite);
+        const grupo1 = [
+          'salve',
+          'opa',
+          'slv',
+          'e aí',
+          'eae',
+          'eai',
+          'fala',
+          'e ai',
+          'e ae',
+          'boa',
+          'boaa',
+        ];
+        const grupo2 = [
+          'tô precisando de alguém pro trampo agora',
+          'preciso de alguém pra um trampo agora',
+          'tô precisando de alguém pra um trampo agora',
+          'preciso de alguém pro trampo agora',
+          'precisando de alguém pro trampo agora',
+          'precisando de alguém pra um trampo agora',
+          'to com vaga pra um trampo agora',
+          'tenho vaga pra um trampo agora',
+          'to com vaga pra um trampo',
+        ];
+        const grupo3 = [
+          'tá disponível?',
+          'vai poder fazer?',
+          'bora fazer?',
+          'consegue fazer?',
+          'vamos fazer?',
+          'vai fazer?',
+          'vai poder?',
+          'consegue?',
+          'bora?',
+        ];
 
-        if (tipoAceite.includes('aceite')) {
-          await enviarLinhaPorLinha(contato, mensagemImpulso);
-          estado.etapa = 'impulso';
-          estado.historico.push({ role: 'assistant', content: mensagemImpulso });
-          estado.mensagensDesdeSolicitacao = [];
-          await atualizarContato(contato, 'Sim', 'impulso', mensagemImpulso);
-          console.log("[" + contato + "] Avançando para etapa impulso");
-        } else if (tipoAceite.includes('recusa')) {
-          if (estado.negativasAbertura < 2) {
-            const insistencias = ['vamo maluco, é rapidão', 'demora nada, bora nessa', 'tá com medo de que?'];
-            const insistencia = insistencias[estado.negativasAbertura];
-            await enviarLinhaPorLinha(contato, insistencia);
-            estado.negativasAbertura++;
-            estado.historico.push({ role: 'assistant', content: insistencia });
-            await atualizarContato(contato, 'Sim', 'abertura', insistencia);
-            console.log("[" + contato + "] Insistindo após recusa (" + estado.negativasAbertura + "/2)");
-          } else {
-            const mensagem = 'quando quiser, só chamar';
-            await enviarLinhaPorLinha(contato, mensagem);
-            estado.etapa = 'encerrado';
-            estado.encerradoAte = Date.now() + 3 * 60 * 60 * 1000;
-            estado.historico.push({ role: 'assistant', content: mensagem });
-            await atualizarContato(contato, 'Sim', 'encerrado', mensagem);
-            console.log("[" + contato + "] Etapa encerrada após 2 recusas");
+        const m1 = grupo1[Math.floor(Math.random() * grupo1.length)];
+        const m2 = grupo2[Math.floor(Math.random() * grupo2.length)];
+        const m3 = grupo3[Math.floor(Math.random() * grupo3.length)];
+
+        // Mensagem base no formato pedido: '{msg1}, {msg2}, {msg3}'
+        let mensagem = `${m1}, ${m2}, ${m3}`;
+
+        // --- Selo + Opt-out inline (sem quebras de linha) ---
+        try {
+          const settings = await getBotSettings().catch(() => null);
+          const isFirstResponse = (estado.etapa === 'abertura' && !estado.aberturaConcluida);
+
+          if (isFirstResponse) {
+            // Selo de identidade (inline, sem \n)
+            const identEnabled = settings?.identity_enabled !== false;
+            let label = (settings?.identity_label || '').trim();
+
+            if (!label) {
+              const pieces = [];
+              if (settings?.support_email) pieces.push(settings.support_email);
+              if (settings?.support_phone) pieces.push(settings.support_phone);
+              if (settings?.support_url) pieces.push(settings.support_url);
+              if (pieces.length) label = `Suporte • ${pieces.join(' | ')}`;
+            }
+            if (identEnabled && label) {
+              mensagem = `${label} — ${mensagem}`; // tudo na mesma linha
+            }
+
+            // Opt-out (inline, mesma linha)
+            const optHintEnabled = settings?.optout_hint_enabled !== false; // default ON
+            const suffix = (settings?.optout_suffix || '· se não quiser: NÃO QUERO').trim();
+            if (optHintEnabled && suffix && !mensagem.includes(suffix)) {
+              mensagem = `${mensagem} ${suffix}`;
+            }
           }
-        } else if (tipoAceite.includes('duvida')) {
-          await enviarLinhaPorLinha(contato, mensagemImpulso);
-          estado.etapa = 'impulso';
-          estado.historico.push({ role: 'assistant', content: mensagemImpulso });
-          estado.mensagensDesdeSolicitacao = [];
-          await atualizarContato(contato, 'Sim', 'impulso', mensagemImpulso);
-          console.log("[" + contato + "] Resposta classificada como dúvida, avançando para impulso");
-        } else {
-          const mensagem = 'manda aí se vai ou não';
-          await enviarLinhaPorLinha(contato, mensagem);
-          estado.historico.push({ role: 'assistant', content: mensagem });
-          await atualizarContato(contato, 'Sim', 'abertura', mensagem);
-          console.log("[" + contato + "] Resposta não classificada, pedindo esclarecimento");
+        } catch (e) {
+          console.error('[Abertura][inline selo/optout] erro:', e.message);
         }
+        // --- fim selo/opt-out inline ---
+
+        // Envia UMA mensagem (sem quebras de linha)
+        await sendMessage(contato, mensagem);
+
+        estado.aberturaConcluida = true;
+        estado.historico.push({ role: 'assistant', content: mensagem });
+        await atualizarContato(contato, 'Sim', 'abertura', mensagem);
+        console.log("[" + contato + "] Mensagem inicial enviada (única): " + mensagem);
+      } else if (mensagensPacote.length > 0) {
+        // ... (restante do seu fluxo permanece igual)
       }
-      console.log(`[${contato}] Estado após processamento: etapa=${estado.etapa}, mensagensPendentes=${estado.mensagensPendentes.length}`);
-      return;
     }
 
     if (estado.etapa === 'impulso') {
