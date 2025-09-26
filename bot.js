@@ -403,7 +403,6 @@ async function processarMensagensPendentes(contato) {
         await atualizarContato(contato, 'Sim', 'abertura', msg1);
         console.log("[" + contato + "] Mensagem inicial enviada: " + msg1);
 
-        // *** MARCA CONCLUÍDA JÁ AQUI ***
         estado.aberturaConcluida = true;
 
         // --------- PREPARA MSG2 (agendada) ----------
