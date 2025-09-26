@@ -445,7 +445,6 @@ async function processarMensagensPendentes(contato) {
 
         const msg2 = `${pick(msg2Grupo1)}, ${pick(msg2Grupo2)}, ${pick(msg2Grupo3)}`;
 
-        // delay de 2.5 a 5s para não parecer bot instantâneo
         await new Promise(r => setTimeout(r, 2500 + Math.floor(Math.random() * 2500)));
 
         await sendMessage(contato, msg2);
