@@ -445,22 +445,37 @@ function setupRoutes(
     }
   });
 
+  function normalizeMsg(m, role) {
+    return {
+      texto:
+        m?.texto ??
+        m?.text ??
+        m?.mensagem ??
+        m?.message ??
+        m?.body ??
+        m?.content ??
+        '',
+      data: m?.data ?? m?.date ?? m?.created_at ?? m?.createdAt ?? Date.now(),
+      role
+    };
+  }
+
   app.get('/sim/chat/:id', async (req, res) => {
     const phone = onlyDigits(req.params.id || '');
     if (!phone) return res.status(400).json({ error: 'phone é obrigatório' });
 
     const client = await pool.connect();
     try {
-      const { rows } = await client.query(
+      const r = await client.query(
         'SELECT historico, historico_interacoes FROM contatos WHERE id = $1',
         [phone]
       );
-      const historico = rows[0]?.historico || [];
-      const interacoes = rows[0]?.historico_interacoes || [];
+      const historico = r.rows[0]?.historico || [];
+      const interacoes = r.rows[0]?.historico_interacoes || [];
 
       const all = [
-        ...historico.map(m => ({ ...m, role: 'received' })),
-        ...interacoes.map(m => ({ ...m, role: 'sent' })),
+        ...historico.map(m => normalizeMsg(m, 'received')),
+        ...interacoes.map(m => normalizeMsg(m, 'sent')),
       ].sort((a, b) => new Date(a.data) - new Date(b.data));
 
       res.set('Cache-Control', 'no-store');
