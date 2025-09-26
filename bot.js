@@ -353,6 +353,7 @@ async function processarMensagensPendentes(contato) {
       if (estado.aberturaConcluida && mensagensPacote.length > 0) {
         if (estado._timer2Abertura) { clearTimeout(estado._timer2Abertura); estado._timer2Abertura = null; }
         estado.etapa = 'impulso';
+        await atualizarContato(contato, 'Sim', 'impulso');
         console.log(`[${contato}] Resposta após abertura → avançando para 'impulso'.`);
         // segue o fluxo normal depois
       }
