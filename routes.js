@@ -386,17 +386,18 @@ function setupRoutes(
         return res.status(400).json({ ok: false, error: 'id e texto são obrigatórios' });
       }
 
-      // Detecta origem (TID) como no webhook (mantendo o formato original)
       let tid = '';
-      let click_type = 'Simulador';
+      let click_type = 'Orgânico'; // <- padrão igual ao fluxo real (NUNCA "Simulador")
 
       if (texto) {
+        // [TID: ...]
         const m1 = texto.match(/\[TID:\s*([A-Za-z0-9_-]{6,64})\]/i);
         if (m1 && m1[1]) {
-          tid = m1[1];
-          click_type = 'Landing';
+          tid = m1[1];           // mantém exatamente como veio
+          click_type = 'Landing'; // igual ao webhook
         }
 
+        // 16 hex na primeira linha
         if (!tid) {
           const stripInvis = (s) => String(s || '')
             .normalize('NFKC')
@@ -405,7 +406,7 @@ function setupRoutes(
           const firstLine = (t.split(/\r?\n/)[0] || '').trim();
           const m2 = /^[a-f0-9]{16}$/i.exec(firstLine);
           if (m2) {
-            tid = m2[0];     // mantém como veio
+            tid = m2[0];          // mantém exatamente como veio
             click_type = 'Landing';
           }
         }
