@@ -342,20 +342,23 @@ async function processarMensagensPendentes(contato) {
 
     if (estado.etapa === 'abertura') {
       console.log("[" + contato + "] Processando etapa abertura");
+
+      // Drena as pendentes desta batida de processamento
+      const mensagensPacote = Array.isArray(estado.mensagensPendentes)
+        ? estado.mensagensPendentes.splice(0)
+        : [];
+
+      // Se já concluímos a abertura e chegou resposta => ir para 'impulso'
+      if (estado.aberturaConcluida && mensagensPacote.length > 0) {
+        if (estado._timer2Abertura) { clearTimeout(estado._timer2Abertura); estado._timer2Abertura = null; }
+        estado.etapa = 'impulso';
+        console.log(`[${contato}] Resposta após abertura → avançando para 'impulso'.`);
+        // segue o fluxo normal depois
+      }
+
       if (!estado.aberturaConcluida) {
-        const msg1Grupo1 = [
-          'salve',
-          'opa',
-          'slv',
-          'e aí',
-          'eae',
-          'eai',
-          'fala',
-          'e ai',
-          'e ae',
-          'boa',
-          'boaa',
-        ];
+        // --------- MONTA MSG1 ----------
+        const msg1Grupo1 = ['salve', 'opa', 'slv', 'e aí', 'eae', 'eai', 'fala', 'e ai', 'e ae', 'boa', 'boaa'];
         const msg1Grupo2 = [
           'tô precisando de alguém pro trampo agora',
           'preciso de alguém pra um trampo agora',
@@ -367,98 +370,71 @@ async function processarMensagensPendentes(contato) {
           'tenho vaga pra um trampo agora',
           'to com vaga pra um trampo',
         ];
-        const msg1Grupo3 = [
-          'tá disponível?',
-          'vai poder fazer?',
-          'bora fazer?',
-          'consegue fazer?',
-          'vamos fazer?',
-          'vai fazer?',
-          'vai poder?',
-          'consegue?',
-          'bora?',
-        ];
-
-        const msg2Grupo1 = [
-          'fechou',
-          'tranquilo',
-          'da hora',
-          'massa'
-        ];
-        const msg2Grupo2 = [
-          'é rapidinho',
-          'pago agora',
-          'é coisa simples',
-          'é só seguir o passo'
-        ];
-        const msg2Grupo3 = [
-          'bora?',
-          'vamo nessa?',
-          'topa?',
-          'consegue agora?'
-        ];
+        const msg1Grupo3 = ['tá disponível?', 'vai poder fazer?', 'bora fazer?', 'consegue fazer?', 'vamos fazer?', 'vai fazer?', 'vai poder?', 'consegue?', 'bora?'];
 
         const m1 = msg1Grupo1[Math.floor(Math.random() * msg1Grupo1.length)];
         const m2 = msg1Grupo2[Math.floor(Math.random() * msg1Grupo2.length)];
         const m3 = msg1Grupo3[Math.floor(Math.random() * msg1Grupo3.length)];
-
-        // Mensagem base no formato pedido: '{msg1}, {msg2}, {msg3}'
         let msg1 = `${m1}, ${m2}, ${m3}`;
 
-        // --- Selo + Opt-out inline (sem quebras de linha) ---
+        // Selo/opt-out inline (mantido do seu código)
         try {
           const settings = await getBotSettings().catch(() => null);
-          const isFirstResponse = (estado.etapa === 'abertura' && !estado.aberturaConcluida);
-
-          if (isFirstResponse) {
-            // Selo de identidade (inline, sem \n)
-            const identEnabled = settings?.identity_enabled !== false;
-            let label = (settings?.identity_label || '').trim();
-
-            if (!label) {
-              const pieces = [];
-              if (settings?.support_email) pieces.push(settings.support_email);
-              if (settings?.support_phone) pieces.push(settings.support_phone);
-              if (settings?.support_url) pieces.push(settings.support_url);
-              if (pieces.length) label = `Suporte • ${pieces.join(' | ')}`;
-            }
-            if (identEnabled && label) {
-              msg1 = `${label} — ${msg1}`; // tudo na mesma linha
-            }
-
-            // Opt-out (inline, mesma linha)
-            const optHintEnabled = settings?.optout_hint_enabled !== false; // default ON
-            const suffix = (settings?.optout_suffix || '· se não quiser: NÃO QUERO').trim();
-            if (optHintEnabled && suffix && !msg1.includes(suffix)) {
-              msg1 = `${msg1} ${suffix}`;
-            }
+          const identEnabled = settings?.identity_enabled !== false;
+          let label = (settings?.identity_label || '').trim();
+          if (!label) {
+            const pieces = [];
+            if (settings?.support_email) pieces.push(settings.support_email);
+            if (settings?.support_phone) pieces.push(settings.support_phone);
+            if (settings?.support_url) pieces.push(settings.support_url);
+            if (pieces.length) label = `Suporte • ${pieces.join(' | ')}`;
           }
+          if (identEnabled && label) msg1 = `${label} — ${msg1}`;
+          const optHintEnabled = settings?.optout_hint_enabled !== false;
+          const suffix = (settings?.optout_suffix || '· se não quiser: NÃO QUERO').trim();
+          if (optHintEnabled && suffix && !msg1.includes(suffix)) msg1 = `${msg1} ${suffix}`;
         } catch (e) {
           console.error('[Abertura][inline selo/optout] erro:', e.message);
         }
-        // --- fim selo/opt-out inline ---
 
-        // Envia UMA mensagem (sem quebras de linha)
+        // Envia a 1ª
         await sendMessage(contato, msg1);
-
-        const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
-
-        const msg2 = `${pick(msg2Grupo1)}, ${pick(msg2Grupo2)}, ${pick(msg2Grupo3)}`;
-
-        await new Promise(r => setTimeout(r, 2500 + Math.floor(Math.random() * 2500)));
-
-        await sendMessage(contato, msg2);
-        estado.historico.push({ role: 'assistant', content: msg2 });
-        await atualizarContato(contato, 'Sim', 'abertura', msg2);
-        console.log(`[${contato}] Segunda mensagem enviada: ${msg2}`);
-
-        estado.aberturaConcluida = true;
         estado.historico.push({ role: 'assistant', content: msg1 });
         await atualizarContato(contato, 'Sim', 'abertura', msg1);
-        console.log("[" + contato + "] Mensagem inicial enviada (única): " + msg1);
-      } else if (mensagensPacote.length > 0) {
-        estado.etapa = 'impulso';
-        console.log(`[${contato}] Resposta após abertura detectada → avançando para 'impulso'.`);
+        console.log("[" + contato + "] Mensagem inicial enviada: " + msg1);
+
+        // *** MARCA CONCLUÍDA JÁ AQUI ***
+        estado.aberturaConcluida = true;
+
+        // --------- PREPARA MSG2 (agendada) ----------
+        const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
+        const msg2Grupo1 = ['fechou', 'tranquilo', 'da hora', 'massa'];
+        const msg2Grupo2 = ['é rapidinho', 'pago agora', 'é coisa simples', 'é só seguir o passo'];
+        const msg2Grupo3 = ['bora?', 'vamo nessa?', 'topa?', 'consegue agora?'];
+        const msg2 = `${pick(msg2Grupo1)}, ${pick(msg2Grupo2)}, ${pick(msg2Grupo3)}`;
+
+        // Agenda a 2ª com cancelamento se o usuário responder ou a etapa mudar
+        const delayMs = 7000 + Math.floor(Math.random() * 6000); // 7–13s
+        estado._timer2Abertura = setTimeout(async () => {
+          try {
+            // se mudou de etapa ou há novas pendentes, não enviar
+            if (estado.etapa !== 'abertura' || (estado.mensagensPendentes && estado.mensagensPendentes.length)) {
+              console.log(`[${contato}] 2ª de abertura cancelada (usuário respondeu ou etapa mudou).`);
+              return;
+            }
+            await sendMessage(contato, msg2);
+            estado.historico.push({ role: 'assistant', content: msg2 });
+            await atualizarContato(contato, 'Sim', 'abertura', msg2);
+            console.log(`[${contato}] Segunda mensagem enviada (após ${(delayMs / 1000).toFixed(1)}s): ${msg2}`);
+          } catch (e) {
+            console.error(`[${contato}] Falha ao enviar 2ª de abertura:`, e);
+          } finally {
+            estado._timer2Abertura = null;
+          }
+        }, delayMs);
+
+        // encerra este ciclo — a 2ª sai depois, no timer
+        return;
       }
     }
 
