@@ -145,7 +145,10 @@ async function sendManychatBatch(phone, textOrLines) {
     contato?.manychat_subscriber_id ||
     estadoContatos[phone]?.manychat_subscriber_id ||
     null;
-  if (!subscriberId) throw new Error('ManyChat: subscriberId ausente para este contato.');
+  if (!subscriberId) {
+    console.warn(`[ManyChat] subscriberId ausente para ${phone} — pulando envio externo (simulação/local).`);
+    return { ok: true, skipped: true, reason: 'no-subscriber' };
+  }
 
   const lines = Array.isArray(textOrLines)
     ? textOrLines
