@@ -27,27 +27,33 @@ async function setDoNotContact(contato, value = true) {
   }
 }
 
+async function finalizeOptOut(contato) {
+  const confirm = 'tranquilo, não vou mais te mandar mensagem. qualquer coisa só chamar';
+  try { await sendMessage(contato, confirm); } 
+  catch (e) { console.error(`[${contato}] Falha ao enviar confirmação de opt-out: ${e.message}`); }
+  await setDoNotContact(contato, true);
+
+  const st = estadoContatos[contato];
+  if (st?._timer2Abertura) clearTimeout(st._timer2Abertura);
+  if (st?.merrecaTimeout) clearTimeout(st.merrecaTimeout);
+  if (st?.posMerrecaTimeout) clearTimeout(st.posMerrecaTimeout);
+  if (st) st.etapa = 'encerrado';
+
+  console.log(`[${contato}] Opt-out concluído → confirmação enviada e fluxo encerrado.`);
+}
+
 async function checarOptOutGlobal(contato, mensagensTexto) {
   if (OPTOUT_RX.test(mensagensTexto)) {
-    await setDoNotContact(contato, true);
-    const st = estadoContatos[contato];
-    if (st?._timer2Abertura) clearTimeout(st._timer2Abertura);
-    if (st?.merrecaTimeout) clearTimeout(st.merrecaTimeout);
-    if (st?.posMerrecaTimeout) clearTimeout(st.posMerrecaTimeout);
-    estadoContatos[contato].etapa = 'encerrado';
-    console.log(`[${contato}] Opt-out detectado via regex → fluxo encerrado.`);
+    await finalizeOptOut(contato);            // <-- envia msg e só depois marca DNC
+    console.log(`[${contato}] Opt-out detectado via regex.`);
     return true;
   }
-  const out = await gerarResposta([{ role: 'system', content: promptClassificaOptOut(mensagensTexto) }], 6);
-  const decisao = (out || '').trim().toUpperCase();
-  if (decisao.includes('OPTOUT')) {
-    await setDoNotContact(contato, true);
-    const st = estadoContatos[contato];
-    if (st?._timer2Abertura) clearTimeout(st._timer2Abertura);
-    if (st?.merrecaTimeout) clearTimeout(st.merrecaTimeout);
-    if (st?.posMerrecaTimeout) clearTimeout(st.posMerrecaTimeout);
-    estadoContatos[contato].etapa = 'encerrado';
-    console.log(`[${contato}] Opt-out detectado via LLM → fluxo encerrado.`);
+  const out = await gerarResposta(
+    [{ role: 'system', content: promptClassificaOptOut(mensagensTexto) }], 6
+  );
+  if ((out || '').trim().toUpperCase().includes('OPTOUT')) {
+    await finalizeOptOut(contato);            // <-- idem
+    console.log(`[${contato}] Opt-out detectado via LLM.`);
     return true;
   }
   return false;

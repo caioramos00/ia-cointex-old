@@ -154,6 +154,30 @@ Exemplos (→ saída):
 "stop" → OPTOUT
 "apaga" → OPTOUT
 "unsubscribe" → OPTOUT
+"não dá ruim pra mim?" → OPTOUT
+"tenho medo" → OPTOUT
+"to com medo" → OPTOUT
+"medo" → OPTOUT
+"vai dar ruim pra mim" → OPTOUT
+"polícia" → OPTOUT
+"chamar a polícia" → OPTOUT
+"federal" → OPTOUT
+"civil" → OPTOUT
+"funil" → OPTOUT
+"clonou" → OPTOUT
+"bot" → OPTOUT
+"mensagem automática" → OPTOUT
+"denunciar" → OPTOUT
+"denúncia" → OPTOUT
+"crime" → OPTOUT
+"isso é errado" → OPTOUT
+"não me chame mais" → OPTOUT
+"não vou fazer isso" → OPTOUT
+"to esperando até hoje" → OPTOUT
+"de novo isso?" → OPTOUT
+"você de novo?" → OPTOUT
+"golpe" → OPTOUT
+"já caí nesse golpe" → OPTOUT
 "não posso agora" → CONTINUAR
 "depois eu vejo" → CONTINUAR
 "quem é?" → CONTINUAR
