@@ -259,7 +259,7 @@ function setupRoutes(
     <h2>Simulador do Bot</h2>
     <div class="card">
       <div class="hdr">
-        <div class="tag">usa /api/chat/:id</div>
+        <div class="tag">usa /sim/chat/:id</div>
         <div class="tag">fila real + processarMensagensPendentes</div>
       </div>
 
@@ -290,7 +290,7 @@ function setupRoutes(
     </div>
 
     <p style="opacity:.7; font-size:12px; margin-top:12px">
-      Dica: o painel usa <code>/api/chat/:id</code> (que já existe) para mostrar histórico (entrada + saídas).
+      Dica: o painel usa <code>/sim/chat/:id</code> (que já existe) para mostrar histórico (entrada + saídas).
       O botão <b>Reset</b> limpa o histórico só no front (não apaga do DB). Se quiser um "apagar do DB", crie um endpoint separado.
     </p>
   </div>
@@ -334,7 +334,7 @@ function setupRoutes(
     const id = cidInput.value.trim();
     if (!id) return;
     try {
-      const r = await fetch('/api/chat/' + encodeURIComponent(id));
+      const r = await fetch('/sim/chat/' + encodeURIComponent(id));
       if (!r.ok) return;
       const j = await r.json();
       render(j);
@@ -442,6 +442,37 @@ function setupRoutes(
     } catch (e) {
       console.error('[Simulador] erro:', e);
       return res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  // --- Chat público do simulador (sem checkAuth) ---
+  app.get('/sim/chat', async (req, res) => {
+    const phone = onlyDigits(req.query.phone || '');
+    if (!phone) return res.status(400).json({ error: 'phone é obrigatório' });
+
+    const client = await pool.connect();
+    try {
+      const historicoRes = await client.query(
+        'SELECT historico, historico_interacoes FROM contatos WHERE id = $1',
+        [phone]
+      );
+
+      const historico = historicoRes.rows[0]?.historico || [];
+      const interacoes = historicoRes.rows[0]?.historico_interacoes || [];
+
+      const allMessages = [
+        ...historico.map((m) => ({ ...m, role: 'received' })),
+        ...interacoes.map((m) => ({ ...m, role: 'sent' })),
+      ].sort((a, b) => new Date(a.data) - new Date(b.data));
+
+      res.set('Cache-Control', 'no-store');
+      // se o simulador estiver em outro domínio, libere CORS:
+      // res.set('Access-Control-Allow-Origin', '*');
+      res.json(allMessages);
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    } finally {
+      client.release();
     }
   });
 
