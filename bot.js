@@ -406,9 +406,9 @@ async function processarMensagensPendentes(contato) {
         estado.aberturaConcluida = true;
 
         const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
-        const msg2Grupo1 = ['fechou', 'tranquilo', 'da hora', 'massa'];
-        const msg2Grupo2 = ['é rapidinho', 'pago agora', 'é coisa simples', 'é só seguir o passo'];
-        const msg2Grupo3 = ['bora?', 'vamo nessa?', 'topa?', 'consegue agora?'];
+        const msg2Grupo1 = ['Numero empresarial haha,', 'Numero empresarial haha,', 'Numero empresarial haha,', 'Numero empresarial haha,'];
+        const msg2Grupo2 = ['nem liga pro nome', 'nem liga pro nome', 'nem liga pro nome', 'nem liga pro nome'];
+        const msg2Grupo3 = ['pode salvar como Ryan mesmo', 'pode salvar como Ryan mesmo', 'pode salvar como Ryan mesmo', 'pode salvar como Ryan mesmo'];
         const msg2 = `${pick(msg2Grupo1)}, ${pick(msg2Grupo2)}, ${pick(msg2Grupo3)}`;
 
         // Agenda a 2ª com cancelamento se o usuário responder ou a etapa mudar
