@@ -445,29 +445,26 @@ function setupRoutes(
     }
   });
 
-  app.get('/sim/chat', async (req, res) => {
-    const phone = onlyDigits(req.query.phone || '');
+  app.get('/sim/chat/:id', async (req, res) => {
+    const phone = onlyDigits(req.params.id || '');
     if (!phone) return res.status(400).json({ error: 'phone é obrigatório' });
 
     const client = await pool.connect();
     try {
-      const historicoRes = await client.query(
+      const { rows } = await client.query(
         'SELECT historico, historico_interacoes FROM contatos WHERE id = $1',
         [phone]
       );
+      const historico = rows[0]?.historico || [];
+      const interacoes = rows[0]?.historico_interacoes || [];
 
-      const historico = historicoRes.rows[0]?.historico || [];
-      const interacoes = historicoRes.rows[0]?.historico_interacoes || [];
-
-      const allMessages = [
-        ...historico.map((m) => ({ ...m, role: 'received' })),
-        ...interacoes.map((m) => ({ ...m, role: 'sent' })),
+      const all = [
+        ...historico.map(m => ({ ...m, role: 'received' })),
+        ...interacoes.map(m => ({ ...m, role: 'sent' })),
       ].sort((a, b) => new Date(a.data) - new Date(b.data));
 
       res.set('Cache-Control', 'no-store');
-      // se o simulador estiver em outro domínio, libere CORS:
-      // res.set('Access-Control-Allow-Origin', '*');
-      res.json(allMessages);
+      res.json(all);
     } catch (e) {
       res.status(500).json({ error: e.message });
     } finally {
