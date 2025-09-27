@@ -93,7 +93,7 @@ async function gerarResposta(messages) {
     const completion = await openai.chat.completions.create({
       model: 'gpt-5',
       messages,
-      temperature: 0,
+      temperature: 1,
       top_p: 0.1,
       max_completion_tokens: 8,
     });
