@@ -644,9 +644,10 @@ function setupRoutes(
             if (label === 'OPTOUT') {
               const { next, permanently } = await registerOptOut(pool, contato, texto);
               console.log(`[${contato}] OPT-OUT #${next} ${permanently ? '(permanente)' : ''} por: "${texto}"`);
+
               if (!permanently) {
                 await delay(10000 + Math.floor(Math.random() * 5000));
-                await sendMessage(contato, OPTOUT_MSGS[next] || OPTOUT_MSGS[2]);
+                await sendMessage(contato, OPTOUT_MSGS[next] || OPTOUT_MSGS[2], { bypassBlock: true });
               }
               return res.sendStatus(200);
             }
@@ -1093,51 +1094,61 @@ function setupRoutes(
       log('error', 'Erro ao salvarContato', { err: e.message });
     }
 
-    // 7A) DO NOT CONTACT + re-opt-in (via classificador)
-    const { rows: flags } = await pool.query(
-      'SELECT do_not_contact, opt_out_count, permanently_blocked FROM contatos WHERE id = $1 LIMIT 1',
-      [phone]
-    );
-    const f = flags?.[0] || {};
-    const MAX_OPTOUTS = 3;
-
-    if (f.permanently_blocked || (f.opt_out_count || 0) >= MAX_OPTOUTS) {
-      return res.json({ ok: true, ignored: 'permanently_blocked' });
-    }
-
-    const label = await decidirOptLabel(textIn || '');
-    if (label === 'OPTOUT') {
-      const { next, permanently } = await registerOptOut(pool, phone, textIn || '');
-      console.log(`[${phone}] OPT-OUT #${next} ${permanently ? '(permanente)' : ''} por: "${textIn}"`);
-      if (!permanently) {
-        await delay(10000 + Math.floor(Math.random() * 5000));
-        await sendMessage(phone, OPTOUT_MSGS[next] || OPTOUT_MSGS[2]);
+    // ===== 7A) Classificação de intenção (opt-out / re-opt-in) — IA + fallback =====
+    try {
+      // estado atual no DB
+      const { rows: flags } = await pool.query(
+        'SELECT do_not_contact, opt_out_count, permanently_blocked FROM contatos WHERE id = $1 LIMIT 1',
+        [phone]
+      );
+      const f = flags?.[0] || {};
+      if (f.permanently_blocked || (f.opt_out_count || 0) >= MAX_OPTOUTS) {
+        return res.json({ ok: true, ignored: 'permanently_blocked' }); // silêncio definitivo
       }
-      return res.json({ ok: true });
-    }
-    if (label === 'REOPTIN' && f.do_not_contact) {
-      const { allowed } = await clearOptOutIfAllowed(pool, phone);
-      if (!allowed) return res.json({ ok: true, ignored: 'limit_exceeded' });
-      console.log(`[${phone}] Re-opt-in ManyChat (classificador) — retomando sequência se houver.`);
-      if (typeof retomarEnvio === 'function') {
+
+      // IA decide primeiro
+      const label = await decidirOptLabel(textIn || '');
+
+      if (label === 'OPTOUT') {
+        const { next, permanently } = await registerOptOut(pool, phone, textIn || '');
+        console.log(`[${phone}] OPT-OUT #${next} ${permanently ? '(permanente)' : ''} por: "${textIn}"`);
+        if (!permanently) {
+          await delay(10000 + Math.floor(Math.random() * 5000));
+          await sendMessage(phone, OPTOUT_MSGS[next] || OPTOUT_MSGS[2], { bypassBlock: true });
+        }
+        return res.json({ ok: true });
+      }
+
+      if (label === 'REOPTIN' && f.do_not_contact) {
+        // limpa bloqueio (abaixo do limite) e retoma exatamente de onde parou
+        await pool.query(
+          `UPDATE contatos
+         SET do_not_contact = FALSE,
+             do_not_contact_at = NULL,
+             do_not_contact_reason = NULL
+       WHERE id = $1`,
+          [phone]
+        );
+        console.log(`[${phone}] Re-opt-in (classificador) — retomando sequência.`);
         await retomarEnvio(phone);
+        // segue fluxo normal (vamos enfileirar a mensagem)
       }
-      return res.json({ ok: true, resumed: true });
-    }
 
-    // 7B) Detectar OPT-OUT no ManyChat e registrar contagem
-    const n = norm(textIn || '');
-    const isToken = OPTOUT_TOKENS.has(n);
-    const isPhrase = OPTOUT_PHRASES.some(p => n.includes(p));
-    if (isToken || isPhrase) {
-      const { next, permanently } = await registerOptOut(pool, phone, textIn || '');
-      console.log(`[${phone}] OPT-OUT #${next} ${permanently ? '(permanente)' : ''} por: "${textIn}"`);
-
-      if (!permanently) {
-        await delay(10000 + Math.floor(Math.random() * 5000));
-        await sendMessage(phone, OPTOUT_MSGS[next] || OPTOUT_MSGS[2], { bypassBlock: true });
+      // Fallback defensivo se a IA falhar: dicionário curto de opt-out
+      const n = norm(textIn || '');
+      const isToken = OPTOUT_TOKENS.has(n);
+      const isPhrase = OPTOUT_PHRASES.some(p => n.includes(p));
+      if (isToken || isPhrase) {
+        const { next, permanently } = await registerOptOut(pool, phone, textIn || '');
+        console.log(`[${phone}] OPT-OUT #${next} ${permanently ? '(permanente)' : ''} por: "${textIn}"`);
+        if (!permanently) {
+          await delay(10000 + Math.floor(Math.random() * 5000));
+          await sendMessage(phone, OPTOUT_MSGS[next] || OPTOUT_MSGS[2], { bypassBlock: true });
+        }
+        return res.json({ ok: true });
       }
-      return res.json({ ok: true });
+    } catch (e) {
+      console.error(`[${phone}] Falha no fluxo opt-out/retomada: ${e.message}`);
     }
 
     // ===== 8) Fila/estado de mensagens =====

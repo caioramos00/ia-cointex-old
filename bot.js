@@ -272,26 +272,38 @@ async function enviarLinhaPorLinha(to, texto) {
   }
 
   // Bloqueio por DNC / limite / bloqueio permanente (antes de começar)
+  // --- Se está com do_not_contact, só processa se houver retomada explícita ---
   try {
     const { rows } = await pool.query(
       'SELECT do_not_contact, opt_out_count, permanently_blocked FROM contatos WHERE id = $1 LIMIT 1',
-      [to]
+      [contato]
     );
-    const flags = rows?.[0] || {};
-    const MAX_OPTOUTS = 3;
-    const atingiuLimite = (flags.opt_out_count || 0) >= MAX_OPTOUTS;
+    const f = rows?.[0] || {};
+    if (f.permanently_blocked || (f.opt_out_count || 0) >= MAX_OPTOUTS) return; // silêncio definitivo
 
-    if (flags.permanently_blocked || atingiuLimite || flags.do_not_contact) {
-      console.log(
-        `[${to}] Bloqueado para envio (permanently_blocked=${!!flags.permanently_blocked}, ` +
-        `opt_out_count=${flags.opt_out_count || 0}, do_not_contact=${!!flags.do_not_contact}). Abortando envio.`
-      );
-      estado.enviandoMensagens = false;
-      return;
+    if (f.do_not_contact) {
+      const decision = await decidirOptLabel(mensagensTexto || '');
+      if (decision === 'REOPTIN') {
+        await pool.query(
+          `UPDATE contatos
+           SET do_not_contact = FALSE,
+               do_not_contact_at = NULL,
+               do_not_contact_reason = NULL
+         WHERE id = $1`,
+          [contato]
+        );
+        console.log(`[${contato}] Re-opt-in (classificador) durante processamento — retomando sequência.`);
+        // garante retomada do ponto exato
+        await retomarEnvio(contato);
+        // segue o fluxo normal
+      } else {
+        console.log(`[${contato}] Ignorando processamento (do_not_contact=true).`);
+        return;
+      }
     }
   } catch (e) {
-    console.error(`[${to}] Falha ao checar flags de contato: ${e.message}`);
-    return; // falha segura
+    console.error(`[${contato}] Falha ao revalidar do_not_contact: ${e.message}`);
+    return;
   }
 
   // Selo de identidade (apenas na 1ª resposta da abertura)
