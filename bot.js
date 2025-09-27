@@ -445,7 +445,6 @@ async function sendMessage(to, text, opts = {}) {
   return transport.sendText({ to, text }, settings);
 }
 
-
 function inicializarEstado(contato, tid = '', click_type = 'Orgânico') {
   estadoContatos[contato] = {
     etapa: 'abertura',
