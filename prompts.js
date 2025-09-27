@@ -177,6 +177,9 @@ Exemplos (→ saída):
 "de novo isso?" → OPTOUT
 "você de novo?" → OPTOUT
 "golpe" → OPTOUT
+"acho que não vou querer mais" → OPTOUT
+"acho que não quero mais" → OPTOUT
+"não quero mais não" → OPTOUT
 "já caí nesse golpe" → OPTOUT
 "não posso agora" → CONTINUAR
 "depois eu vejo" → CONTINUAR
