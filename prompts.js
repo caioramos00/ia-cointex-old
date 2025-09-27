@@ -188,4 +188,27 @@ ${texto}
 Saída:`;
 };
 
-module.exports = { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, mensagemImpulso, mensagensIntrodutorias, checklistVariacoes, mensagensPosChecklist, respostasNaoConfirmadoAcesso, respostasNaoConfirmadoConfirmacao, respostasDuvidasComuns, promptClassificaOptOut };
+function promptClassificaReoptin(texto) {
+  return `
+Tarefa: Classifique se a última mensagem do usuário indica RETOMAR/CONTINUAR a conversa.
+
+Responda APENAS com UMA palavra:
+- REOPTIN  → quando houver intenção clara de continuar/retomar/aceitar (“bora”, “pode continuar”, “pode seguir”, “pode mandar”, “mudei de ideia”, “segue”, “vamos”, “manda”, “ok pode mandar”, “retoma”, “pode falar”, “pode prosseguir”, “quero sim”, “sim”, “fechou”, “vamo”, “manda aí”, “pode ir”, “toca”, “vai”, “continua”, “voltei”, “pode enviar”, “prossegue”, “segue o baile”, “marcha”, “tô dentro”, “topo”, “aceito”, “faço sim”, beleza então”, etc.). Considere variações/gírias/erros.
+- CONTINUAR → qualquer outra coisa que NÃO seja um convite claro para retomar (respostas neutras como “ok”, “entendi”, “?”, “hum” sem contexto de aceite; dúvidas; recusas).
+
+Exemplos (→ saída):
+"bora" → REOPTIN
+"pode continuar" → REOPTIN
+"pode mandar" → REOPTIN
+"segue" → REOPTIN
+"vamos" → REOPTIN
+"ok" → CONTINUAR
+"?" → CONTINUAR
+"talvez" → CONTINUAR
+
+Texto do usuário:
+${texto}
+Saída:`;
+}
+
+module.exports = { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, mensagemImpulso, mensagensIntrodutoras, checklistVariacoes, mensagensPosChecklist, respostasNaoConfirmadoAcesso, respostasNaoConfirmadoConfirmacao, respostasDuvidasComuns, promptClassificaOptOut, promptClassificaReoptin };

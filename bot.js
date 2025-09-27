@@ -10,7 +10,7 @@ const GLOBAL_PER_MSG_JITTER_MS = 1500;
 const { getActiveTransport } = require('./lib/transport');
 const { getContatoByPhone } = require('./db');
 const { atualizarContato, getBotSettings, pool } = require('./db.js');
-const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, mensagemImpulso, mensagensIntrodutorias, checklistVariacoes, mensagensPosChecklist, respostasNaoConfirmadoAcesso, respostasNaoConfirmadoConfirmacao, respostasDuvidasComuns, promptClassificaOptOut } = require('./prompts.js');
+const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, mensagemImpulso, mensagensIntrodutorias, checklistVariacoes, mensagensPosChecklist, respostasNaoConfirmadoAcesso, respostasNaoConfirmadoConfirmacao, respostasDuvidasComuns, promptClassificaOptOut, promptClassificaReoptin } = require('./prompts.js');
 const estadoContatos = require('./state.js');
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -223,6 +223,37 @@ Retorne estritamente JSON, exatamente neste formato:
     console.error("[OpenAI] Erro:", err?.message || err);
     return DEFAULT_LABEL; // não quebra seu fluxo
   }
+}
+
+async function decidirOptLabel(texto) {
+  const msg = String(texto || '').trim();
+
+  // Hard-stop mínimo (não remove nada do seu prompt; só cobre termos óbvios)
+  const HARD_STOP = /\b(stop|unsubscribe|remover|remova|removo|remova\-me|tira(r)?|excluir|exclui(r)?|cancelar|cancela|cancelamento|para(?!\w)|parem|pare|nao quero|não quero|não me chame|nao me chame|remove meu número|remova meu numero)\b/i;
+  if (HARD_STOP.test(msg)) return 'OPTOUT';
+
+  // 1) Primeiro, usa SEU prompt de OPT-OUT (sem tirar nada)
+  try {
+    const r1 = await gerarResposta(
+      [{ role: 'system', content: promptClassificaOptOut(msg) }],
+      ['OPTOUT', 'CONTINUAR']
+    );
+    const s1 = String(r1 || '').trim().toUpperCase();
+    if (s1 === 'OPTOUT') return 'OPTOUT';
+  } catch { }
+
+  // 2) Não foi opt-out → tenta RE-OPT-IN (retomada)
+  try {
+    const r2 = await gerarResposta(
+      [{ role: 'system', content: promptClassificaReoptin(msg) }],
+      ['REOPTIN', 'CONTINUAR']
+    );
+    const s2 = String(r2 || '').trim().toUpperCase();
+    if (s2 === 'REOPTIN') return 'REOPTIN';
+  } catch { }
+
+  // 3) Caso contrário
+  return 'CONTINUAR';
 }
 
 function quebradizarTexto(resposta) {
@@ -612,34 +643,32 @@ async function processarMensagensPendentes(contato) {
       [contato]
     );
     const dnc = !!dncRows?.[0]?.do_not_contact;
-    const isReoptInHere = REOPTIN_RX.test((mensagensTexto || '').trim());
 
-    // --- CONSUMO DA REATIVAÇÃO --- //
-    if (estado.aguardandoConfirmacaoPosReativacao && mensagensPacote.length > 0) {
-      console.log(`[${contato}] Recebeu mensagem pós-reativação → liberando fluxo normal (sem enviar nada).`);
-      estado.aguardandoConfirmacaoPosReativacao = false;
-      estado.reativadoAgora = false;
-      // prossegue o processamento normalmente
+    // Usa o decisor único (se for rodar bem rápido, ótimo; se der erro, cai em CONTINUAR)
+    const decision = await decidirOptLabel(mensagensTexto);
+
+    // Se está em DNC, só nos interessa saber se é REOPTIN
+    if (dnc) {
+      if (decision === 'REOPTIN') {
+        await setDoNotContact(contato, false);
+
+        // se você já implementou retomarEnvio, chama; senão, mantém seu comportamento atual de “aguardar mais uma”
+        if (typeof retomarEnvio === 'function') {
+          await delay(10000 + Math.floor(Math.random() * 5000));
+          await retomarEnvio(contato);
+          return;
+        } else {
+          estado.reativadoAgora = true;
+          estado.aguardandoConfirmacaoPosReativacao = true;
+          console.log(`[${contato}] Reativado (classificador). Aguardando próxima mensagem para prosseguir.`);
+          return;
+        }
+      } else {
+        console.log(`[${contato}] Ignorando processamento (do_not_contact=true).`);
+        estado.mensagensPendentes = [];
+        return;
+      }
     }
-
-    if (dnc && isReoptInHere) {
-      // limpa DNC sem falar nada
-      await setDoNotContact(contato, false);   // já existe em bot.js
-      // sinaliza que acabou de reativar -> suprimir nudges e esperar MAIS UMA mensagem
-      estado.reativadoAgora = true;
-      estado.aguardandoConfirmacaoPosReativacao = true;
-      console.log(`[${contato}] Reativado por opt-in (silencioso). Aguardando próxima msg para prosseguir.`);
-      // NÃO envie nada agora; apenas retorne
-      return;
-    }
-
-    // comportamento antigo permanece:
-    if (dnc && !isReoptInHere) {
-      console.log(`[${contato}] Ignorando processamento (do_not_contact=true)`);
-      estado.mensagensPendentes = [];
-      return;
-    }
-
 
     const agora = Date.now();
     if (estado.etapa === 'encerrado' && estado.encerradoAte && agora < estado.encerradoAte) {

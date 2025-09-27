@@ -6,7 +6,7 @@ const twilio = require('twilio'); // npm i twilio
 const qs = require('qs');
 
 const { pool } = require('./db.js');
-const { delay, sendMessage, retomarEnvio } = require('./bot.js');
+const { delay, sendMessage, retomarEnvio, decidirOptLabel } = require('./bot.js');
 const { getBotSettings, updateBotSettings, getContatoByPhone } = require('./db.js');
 
 const LANDING_URL = 'https://grupo-whatsapp-trampos-lara-2025.onrender.com';
@@ -630,45 +630,39 @@ function setupRoutes(
 
           // ======= OPT-OUT / RE-OPT-IN =======
           try {
-            const n = norm(texto);
-
-            // 1) Re-opt-in
             const { rows: flags } = await pool.query(
               'SELECT do_not_contact, opt_out_count, permanently_blocked FROM contatos WHERE id = $1 LIMIT 1',
               [contato]
             );
-
-            if (flags?.[0]?.permanently_blocked || (flags?.[0]?.opt_out_count || 0) >= MAX_OPTOUTS) {
+            const f = flags?.[0] || {};
+            const MAX_OPTOUTS = 3;
+            if (f.permanently_blocked || (f.opt_out_count || 0) >= MAX_OPTOUTS) {
               return res.sendStatus(200); // silêncio definitivo
             }
-            if (flags?.[0]?.do_not_contact) {
-              if (REOPTIN_RX.test(texto)) {
-                const { allowed } = await clearOptOutIfAllowed(pool, contato);
-                if (!allowed) return res.sendStatus(200); // já excedeu o limite → silêncio
-                console.log(`[${contato}] Re-opt-in por "BORA" — retomando sequência se houver.`);
-                await retomarEnvio(contato);
-                return res.sendStatus(200);
-              } else {
-                await sendMessage(contato, 'vc tinha parado as msgs. se quiser retomar, manda "BORA".');
-                return res.sendStatus(200);
-              }
-            }
 
-            // 2) Opt-out
-            const isToken = OPTOUT_TOKENS.has(n);
-            const isPhrase = OPTOUT_PHRASES.some((p) => n.includes(p));
-            if (isToken || isPhrase) {
+            const label = await decidirOptLabel(texto);
+
+            if (label === 'OPTOUT') {
               const { next, permanently } = await registerOptOut(pool, contato, texto);
               console.log(`[${contato}] OPT-OUT #${next} ${permanently ? '(permanente)' : ''} por: "${texto}"`);
-
               if (!permanently) {
                 await delay(10000 + Math.floor(Math.random() * 5000));
-                await sendMessage(contato, OPTOUT_MSGS[next] || OPTOUT_MSGS[2], { bypassBlock: true });
+                await sendMessage(contato, OPTOUT_MSGS[next] || OPTOUT_MSGS[2]);
+              }
+              return res.sendStatus(200);
+            }
+
+            if (label === 'REOPTIN' && f.do_not_contact) {
+              const { allowed } = await clearOptOutIfAllowed(pool, contato);
+              if (!allowed) return res.sendStatus(200);
+              console.log(`[${contato}] Re-opt-in (classificador) — retomando sequência se houver.`);
+              if (typeof retomarEnvio === 'function') {
+                await retomarEnvio(contato);
               }
               return res.sendStatus(200);
             }
           } catch (e) {
-            console.error(`[${contato}] Falha no fluxo opt-in/out: ${e.message}`);
+            console.error(`[${contato}] Falha no fluxo opt-out/retomada: ${e.message}`);
           }
           // ======= FIM OPT-OUT / RE-OPT-IN =======
 
@@ -1100,28 +1094,35 @@ function setupRoutes(
       log('error', 'Erro ao salvarContato', { err: e.message });
     }
 
-    // 7A) Respeitar DO NOT CONTACT (antes de qualquer processamento)
+    // 7A) DO NOT CONTACT + re-opt-in (via classificador)
     const { rows: flags } = await pool.query(
       'SELECT do_not_contact, opt_out_count, permanently_blocked FROM contatos WHERE id = $1 LIMIT 1',
       [phone]
     );
-    const isDNC = !!flags?.[0]?.do_not_contact;
-    const isBlocked = !!flags?.[0]?.permanently_blocked || (flags?.[0]?.opt_out_count || 0) >= MAX_OPTOUTS;
-    const isReopt = REOPTIN_RX.test((textIn || '').trim());
+    const f = flags?.[0] || {};
+    const MAX_OPTOUTS = 3;
 
-    if (isBlocked) {
-      // silêncio definitivo, inclusive para "BORA"
+    if (f.permanently_blocked || (f.opt_out_count || 0) >= MAX_OPTOUTS) {
       return res.json({ ok: true, ignored: 'permanently_blocked' });
     }
-    if (isDNC && !isReopt) {
-      console.log(`[${phone}] Ignorando (do_not_contact=true) no ManyChat: "${(textIn || '').slice(0, 80)}"`);
-      return res.json({ ok: true, ignored: 'do_not_contact' });
+
+    const label = await decidirOptLabel(textIn || '');
+    if (label === 'OPTOUT') {
+      const { next, permanently } = await registerOptOut(pool, phone, textIn || '');
+      console.log(`[${phone}] OPT-OUT #${next} ${permanently ? '(permanente)' : ''} por: "${textIn}"`);
+      if (!permanently) {
+        await delay(10000 + Math.floor(Math.random() * 5000));
+        await sendMessage(phone, OPTOUT_MSGS[next] || OPTOUT_MSGS[2]);
+      }
+      return res.json({ ok: true });
     }
-    if (isDNC && isReopt) {
+    if (label === 'REOPTIN' && f.do_not_contact) {
       const { allowed } = await clearOptOutIfAllowed(pool, phone);
       if (!allowed) return res.json({ ok: true, ignored: 'limit_exceeded' });
-      console.log(`[${phone}] Re-opt-in ManyChat — retomando sequência se houver.`);
-      await retomarEnvio(phone);
+      console.log(`[${phone}] Re-opt-in ManyChat (classificador) — retomando sequência se houver.`);
+      if (typeof retomarEnvio === 'function') {
+        await retomarEnvio(phone);
+      }
       return res.json({ ok: true, resumed: true });
     }
 
