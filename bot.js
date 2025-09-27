@@ -107,30 +107,22 @@ async function checarOptOutGlobal(contato, mensagensTexto) {
       return true;
     }
 
-    // 2) Classificador via LLM (retorna "OPTOUT" ou "CONTINUAR")
-    const out = await gerarResposta(
-      [{ role: "system", content: promptClassificaOptOut(texto) }],
-      ["OPTOUT", "CONTINUAR"]  // <-- rótulos válidos (NÃO passe número)
-    );
-
-    const label = String(out || "").trim().toUpperCase();
-
-    if (label === "OPTOUT") {
+    // 2) Decisor unificado (usa seus prompts de opt-out e re-opt-in)
+    const label = await decidirOptLabel(texto);
+    if (label === 'OPTOUT') {
       await finalizeOptOut(contato, texto);
-      console.log(`[${contato}] Opt-out detectado via LLM (${label}).`);
+      console.log(`[${contato}] Opt-out detectado via IA.`);
       return true;
     }
 
-    // default seguro
     console.log(`[${contato}] Sem opt-out (label=${label || "vazio"}).`);
     return false;
-
   } catch (err) {
     console.error(`[${contato}] Erro em checarOptOutGlobal:`, err?.message || err);
-    // Em caso de erro no LLM, NÃO bloqueie o usuário por engano
-    return false;
+    return false; // seguro
   }
 }
+
 
 async function retomarEnvio(contato) {
   const st = estadoContatos[contato];
@@ -228,11 +220,11 @@ Retorne estritamente JSON, exatamente neste formato:
 async function decidirOptLabel(texto) {
   const raw = String(texto || '').trim();
 
-  // Hard-stop mínimo (não mexe no seu prompt; só cobre termos óbvios)
-  const HARD_STOP = /\b(stop|unsubscribe|remover|remova|removo|remova\-me|tira(r)?|excluir|exclui(r)?|cancelar|cancela|cancelamento|para(?!\w)|parem|pare|nao quero|não quero|não me chame|nao me chame|remove meu número|remova meu numero)\b/i;
+  // Hard-stop mais abrangente (não mexe no seu prompt original; só cobre variações comuns)
+  const HARD_STOP = /(stop|unsubscribe|remover|remova|remove meu número|remova meu numero|excluir|exclui(r)?|apaga(r)?|cancelar|cancela|cancelamento|para(?!\w)|parem|pare|nao quero|não quero|nao vou querer(?: mais)?|não vou querer(?: mais)?|acho que (?:nao|não) vou querer(?: mais)?|nao vou fazer|não vou fazer|nao me chama(?:r)?|não me chama(?:r)?|nao me chame|não me chame)/i;
   if (HARD_STOP.test(raw)) return 'OPTOUT';
 
-  // Fast-path de retomada: normaliza e checa frases batidas
+  // Frases batidas de re-opt-in (normalizado)
   const norm = raw.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
   const RE_PHRASES = [
     'mudei de ideia', 'quero fazer', 'quero sim',
@@ -241,14 +233,14 @@ async function decidirOptLabel(texto) {
   ];
   if (RE_PHRASES.some(p => norm.includes(p))) return 'REOPTIN';
 
-  // 1) seu prompt DE OPT-OUT (com todas as palavras que você pediu)
+  // 1) seu prompt DE OPT-OUT (mantendo TODAS as palavras que você colocou)
   try {
     const r1 = await gerarResposta(
       [{ role: 'system', content: promptClassificaOptOut(raw) }],
       ['OPTOUT', 'CONTINUAR']
     );
     if (String(r1 || '').trim().toUpperCase() === 'OPTOUT') return 'OPTOUT';
-  } catch { }
+  } catch {}
 
   // 2) se não for opt-out → seu prompt DE RE-OPT-IN
   try {
@@ -257,7 +249,7 @@ async function decidirOptLabel(texto) {
       ['REOPTIN', 'CONTINUAR']
     );
     if (String(r2 || '').trim().toUpperCase() === 'REOPTIN') return 'REOPTIN';
-  } catch { }
+  } catch {}
 
   // 3) default
   return 'CONTINUAR';
@@ -281,39 +273,15 @@ async function enviarLinhaPorLinha(to, texto) {
   try {
     const { rows } = await pool.query(
       'SELECT do_not_contact, opt_out_count, permanently_blocked FROM contatos WHERE id = $1 LIMIT 1',
-      [contato]
+      [to]
     );
     const f = rows?.[0] || {};
-    const MAX_OPTOUTS = 3;
-
-    if (f.permanently_blocked || (f.opt_out_count || 0) >= MAX_OPTOUTS) {
-      console.log(`[${contato}] Silêncio definitivo (limite de opt-out atingido).`);
+    if (f.permanently_blocked || (f.opt_out_count || 0) >= MAX_OPTOUTS || f.do_not_contact) {
+      console.log(`[${to}] Bloqueado antes do envio (DNC/limite).`);
       return;
     }
-
-    if (f.do_not_contact) {
-      const decision = await decidirOptLabel(mensagensTexto || '');
-      if (decision === 'REOPTIN') {
-        await pool.query(`
-        UPDATE contatos
-           SET do_not_contact = FALSE,
-               do_not_contact_at = NULL,
-               do_not_contact_reason = NULL
-         WHERE id = $1
-      `, [contato]);
-        console.log(`[${contato}] Re-opt-in (IA) durante processamento — retomando sequência…`);
-        if (typeof retomarEnvio === 'function') {
-          await delay(10000 + Math.floor(Math.random() * 5000));
-          await retomarEnvio(contato);
-        }
-        // segue o fluxo normal após retomar
-      } else {
-        console.log(`[${contato}] Ignorando processamento (do_not_contact=true).`);
-        return;
-      }
-    }
   } catch (e) {
-    console.error(`[${contato}] Falha ao revalidar do_not_contact: ${e.message}`);
+    console.error(`[${to}] Falha ao checar bloqueio antes do envio: ${e.message}`);
     return;
   }
 
@@ -395,7 +363,6 @@ async function enviarLinhaPorLinha(to, texto) {
           [to]
         );
         const f = rows?.[0] || {};
-        const MAX_OPTOUTS = 3;
         if (f.permanently_blocked || (f.opt_out_count || 0) >= MAX_OPTOUTS || f.do_not_contact) {
           console.log(`[${to}] Loop interrompido: bloqueado entre linhas (DNC/limite).`);
           estado.enviandoMensagens = false;
@@ -424,6 +391,7 @@ async function enviarLinhaPorLinha(to, texto) {
   delete estado.seqIdx;
   estado.paused = false;
 }
+
 
 async function sendManychatBatch(phone, textOrLines) {
   const settings = await getBotSettings().catch(() => ({}));
