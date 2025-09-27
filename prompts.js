@@ -39,104 +39,6 @@ Considere variações de formato monetário em português brasileiro, com ou sem
 const promptClassificaRelevancia = (mensagensTexto, temMidia) => `
 Analise TODAS as respostas do lead após pedir para ele sacar o valor e avisar quando cair:\n"${mensagensTexto}"\n\nConsidere se a mensagem contém referências a:\n- Problema (ex.: "deu problema", "tá com problema", "não funcionou")\n- Taxa (ex.: "tem taxa?", "cobrou taxa")\n- Dúvida (ex.: "como faço?", "o que é isso?", "onde clico?", "ué", "apareceu um negócio")\n- Validação (ex.: "confirma isso?", "precisa validar?", "validação", "pediu validação", "pediu verificar", "pediu")\n- Negócio (ex.: "qual é o negócio?", "que trampo é esse?")\n- Valor a pagar (ex.: "quanto pago?", "tem custo?")\n- Tela (ex.: "na tela aparece isso", "qual tela?")\n- Erro (ex.: "deu erro", "não funcionou")\n- Print (ex.: "te mandei o print", "é um print")\n- Ou se a mensagem é uma mídia (como imagem, vídeo, documento, etc.): ${temMidia ? 'sim' : 'não'}\n\nIgnorar como irrelevante se a mensagem for uma afirmação ou confiança (ex.: "confia irmão", "sou seu sócio agora", "vc vai ver que sou suave", "sou lara do 7", "tô na confiança", "beleza", "tamo junto", "vou mandar", "certo", "calma aí", "e aí?").\n\nResponda com só UMA destas opções:\n- "relevante" (se a mensagem contém qualquer um dos critérios acima ou é uma mídia)\n- "irrelevante" (se a mensagem não contém nenhum dos critérios e não é uma mídia, incluindo afirmações ou confiança)\n\nNunca explique nada. Só escreva uma dessas palavras.\n`;
 
-const mensagemImpulso = `só ignora o nome desse WhatsApp aqui, é que eu to usando esse número pra fazer outro trampo aqui também
-vamo lá então, como já te disse, eu to fazendo vários trampos ao mesmo tempo aqui, tá bem corrido
-então vou ser bem direto e falar só o necessário, e você vai me respondendo só o que eu te perguntar, pode ser?`;
-
-const mensagensIntrodutorias = [
-  [
-    'antes de mais nada, já salva meu contato, pode salvar como "Ryan"',
-    'antes de mais nada, já deixa meu contato salvo aí, pode salvar como "Ryan"',
-    'antes de mais nada, já me adiciona aí nos seus contatos, pode salvar como "Ryan"',
-  ],
-  [
-    'pq se aparecer mais um trampo, eu já passo pra você',
-    'porque se aparecer mais um trampo hoje eu já te passo',
-    'se aparecer mais um trampo hoje, você já faz também',
-  ],
-];
-
-const checklistVariacoes = [
-  // (0) Pré-requisito (PIX ativo)
-  [
-    'você precisa ter uma conta com pix ativo pra receber o dinheiro',
-    'você tem que ter uma conta com pix ativo pra receber o dinheiro',
-    'você precisa de uma conta com pix ativo pra receber o dinheiro',
-  ],
-
-  // (1) Banco
-  [
-    'pode ser qualquer banco, físico ou digital, tanto faz',
-    'pode ser banco físico ou digital, tanto faz',
-    'pode ser qualquer tipo de banco, físico ou digital',
-  ],
-
-  // (2) Conexão (inalterado)
-  [
-    'se tiver como, desativa o wi-fi e ativa só os dados móveis',
-    'se der, desativa o wi-fi e ativa os dados móveis',
-    'se conseguir, desliga o wi-fi e liga os dados móveis',
-    'se puder, desliga o wi-fi e liga o 5g',
-  ],
-
-  // (3) Acesso (credenciais)
-  [
-    'vou te passar o email e a senha de uma conta pra você entrar',
-    'vou te passar o email e a senha de uma conta pra você acessar',
-    'vou te passar o email e a senha de uma conta pra vc entrar',
-  ],
-
-  // (4) Bloco final (sem "reforço")
-  [
-    // Saque
-    [
-      'vc vai sacar R$ 5000 dessa conta pra sua conta de recebimento',
-      'vc vai sacar R$ 5000 dessa conta pra sua conta de recebimento',
-      'vc vai sacar R$ 5000 do saldo disponível lá pra sua conta bancária',
-    ],
-    // Parte / repasse
-    [
-      'sua parte vai ser R$ 2000 nesse trampo, e vc vai mandar o restante pra gente assim que cair',
-      'sua parte nesse trampo é de R$ 2000, manda o restante pra minha conta assim que cair',
-      'vc fica com R$ 2000 desse trampo, o resto manda pra gente assim que cair',
-      'sua parte é R$ 2000, o restante manda pra minha conta logo que cair',
-    ],
-  ],
-];
-
-const mensagensPosChecklist = [
-  ['mas fica tranquilo', 'mas relaxa', 'mas fica suave'],
-  ['a gente vai fazer parte por parte', 'a gente faz parte por parte', 'a gente faz na calma, parte por parte']
-];
-
-const respostasNaoConfirmadoAcesso = [
-  'mano, tenta de novo com os dados que te mandei. copia o usuário e senha certinho e usa o link. me avisa quando entrar',
-  'tenta de novo, mano. usa o usuário e senha que te passei e o link certinho. me chama quando entrar'
-];
-
-const respostasNaoConfirmadoConfirmacao = [
-  'me escreve o valor que tá disponível, EXATAMENTE nesse formato: R$ 5000, por exemplo',
-  'me manda aqui escrito o valor disponível, EXATAMENTE nesse formato: R$ 5000, por exemplo',
-  'me escreve aqui o valor disponível, EXATAMENTE nesse formato: R$ 5000, por exemplo',
-  'escreve aqui o valor disponível, EXATAMENTE nesse formato: R$ 5000, por exemplo'
-];
-
-const respostasDuvidasComuns = {
-  'não tenho 4g': 'não, tudo bem, vamos manter no wi-fi. o resto tá pronto, bora seguir',
-  'qual cpf': 'usa o CPF da sua conta que vai receber a grana. faz aí e me avisa',
-  'onde fica o perfil': 'no app, geralmente tá nas configurações ou no canto superior, procura por PERFIL',
-  'não tenho 5k': 'tenta arrumar uma conta com alguém, precisa ter 5k pra rolar',
-  'onde coloco o usuário': 'no campo de login no link que te mandei. copia o usuário e senha certinho',
-  'o link não abre': 'tenta copiar e colar no navegador. me avisa se não rolar',
-  'qual senha': 'a senha é a que te mandei. copia e cola no login',
-  'não achei perfil': 'no app, vai nas configurações ou no canto superior, procura por PERFIL',
-  'onde tá financeiro': 'no app, procura no menu ou configurações, tá como FINANCEIRO, depois me manda o valor em texto',
-  'qual valor mando': 'o valor que aparece em FINANCEIRO, só escreve o número em texto',
-  'como faço o saque': 'vai em FINANCEIRO, seleciona sacar, coloca TUDO pra sua conta e usa as senhas que te mandei',
-  'qual chave pix': 'te passo a chave assim que confirmar que caiu, saca primeiro e me avisa',
-  'demora quanto': 'saca tudo agora, geralmente cai na hora. me avisa quando cair'
-};
-
 function promptClassificaOptOut(texto) {
   return `
 Você é um CLASSIFICADOR BINÁRIO. Decida se a mensagem do usuário é um pedido explícito para PARAR de receber mensagens. 
@@ -238,4 +140,4 @@ ${texto}
 Saída:`;
 }
 
-module.exports = { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, mensagemImpulso, mensagensIntrodutorias, checklistVariacoes, mensagensPosChecklist, respostasNaoConfirmadoAcesso, respostasNaoConfirmadoConfirmacao, respostasDuvidasComuns, promptClassificaOptOut, promptClassificaReoptin };
+module.exports = { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, promptClassificaOptOut, promptClassificaReoptin };

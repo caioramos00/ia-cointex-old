@@ -10,7 +10,7 @@ const GLOBAL_PER_MSG_JITTER_MS = 1500;
 const { getActiveTransport } = require('./lib/transport');
 const { getContatoByPhone } = require('./db');
 const { atualizarContato, getBotSettings, pool } = require('./db.js');
-const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, mensagemImpulso, mensagensIntrodutorias, checklistVariacoes, mensagensPosChecklist, respostasNaoConfirmadoAcesso, respostasNaoConfirmadoConfirmacao, respostasDuvidasComuns, promptClassificaOptOut, promptClassificaReoptin } = require('./prompts.js');
+const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, promptClassificaOptOut, promptClassificaReoptin } = require('./prompts.js');
 const estadoContatos = require('./state.js');
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -1162,6 +1162,66 @@ async function processarMensagensPendentes(contato) {
 
       console.log(`[${contato}] Mensagens processadas: ${mensagensTexto}, Classificação: ${tipoAceite}`);
 
+      const mensagensIntrodutorias = [
+        [
+          'antes de mais nada, já salva meu contato, pode salvar como "Ryan"',
+          'antes de mais nada, já deixa meu contato salvo aí, pode salvar como "Ryan"',
+          'antes de mais nada, já me adiciona aí nos seus contatos, pode salvar como "Ryan"',
+        ],
+        [
+          'pq se aparecer mais um trampo, eu já passo pra você',
+          'porque se aparecer mais um trampo hoje eu já te passo',
+          'se aparecer mais um trampo hoje, você já faz também',
+        ],
+      ];
+
+      const checklistVariacoes = [
+        // (0) Pré-requisito (PIX ativo)
+        [
+          'você precisa ter uma conta com pix ativo pra receber o dinheiro',
+          'você tem que ter uma conta com pix ativo pra receber o dinheiro',
+          'você precisa de uma conta com pix ativo pra receber o dinheiro',
+        ],
+
+        // (1) Banco
+        [
+          'pode ser qualquer banco, físico ou digital, tanto faz',
+          'pode ser banco físico ou digital, tanto faz',
+          'pode ser qualquer tipo de banco, físico ou digital',
+        ],
+
+        // (2) Conexão (inalterado)
+        [
+          'se tiver como, desativa o wi-fi e ativa só os dados móveis',
+          'se der, desativa o wi-fi e ativa os dados móveis',
+          'se conseguir, desliga o wi-fi e liga os dados móveis',
+          'se puder, desliga o wi-fi e liga o 5g',
+        ],
+
+        // (3) Acesso (credenciais)
+        [
+          'vou te passar o email e a senha de uma conta pra você entrar',
+          'vou te passar o email e a senha de uma conta pra você acessar',
+          'vou te passar o email e a senha de uma conta pra vc entrar',
+        ],
+
+        // (4) Bloco final (sem "reforço")
+        [
+          // Saque
+          [
+            'vc vai sacar R$ 5000 dessa conta pra sua conta de recebimento',
+            'vc vai sacar R$ 5000 dessa conta pra sua conta de recebimento',
+            'vc vai sacar R$ 5000 do saldo disponível lá pra sua conta bancária',
+          ],
+          // Parte / repasse
+          [
+            'sua parte vai ser R$ 2000 nesse trampo, e vc vai mandar o restante pra gente assim que cair',
+            'sua parte nesse trampo é de R$ 2000, manda o restante pra minha conta assim que cair',
+            'vc fica com R$ 2000 desse trampo, o resto manda pra gente assim que cair',
+            'sua parte é R$ 2000, o restante manda pra minha conta logo que cair',
+          ],
+        ],
+      ];
 
       if (tipoAceite.includes('ACEITE') || tipoAceite.includes('DUVIDA')) {
         if (!estado.instrucoesEnviadas) {
@@ -1205,6 +1265,7 @@ async function processarMensagensPendentes(contato) {
 
     if (estado.etapa === 'instruções') {
       console.log("[" + contato + "] Etapa 3: instruções");
+
       if (estado.instrucoesCompletas && mensagensPacote.length > 0) {
         // Qualquer interação do usuário após o envio do checklist dispara o bloco de acesso (se já tivermos as credenciais)
         if (
@@ -1276,6 +1337,10 @@ async function processarMensagensPendentes(contato) {
         estado.tentativasAcesso = 0;
         console.log("[" + contato + "] Etapa 5: confirmação - instruções enviadas");
       } else if (tipoAcesso.includes('NAO_CONFIRMADO')) {
+        const respostasNaoConfirmadoAcesso = [
+          'mano, tenta de novo com os dados que te mandei. copia o usuário e senha certinho e usa o link. me avisa quando entrar',
+          'tenta de novo, mano. usa o usuário e senha que te passei e o link certinho. me chama quando entrar'
+        ];
         if (estado.tentativasAcesso < 2) {
           const resposta = respostasNaoConfirmadoAcesso[Math.floor(Math.random() * respostasNaoConfirmadoAcesso.length)];
           await enviarLinhaPorLinha(contato, resposta);
@@ -1424,6 +1489,12 @@ async function processarMensagensPendentes(contato) {
         estado.mensagensDesdeSolicitacao = [];
         console.log("[" + contato + "] Etapa 6: saque - instruções enviadas");
       } else if (tipoConfirmacao.includes('NAO_CONFIRMADO')) {
+        const respostasNaoConfirmadoConfirmacao = [
+          'me escreve o valor que tá disponível, EXATAMENTE nesse formato: R$ 5000, por exemplo',
+          'me manda aqui escrito o valor disponível, EXATAMENTE nesse formato: R$ 5000, por exemplo',
+          'me escreve aqui o valor disponível, EXATAMENTE nesse formato: R$ 5000, por exemplo',
+          'escreve aqui o valor disponível, EXATAMENTE nesse formato: R$ 5000, por exemplo'
+        ];
         if (estado.tentativasConfirmacao < 2) {
           const resposta = respostasNaoConfirmadoConfirmacao[Math.floor(Math.random() * respostasNaoConfirmadoConfirmacao.length)];
           await enviarLinhaPorLinha(contato, resposta);
@@ -1441,6 +1512,21 @@ async function processarMensagensPendentes(contato) {
           console.log(`[${contato}] Etapa encerrada após 2 tentativas`);
         }
       } else if (tipoConfirmacao.includes('DUVIDA')) {
+        const respostasDuvidasComuns = {
+          'não tenho 4g': 'não, tudo bem, vamos manter no wi-fi. o resto tá pronto, bora seguir',
+          'qual cpf': 'usa o CPF da sua conta que vai receber a grana. faz aí e me avisa',
+          'onde fica o perfil': 'no app, geralmente tá nas configurações ou no canto superior, procura por PERFIL',
+          'não tenho 5k': 'tenta arrumar uma conta com alguém, precisa ter 5k pra rolar',
+          'onde coloco o usuário': 'no campo de login no link que te mandei. copia o usuário e senha certinho',
+          'o link não abre': 'tenta copiar e colar no navegador. me avisa se não rolar',
+          'qual senha': 'a senha é a que te mandei. copia e cola no login',
+          'não achei perfil': 'no app, vai nas configurações ou no canto superior, procura por PERFIL',
+          'onde tá financeiro': 'no app, procura no menu ou configurações, tá como FINANCEIRO, depois me manda o valor em texto',
+          'qual valor mando': 'o valor que aparece em FINANCEIRO, só escreve o número em texto',
+          'como faço o saque': 'vai em FINANCEIRO, seleciona sacar, coloca TUDO pra sua conta e usa as senhas que te mandei',
+          'qual chave pix': 'te passo a chave assim que confirmar que caiu, saca primeiro e me avisa',
+          'demora quanto': 'saca tudo agora, geralmente cai na hora. me avisa quando cair'
+        };
         const mensagemLower = mensagensTextoConfirmacao.toLowerCase();
         let resposta = 'me manda o valor que tá em FINANCEIRO, só o número em texto';
         for (const [duvida, respostaPronta] of Object.entries(respostasDuvidasComuns)) {
@@ -1697,9 +1783,13 @@ async function processarMensagensPendentes(contato) {
 }
 
 function gerarBlocoInstrucoes() {
-  // Helpers
   const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
   const pickNested = (arr, i) => (Array.isArray(arr?.[i]) ? pick(arr[i]) : '');
+
+  const mensagensPosChecklist = [
+    ['mas fica tranquilo', 'mas relaxa', 'mas fica suave'],
+    ['a gente vai fazer parte por parte', 'a gente faz parte por parte', 'a gente faz na calma, parte por parte']
+  ];
 
   const checklist = [
     pick(checklistVariacoes?.[0]),
