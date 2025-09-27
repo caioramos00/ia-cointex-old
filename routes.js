@@ -647,7 +647,6 @@ function setupRoutes(
                 const { allowed } = await clearOptOutIfAllowed(pool, contato);
                 if (!allowed) return res.sendStatus(200); // já excedeu o limite → silêncio
                 console.log(`[${contato}] Re-opt-in por "BORA" (abaixo do limite)`);
-                await sendMessage(contato, 'fechou, voltamos então. bora.');
               } else {
                 await sendMessage(contato, 'vc tinha parado as msgs. se quiser retomar, manda "BORA".');
                 return res.sendStatus(200);
@@ -1119,7 +1118,6 @@ function setupRoutes(
     if (isDNC && isReopt) {
       const { allowed } = await clearOptOutIfAllowed(pool, phone);
       if (!allowed) return res.json({ ok: true, ignored: 'limit_exceeded' });
-      await sendMessage(phone, 'fechou, voltamos então. bora.');
     }
 
     // 7B) Detectar OPT-OUT no ManyChat e registrar contagem
