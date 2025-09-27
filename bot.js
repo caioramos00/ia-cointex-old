@@ -87,23 +87,69 @@ async function checarOptOutGlobal(contato, mensagensTexto) {
   return false;
 }
 
-async function gerarResposta(messages) {
+// helper: valida e normaliza um rótulo (ex.: ["OPTOUT","CONTINUAR"])
+function pickValidLabel(raw, allowed) {
+  if (!raw) return null;
+  const txt = String(raw).trim().toUpperCase();
+  return allowed.includes(txt) ? txt : null;
+}
+
+// helper: tenta parsear JSON {"label":"..."} e validar
+function extractJsonLabel(outputText, allowed) {
+  try {
+    const obj = JSON.parse(outputText || "{}");
+    return pickValidLabel(obj.label, allowed);
+  } catch { 
+    return null;
+  }
+}
+
+// Ex.: chame com allowedLabels = ["OPTOUT","CONTINUAR"] (ou os rótulos do seu prompt)
+async function gerarResposta(messages, allowedLabels = ["OPTOUT","CONTINUAR"]) {
   try {
     const promptStr = messages.map(m => m.content).join("\n");
     console.log("[OpenAI] Enviando requisição (Responses): " + promptStr);
 
-    const res = await openai.responses.create({
+    // 1) Primeira tentativa: exigir JSON (evita resposta vazia e quebra de linha)
+    let res = await openai.responses.create({
       model: "gpt-5",
       input: promptStr,
-      max_output_tokens: 16,
+      max_output_tokens: 24,                         // >=16
+      response_format: { type: "json_object" }       // força {"label":"..."}
+      // não envie temperature/top_p se o snapshot rejeitar
     });
 
-    const resposta = res.output_text.trim();
-    console.log("[OpenAI] Resposta recebida: " + resposta);
-    return quebradizarTexto(resposta);
+    // tente extrair label do JSON
+    let outText = (res.output_text ?? "").trim();
+    let label = extractJsonLabel(outText, allowedLabels);
+
+    // 2) Fallback A: se JSON for inválido, tenta “uma palavra” (sem response_format)
+    if (!label) {
+      console.warn("[OpenAI] JSON inválido/vazio; tentando fallback one-word...");
+      res = await openai.responses.create({
+        model: "gpt-5",
+        input: promptStr + "\n\nResponda apenas com uma palavra válida: " + allowedLabels.join("|"),
+        max_output_tokens: 24
+        // sem stop para não cortar no 1º \n
+      });
+      const raw = (res.output_text ?? "").trim();
+      // pega a primeira palavra e valida
+      const firstWord = raw.split(/\s+/)[0] || "";
+      label = pickValidLabel(firstWord, allowedLabels);
+    }
+
+    // 3) Fallback B: se ainda assim vier inválido, defina default seguro
+    if (!label) {
+      console.warn("[OpenAI] Saída inválida após fallback; aplicando default.");
+      label = allowedLabels.includes("CONTINUAR") ? "CONTINUAR" : allowedLabels[0];
+    }
+
+    console.log("[OpenAI] Resposta recebida:", label);
+    return label; // ou, se preferir, mantenha quebradizarTexto(label)
   } catch (error) {
-    console.error("[OpenAI] Erro: " + error.message);
-    return "me chama mais tarde, preciso sair aqui";
+    console.error("[OpenAI] Erro:", error?.message || error);
+    // default seguro para não bloquear fluxo
+    return allowedLabels.includes("CONTINUAR") ? "CONTINUAR" : allowedLabels[0];
   }
 }
 
