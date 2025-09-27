@@ -72,7 +72,12 @@ async function finalizeOptOut(contato, reasonText = '') {
   if (st?._timer2Abertura) clearTimeout(st._timer2Abertura);
   if (st?.merrecaTimeout) clearTimeout(st.merrecaTimeout);
   if (st?.posMerrecaTimeout) clearTimeout(st.posMerrecaTimeout);
-  if (st) st.etapa = 'encerrado';
+  if (st) {
+    st.etapa = 'encerrado';
+    st.cancelarEnvio = true;
+    st.enviandoMensagens = false;
+    st.mensagensPendentes = [];
+  }
 
   console.log(`[${contato}] Opt-out concluído (contabilizado).`);
 }
@@ -275,6 +280,28 @@ async function enviarLinhaPorLinha(to, texto) {
   const linhas = texto.split('\n').filter(line => line.trim() !== '');
   for (const linha of linhas) {
     try {
+      if (estado.cancelarEnvio) {
+        console.log(`[${to}] Loop interrompido: cancelarEnvio=true.`);
+        estado.enviandoMensagens = false;
+        break;
+      }
+      try {
+        const { rows } = await pool.query(
+          'SELECT do_not_contact, opt_out_count, permanently_blocked FROM contatos WHERE id = $1 LIMIT 1',
+          [to]
+        );
+        const f = rows?.[0] || {};
+        const MAX_OPTOUTS = 3;
+        if (f.permanently_blocked || (f.opt_out_count || 0) >= MAX_OPTOUTS || f.do_not_contact) {
+          console.log(`[${to}] Loop interrompido: bloqueado entre linhas (DNC/limite).`);
+          estado.enviandoMensagens = false;
+          break;
+        }
+      } catch (e) {
+        console.error(`[${to}] Falha ao checar bloqueio entre linhas: ${e.message}`);
+        estado.enviandoMensagens = false;
+        break;
+      }
       await delay(Math.max(500, linha.length * 30));
       await sendMessage(to, linha);
       await delay(7000 + Math.floor(Math.random() * 1000));
@@ -373,6 +400,22 @@ async function sendMessage(to, text) {
   }
 
   await delay(extraWait);
+
+  try {
+    const { rows } = await pool.query(
+      'SELECT do_not_contact, opt_out_count, permanently_blocked FROM contatos WHERE id = $1 LIMIT 1',
+      [to]
+    );
+    const f = rows?.[0] || {};
+    const MAX_OPTOUTS = 3;
+    if (f.permanently_blocked || (f.opt_out_count || 0) >= MAX_OPTOUTS || f.do_not_contact) {
+      console.log(`[${to}] Envio cancelado no último instante (DNC/limite).`);
+      return { skipped: true, reason: 'blocked' };
+    }
+  } catch (e) {
+    console.error(`[${to}] Falha ao re-checar bloqueio antes do envio: ${e.message}`);
+    return { skipped: true, reason: 'db_error' };
+  }
 
   const { mod: transport, settings } = await getActiveTransport();
 
