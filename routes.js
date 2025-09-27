@@ -1128,9 +1128,10 @@ function setupRoutes(
     if (isToken || isPhrase) {
       const { next, permanently } = await registerOptOut(pool, phone, textIn || '');
       console.log(`[${phone}] OPT-OUT #${next} ${permanently ? '(permanente)' : ''} por: "${textIn}"`);
+
       if (!permanently) {
         await delay(10000 + Math.floor(Math.random() * 5000));
-        await sendMessage(contato, OPTOUT_MSGS[next] || OPTOUT_MSGS[2], { bypassBlock: true });
+        await sendMessage(phone, OPTOUT_MSGS[next] || OPTOUT_MSGS[2], { bypassBlock: true });
       }
       return res.json({ ok: true });
     }
