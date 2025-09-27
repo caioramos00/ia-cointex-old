@@ -1007,26 +1007,15 @@ async function processarMensagensPendentes(contato) {
           'salva esse número como "Ryan" mesmo',
         ];
         const msg2 = `${pick(msg2Grupo1)} ${pick(msg2Grupo2)}, ${pick(msg2Grupo3)}`;
-
-        // Agenda a 2ª com cancelamento se o usuário responder ou a etapa mudar
-        const delayMs = 7000 + Math.floor(Math.random() * 6000); // 7–13s
-        estado._timer2Abertura = setTimeout(async () => {
-          try {
-            // se mudou de etapa ou há novas pendentes, não enviar
-            if (estado.etapa !== 'abertura' || (estado.mensagensPendentes && estado.mensagensPendentes.length)) {
-              console.log(`[${contato}] 2ª de abertura cancelada (usuário respondeu ou etapa mudou).`);
-              return;
-            }
-            await sendMessage(contato, msg2);
-            estado.historico.push({ role: 'assistant', content: msg2 });
-            await atualizarContato(contato, 'Sim', 'abertura', msg2);
-            console.log(`[${contato}] Segunda mensagem enviada (após ${(delayMs / 1000).toFixed(1)}s): ${msg2}`);
-          } catch (e) {
-            console.error(`[${contato}] Falha ao enviar 2ª de abertura:`, e);
-          } finally {
-            estado._timer2Abertura = null;
-          }
-        }, delayMs);
+        try {
+          await delay(7000 + Math.floor(Math.random() * 6000));
+          await sendMessage(contato, msg2, { bypassBlock: false });
+          estado.historico.push({ role: 'assistant', content: msg2 });
+          await atualizarContato(contato, 'Sim', 'abertura', msg2);
+          console.log(`[${contato}] Segunda mensagem (forçada) enviada: ${msg2}`);
+        } catch (e) {
+          console.error(`[${contato}] Falha ao enviar 2ª de abertura (forçada):`, e);
+        }
         return;
       }
     }
