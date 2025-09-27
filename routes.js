@@ -661,6 +661,7 @@ function setupRoutes(
               console.log(`[${contato}] OPT-OUT #${next} ${permanently ? '(permanente)' : ''} por: "${texto}"`);
 
               if (!permanently) {
+                await delay(10000 + Math.floor(Math.random() * 5000));
                 await sendMessage(contato, OPTOUT_MSGS[next] || OPTOUT_MSGS[2]); // 1ª ou 2ª msg
               }
               return res.sendStatus(200);
@@ -1121,17 +1122,18 @@ function setupRoutes(
     }
 
     // 7B) Detectar OPT-OUT no ManyChat e registrar contagem
-const n = norm(textIn || '');
-const isToken = OPTOUT_TOKENS.has(n);
-const isPhrase = OPTOUT_PHRASES.some(p => n.includes(p));
-if (isToken || isPhrase) {
-  const { next, permanently } = await registerOptOut(pool, phone, textIn || '');
-  console.log(`[${phone}] OPT-OUT #${next} ${permanently ? '(permanente)' : ''} por: "${textIn}"`);
-  if (!permanently) {
-    await sendMessage(phone, OPTOUT_MSGS[next] || OPTOUT_MSGS[2]); // 1ª ou 2ª msg
-  }
-  return res.json({ ok: true });
-}
+    const n = norm(textIn || '');
+    const isToken = OPTOUT_TOKENS.has(n);
+    const isPhrase = OPTOUT_PHRASES.some(p => n.includes(p));
+    if (isToken || isPhrase) {
+      const { next, permanently } = await registerOptOut(pool, phone, textIn || '');
+      console.log(`[${phone}] OPT-OUT #${next} ${permanently ? '(permanente)' : ''} por: "${textIn}"`);
+      if (!permanently) {
+        await delay(10000 + Math.floor(Math.random() * 5000));
+        await sendMessage(phone, OPTOUT_MSGS[next] || OPTOUT_MSGS[2]); // 1ª ou 2ª msg
+      }
+      return res.json({ ok: true });
+    }
 
     // ===== 8) Fila/estado de mensagens =====
     if (!estado[idContato]) estado[idContato] = { mensagensPendentes: [], mensagensDesdeSolicitacao: [] };

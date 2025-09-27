@@ -22,9 +22,8 @@ const REOPTIN_RX = /\b(mudei de ideia|quero sim|topo|tô dentro|to dentro|bora|v
 
 const MAX_OPTOUTS = 3;
 const OPTOUT_MSGS = {
-  1: "tranquilo, não vou mais te mandar mensagem. qualquer coisa só chamar",
-  2: "fechou, sem problema. se mudar de ideia é só chamar",
-  3: "ok, vou parar por aqui"
+  1: 'tranquilo, não vou mais te mandar mensagem. qualquer coisa só chamar',
+  2: 'de boa, vou passar o trampo pra outra pessoa e não te chamo mais. não me manda mais mensagem',
 };
 
 async function setDoNotContact(contato, value = true) {
@@ -61,8 +60,7 @@ async function finalizeOptOut(contato, reasonText = '') {
     `, [contato, String(reasonText || '').slice(0, 200), next, permanently]);
 
     if (!permanently) {
-      // atraso humano 7–15s
-      await delay(rand(7000, 15000));
+      await delay(10000 + Math.floor(Math.random() * 5000));
       await sendMessage(contato, OPTOUT_MSGS[next] || OPTOUT_MSGS[2]);
     }
   } catch (e) {
