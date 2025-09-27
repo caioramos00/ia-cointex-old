@@ -1689,45 +1689,45 @@ async function processarMensagensPendentes(contato) {
         console.log("[" + contato + "] Estado após processamento: etapa=" + estado.etapa + ", mensagensPendentes=" + estado.mensagensPendentes.length);
         return;
       }
-
-      console.log(`[${contato}] Estado após processamento: etapa=${estado.etapa}, mensagensPendentes=${estado.mensagensPendentes.length}`);
-    } catch (error) {
-      console.error("[" + contato + "] Erro em processarMensagensPendentes: " + error.message);
-      estadoContatos[contato].mensagensPendentes = [];
-      const mensagem = 'vou ter que sair aqui, daqui a pouco te chamo';
-      await enviarLinhaPorLinha(contato, mensagem);
-      await atualizarContato(contato, 'Sim', estadoContatos[contato].etapa, mensagem);
     }
+    console.log(`[${contato}] Estado após processamento: etapa=${estado.etapa}, mensagensPendentes=${estado.mensagensPendentes.length}`);
+  } catch (error) {
+    console.error("[" + contato + "] Erro em processarMensagensPendentes: " + error.message);
+    estadoContatos[contato].mensagensPendentes = [];
+    const mensagem = 'vou ter que sair aqui, daqui a pouco te chamo';
+    await enviarLinhaPorLinha(contato, mensagem);
+    await atualizarContato(contato, 'Sim', estadoContatos[contato].etapa, mensagem);
   }
+}
 
 function gerarBlocoInstrucoes() {
-    // Helpers
-    const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
-    const pickNested = (arr, i) => (Array.isArray(arr?.[i]) ? pick(arr[i]) : '');
+  // Helpers
+  const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
+  const pickNested = (arr, i) => (Array.isArray(arr?.[i]) ? pick(arr[i]) : '');
 
-    const checklist = [
-      pick(checklistVariacoes?.[0]),
-      pick(checklistVariacoes?.[1]),
-      pick(checklistVariacoes?.[2]),
-      pick(checklistVariacoes?.[3]),
-      pickNested(checklistVariacoes?.[4], 0), // Saque
-      pickNested(checklistVariacoes?.[4], 1), // Parte/repasse
-    ].filter(line => typeof line === 'string' && line.trim() !== '');
+  const checklist = [
+    pick(checklistVariacoes?.[0]),
+    pick(checklistVariacoes?.[1]),
+    pick(checklistVariacoes?.[2]),
+    pick(checklistVariacoes?.[3]),
+    pickNested(checklistVariacoes?.[4], 0), // Saque
+    pickNested(checklistVariacoes?.[4], 1), // Parte/repasse
+  ].filter(line => typeof line === 'string' && line.trim() !== '');
 
-    console.log("[Debug] Checklist gerado:", checklist);
+  console.log("[Debug] Checklist gerado:", checklist);
 
-    if (checklist.length < 5) {
-      console.error("[Error] Checklist incompleto, esperado >=5 itens, recebido:", checklist.length);
-      return "Erro ao gerar instruções, tente novamente.";
-    }
+  if (checklist.length < 5) {
+    console.error("[Error] Checklist incompleto, esperado >=5 itens, recebido:", checklist.length);
+    return "Erro ao gerar instruções, tente novamente.";
+  }
 
-    const posChecklist = [
-      Array.isArray(mensagensPosChecklist?.[0]) ? pick(mensagensPosChecklist[0]) : '',
-      Array.isArray(mensagensPosChecklist?.[1]) ? pick(mensagensPosChecklist[1]) : '',
-    ].filter(Boolean).join('\n');
+  const posChecklist = [
+    Array.isArray(mensagensPosChecklist?.[0]) ? pick(mensagensPosChecklist[0]) : '',
+    Array.isArray(mensagensPosChecklist?.[1]) ? pick(mensagensPosChecklist[1]) : '',
+  ].filter(Boolean).join('\n');
 
-    const checklistTexto = checklist.map(line => `- ${line}`).join('\n');
-    const textoFinal = `
+  const checklistTexto = checklist.map(line => `- ${line}`).join('\n');
+  const textoFinal = `
  presta atenção e segue cada passo:
 
 ${checklistTexto}
@@ -1735,8 +1735,8 @@ ${checklistTexto}
 ${posChecklist}
   `.trim();
 
-    console.log("[Debug] Texto final gerado em gerarBlocoInstrucoes:", textoFinal);
-    return textoFinal;
-  }
+  console.log("[Debug] Texto final gerado em gerarBlocoInstrucoes:", textoFinal);
+  return textoFinal;
+}
 
-  module.exports = { delay, gerarResposta, quebradizarTexto, enviarLinhaPorLinha, inicializarEstado, criarUsuarioDjango, processarMensagensPendentes, sendMessage, gerarSenhaAleatoria, gerarBlocoInstrucoes, retomarEnvio, decidirOptLabel, cancelarConfirmacaoOptOut };
+module.exports = { delay, gerarResposta, quebradizarTexto, enviarLinhaPorLinha, inicializarEstado, criarUsuarioDjango, processarMensagensPendentes, sendMessage, gerarSenhaAleatoria, gerarBlocoInstrucoes, retomarEnvio, decidirOptLabel, cancelarConfirmacaoOptOut };
