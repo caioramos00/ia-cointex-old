@@ -662,7 +662,7 @@ function setupRoutes(
 
               if (!permanently) {
                 await delay(10000 + Math.floor(Math.random() * 5000));
-                await sendMessage(contato, OPTOUT_MSGS[next] || OPTOUT_MSGS[2]); // 1ª ou 2ª msg
+                await sendMessage(contato, OPTOUT_MSGS[next] || OPTOUT_MSGS[2], { bypassBlock: true });
               }
               return res.sendStatus(200);
             }
@@ -1130,7 +1130,7 @@ function setupRoutes(
       console.log(`[${phone}] OPT-OUT #${next} ${permanently ? '(permanente)' : ''} por: "${textIn}"`);
       if (!permanently) {
         await delay(10000 + Math.floor(Math.random() * 5000));
-        await sendMessage(phone, OPTOUT_MSGS[next] || OPTOUT_MSGS[2]); // 1ª ou 2ª msg
+        await sendMessage(contato, OPTOUT_MSGS[next] || OPTOUT_MSGS[2], { bypassBlock: true });
       }
       return res.json({ ok: true });
     }

@@ -60,8 +60,8 @@ async function finalizeOptOut(contato, reasonText = '') {
     `, [contato, String(reasonText || '').slice(0, 200), next, permanently]);
 
     if (!permanently) {
-      await delay(10000 + Math.floor(Math.random() * 5000));
-      await sendMessage(contato, OPTOUT_MSGS[next] || OPTOUT_MSGS[2]);
+      await delay(rand(10000, 15000));
+      await sendMessage(contato, OPTOUT_MSGS[next] || OPTOUT_MSGS[2], { bypassBlock: true });
     }
   } catch (e) {
     console.error(`[${contato}] Falha ao registrar opt-out: ${e.message}`);
