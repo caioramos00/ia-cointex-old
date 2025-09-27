@@ -1,8 +1,7 @@
-// routes.js
 const path = require('path');
 const express = require('express');
 const axios = require('axios');
-const twilio = require('twilio'); // npm i twilio
+const twilio = require('twilio');
 const qs = require('qs');
 
 const { pool } = require('./db.js');
