@@ -848,21 +848,6 @@ async function processarMensagensPendentes(contato) {
           console.error('[Abertura][inline selo/optout] erro:', e.message);
         }
 
-        if (!estado.msg1Enviada && !estado.__msg1Lock) {
-          estado.__msg1Lock = true;
-          try {
-            await sendMessage(contato, msg1);
-            estado.historico.push({ role: 'assistant', content: msg1 });
-            await atualizarContato(contato, 'Sim', 'abertura', msg1);
-            console.log("[" + contato + "] Mensagem inicial enviada: " + msg1);
-            estado.msg1Enviada = true;
-          } finally {
-            estado.__msg1Lock = false;
-          }
-        }
-
-        estado.aberturaConcluida = true;
-
         const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
         const msg2Grupo1 = [
           'nem liga pro nome desse whats,',
@@ -1052,22 +1037,38 @@ async function processarMensagensPendentes(contato) {
 
         const msg2 = () => `${pick(msg2Grupo1)} ${pick(msg2Grupo2)}, ${pick(msg2Grupo3)}`;
 
-        if (!estado.msg2Enviada) {
+        if (!estado.aberturaSequenciada) {
+          estado.aberturaSequenciada = true;
           try {
-            estado.msg2Enviada = true; // garante 1x
-            await delay(7000 + Math.floor(Math.random() * 6000));
-            const m2 = msg2(); // monta a STRING
-            await sendMessage(contato, m2, { bypassBlock: false });
-            estado.historico.push({ role: 'assistant', content: m2 });
-            await atualizarContato(contato, 'Sim', 'abertura', m2);
-            console.log(`[${contato}] Segunda mensagem enviada: ${m2}`);
-          } catch (e) {
-            console.error(`[${contato}] Falha ao enviar 2ª de abertura:`, e);
-            estado.msg2Enviada = false; // libera retry se falhar
+            if (!estado.msg1Enviada) {
+              estado.msg1Enviada = true;
+              await sendMessage(contato, msg1);
+              estado.historico.push({ role: 'assistant', content: msg1 });
+              await atualizarContato(contato, 'Sim', 'abertura', msg1);
+              console.log(`[${contato}] Mensagem inicial enviada: ${msg1}`);
+            }
+            if (!estado.msg2Enviada) {
+              await delay(7000 + Math.floor(Math.random() * 6000));
+              const m2 = msg2();
+              await sendMessage(contato, m2, { bypassBlock: false });
+              estado.historico.push({ role: 'assistant', content: m2 });
+              await atualizarContato(contato, 'Sim', 'abertura', m2);
+              console.log(`[${contato}] Segunda mensagem enviada: ${m2}`);
+              estado.msg2Enviada = true;
+            }
+            estado.aberturaConcluida = true;
+          } finally {
+            estado.aberturaSequenciada = false;
           }
         }
 
         return;
+      }
+      if (mensagensPacote.length > 0 && estado.etapa === 'abertura') {
+        estado.etapa = 'interesse';
+        estado.primeiraRespostaPendente = false;
+        await atualizarContato(contato, 'Sim', 'interesse', '[Avanço automático após abertura]');
+        console.log(`[${contato}] Avanço automático para 'interesse'`);
       }
     }
 
