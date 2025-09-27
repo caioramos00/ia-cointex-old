@@ -623,6 +623,12 @@ function inicializarEstado(contato, tid = '', click_type = 'Orgânico') {
     ultimaMensagem: Date.now(),
     credenciais: null,
     credenciaisEntregues: false,
+    instrucoesConcluida: false,
+    instrucoesSequenciada: false,
+    instrMsg1Enviada: false,
+    instrMsg2Enviada: false,
+    instrMsg3Enviada: false,
+    aguardandoAceiteInstrucoes: false,
     mensagensPendentes: [],
     mensagensDesdeSolicitacao: [],
     negativasAbertura: 0,
@@ -1224,49 +1230,162 @@ async function processarMensagensPendentes(contato) {
     if (estado.etapa === 'instruções') {
       console.log("[" + contato + "] Etapa 3: instruções");
 
-      if (estado.instrucoesCompletas && mensagensPacote.length > 0) {
-        if (
-          estado.credenciais &&
-          estado.credenciais.username &&
-          estado.credenciais.password &&
-          estado.credenciais.link &&
-          !estado.credenciaisEntregues
-        ) {
-          const mensagensAcesso = [
-            'vamos começar, beleza?',
-            'não manda áudio e só responde com o que eu pedir',
-            'USUÁRIO: ',
-            String(estado.credenciais.username || '').trim(),
-            'SENHA: ',
-            String(estado.credenciais.password || '').trim(),
-            String(estado.credenciais.link || '').trim(),
-            'me avisa assim que vc entrar. manda só "ENTREI" pra agilizar'
-          ];
+      // 1) Se ainda não concluiu as 3 mensagens de instruções, monta e envia agora (mesmo padrão da 'abertura')
+      if (!estado.instrucoesConcluida) {
+        const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
 
-          estado.seqKind = 'credenciais';
-          await enviarLinhaPorLinha(contato, mensagensAcesso.join('\n'));
-          const concluiu = !estado.seqLines;
-          estado.credenciaisEntregues = !!concluiu;
+        // ---------- MENSAGEM 1: '{bloco1}? {bloco2}… {bloco3}'
+        const i1g1 = [
+          'rapidinho te passo as instruções',
+          'vou te explicar como vai funcionar',
+          'te mando o passo a passo'
+        ];
+        const i1g2 = [
+          'é simples de seguir',
+          'é bem direto',
+          'é tranquilo de fazer'
+        ];
+        const i1g3 = [
+          'acompanha comigo',
+          'segue comigo',
+          'confere aí'
+        ];
+        const i1_m1 = pick(i1g1);
+        const i1_m2 = pick(i1g2);
+        const i1_m3 = pick(i1g3);
+        const instrMsg1 = `${i1_m1}? ${i1_m2}… ${i1_m3}`;
 
-          if (!concluiu) {
-            // interrompido por DNC/limite: apenas não avança.
-            return;
+        // ---------- MENSAGEM 2 (lista): 4 bullets, cada um com 3 blocos
+        const i2l1g1 = ['deixa o app/sistema aberto', 'mantenha o app logado', 'esteja com o acesso pronto'];
+        const i2l1g2 = ['use conexão estável', 'evite trocar de rede', 'não ative modo avião'];
+        const i2l1g3 = ['responda só o que eu pedir', 'evite áudio', 'mande apenas texto'];
+
+        const i2l2g1 = ['vamos fazer por etapas', 'faça com calma', 'sem pressa'];
+        const i2l2g2 = ['se pintar dúvida, fala aqui', 'qualquer dúvida me avisa', 'tendo dúvida, sinaliza'];
+        const i2l2g3 = ['beleza?', 'tudo certo?', 'combinado?'];
+
+        const i2l3g1 = ['quando terminar cada passo, avise', 'concluindo uma etapa, diga aqui', 'finalizando, manda aqui'];
+        const i2l3g2 = ['não compartilhe dado além do necessário', 'só o essencial', 'mantenha seus dados seguros'];
+        const i2l3g3 = ['vamos começar na sequência', 'a gente começa já já', 'começamos em seguida'];
+
+        const i2l4g1 = ['deixe as notificações ativas', 'evite fechar o app', 'não limpe o histórico nesse momento'];
+        const i2l4g2 = ['se cair a conexão, me avisa', 'se travar, me fala', 'qualquer erro, me manda print'];
+        const i2l4g3 = ['tudo pronto por aí?', 'podemos seguir assim?', 'tá ok?'];
+
+        const instrMsg2 =
+          `• ${pick(i2l1g1)}, ${pick(i2l1g2)}, ${pick(i2l1g3)}
+• ${pick(i2l2g1)}, ${pick(i2l2g2)}, ${pick(i2l2g3)}
+• ${pick(i2l3g1)}, ${pick(i2l3g2)}, ${pick(i2l3g3)}
+• ${pick(i2l4g1)}, ${pick(i2l4g2)}, ${pick(i2l4g3)}`;
+
+        // ---------- MENSAGEM 3: '{bloco1}… {bloco2}?'
+        const i3g1 = ['tudo entendido até aqui', 'ficou claro', 'por enquanto ok'];
+        const i3g2 = ['podemos seguir', 'podemos começar', 'vamos em frente'];
+        const instrMsg3 = `${pick(i3g1)}… ${pick(i3g2)}?`;
+
+        if (!estado.instrucoesSequenciada) {
+          estado.instrucoesSequenciada = true;
+          try {
+            if (!estado.instrMsg1Enviada) {
+              estado.instrMsg1Enviada = true;
+              await sendMessage(contato, instrMsg1);
+              estado.historico.push({ role: 'assistant', content: instrMsg1 });
+              await atualizarContato(contato, 'Sim', 'instruções', instrMsg1);
+              console.log(`[${contato}] [instruções] Msg1 enviada: ${instrMsg1}`);
+            }
+
+            if (!estado.instrMsg2Enviada) {
+              await delay(7000 + Math.floor(Math.random() * 6000));
+              estado.instrMsg2Enviada = true;
+              await sendMessage(contato, instrMsg2);
+              estado.historico.push({ role: 'assistant', content: instrMsg2 });
+              await atualizarContato(contato, 'Sim', 'instruções', instrMsg2);
+              console.log(`[${contato}] [instruções] Msg2 enviada: (bullets)`);
+            }
+
+            if (!estado.instrMsg3Enviada) {
+              await delay(7000 + Math.floor(Math.random() * 6000));
+              estado.instrMsg3Enviada = true;
+              await sendMessage(contato, instrMsg3);
+              estado.historico.push({ role: 'assistant', content: instrMsg3 });
+              await atualizarContato(contato, 'Sim', 'instruções', instrMsg3);
+              console.log(`[${contato}] [instruções] Msg3 enviada: ${instrMsg3}`);
+            }
+
+            estado.instrucoesConcluida = true;       // sequência pronta
+            estado.instrucoesEnviadas = true;        // compat
+            estado.aguardandoAceiteInstrucoes = true;
+          } catch (e) {
+            console.error(`[${contato}] Erro na sequência de instruções: ${e.message}`);
+          } finally {
+            estado.instrucoesSequenciada = false;
           }
-
-          estado.seqKind = null;
-
-          estado.etapa = 'acesso';
-          estado.tentativasAcesso = 0;
-          estado.mensagensDesdeSolicitacao = [];
-          await atualizarContato(contato, 'Sim', 'acesso', 'credenciais enviadas (após interação)');
-          return;
         }
 
-        // Ainda sem credenciais geradas → só registra e segue aguardando (sem "5 minutinhos" e sem timeout)
-        console.log(`[${contato}] Interação recebida em 'instruções', mas ainda sem credenciais — aguardando backend`);
+        return;
+      }
+
+      // 2) Após enviar as instruções: aguarda resposta e classifica
+      if (mensagensPacote.length > 0) {
+        const contexto = mensagensPacote.map(m => m.texto).join("\n");
+        const cls = String(await gerarResposta(
+          [{ role: "system", content: promptClassificaAceite(contexto) }],
+          ["ACEITE", "RECUSA", "DUVIDA"]
+        )).toUpperCase();
+
+        console.log(`[${contato}] Classificação pós-instruções: ${cls}`);
+
+        if (cls.includes("ACEITE")) {
+          // Envia CREDENCIAIS somente após ACEITE nas instruções
+          if (
+            estado.credenciais &&
+            estado.credenciais.username &&
+            estado.credenciais.password &&
+            estado.credenciais.link &&
+            !estado.credenciaisEntregues
+          ) {
+            const mensagensAcesso = [
+              'vamos começar',
+              'envio agora as credenciais — responda apenas o que eu pedir',
+              'USUÁRIO:',
+              String(estado.credenciais.username || '').trim(),
+              'SENHA:',
+              String(estado.credenciais.password || '').trim(),
+              String(estado.credenciais.link || '').trim(),
+              'quando entrar, escreva: ENTREI'
+            ];
+
+            estado.seqKind = 'credenciais';
+            await enviarLinhaPorLinha(contato, mensagensAcesso.join('\n'));
+            const concluiu = !estado.seqLines;
+            estado.credenciaisEntregues = !!concluiu;
+
+            if (!concluiu) {
+              // interrompido por DNC/limite → não avança
+              return;
+            }
+
+            estado.seqKind = null;
+            estado.etapa = 'acesso';
+            estado.tentativasAcesso = 0;
+            estado.mensagensDesdeSolicitacao = [];
+            await atualizarContato(contato, 'Sim', 'acesso', 'credenciais enviadas (após ACEITE nas instruções)');
+            return;
+          } else {
+            console.log(`[${contato}] ACEITE nas instruções, mas sem credenciais ainda — aguardando backend`);
+            // standby silencioso até as credenciais existirem
+            return;
+          }
+        }
+
+        // Qualquer caso diferente de ACEITE → standby absoluto (sem resposta)
+        console.log(`[${contato}] Stand-by em 'instruções' (aguardando ACEITE para credenciais).`);
+        return;
       }
       return;
-    } else if (estado.etapa === 'acesso') {
+    }
+
+    if (estado.etapa === 'acesso') {
       console.log("[" + contato + "] Etapa 4: acesso");
       const tipoAcesso = String(await gerarResposta(
         [{ role: 'system', content: promptClassificaAcesso(mensagensTexto) }],
