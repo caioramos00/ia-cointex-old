@@ -722,9 +722,9 @@ async function processarMensagensPendentes(contato) {
 
       if (estado.aberturaConcluida && mensagensPacote.length > 0) {
         if (estado._timer2Abertura) { clearTimeout(estado._timer2Abertura); estado._timer2Abertura = null; }
-        estado.etapa = 'impulso';
-        await atualizarContato(contato, 'Sim', 'impulso');
-        console.log(`[${contato}] Resposta após abertura → avançando para 'impulso'.`);
+        estado.etapa = 'interesse';
+        await atualizarContato(contato, 'Sim', 'interesse');
+        console.log(`[${contato}] Resposta após abertura → avançando para 'interesse'.`);
       }
 
       if (!estado.aberturaConcluida) {
@@ -1018,6 +1018,138 @@ async function processarMensagensPendentes(contato) {
         }
         return;
       }
+    }
+
+    if (estado.etapa === 'interesse') {
+      console.log("[" + contato + "] Etapa 'interesse'");
+
+      if (!estado.interesseEnviado) {
+        const g1 = [
+          'to bem corrido aqui',
+          'tô na correria aqui',
+          'tô na correria agora',
+          'tô bem corrido agora',
+          'to sem muito tempo aqui',
+          'tô sem muito tempo aqui',
+          'tô sem muito tempo agora',
+          'to sem tempo aqui',
+          'tô sem tempo aqui',
+          'tô sem tempo agora',
+          'to na maior correria aqui',
+          'tô na maior correria aqui',
+          'tô na maior correria agora',
+          'to na maior correria agora',
+          'to meio sem tempo aqui',
+          'tô meio sem tempo aqui',
+          'tô meio sem tempo agora',
+          'to meio corrido aqui'
+        ];
+        const g2 = [
+          'fazendo vários ao mesmo tempo',
+          'fazendo vários trampos ao mesmo tempo',
+          'fazendo vários trampo ao mesmo tempo',
+          'fazendo vários trampos juntos',
+          'fazendo vários trampo juntos',
+          'fazendo vários trampos',
+          'fazendo vários trampo',
+          'fazendo muitos trampos ao mesmo tempo',
+          'fazendo muitos trampo ao mesmo tempo',
+          'fazendo muitos trampos juntos',
+          'fazendo muitos trampo juntos',
+          'fazendo muitos trampos',
+          'fazendo muitos trampo',
+          'fazendo muito trampo',
+          'fazendo muito trampo ao mesmo tempo',
+          'fazendo muito trampo juntos',
+          'fazendo muito trampo agora'
+        ];
+        const g3 = [
+          'vou te mandando tudo o que você tem que fazer',
+          'vou te mandando tudo que você tem que fazer',
+          'vou te mandando tudo o que precisa fazer',
+          'vou te mandando tudo que precisa fazer',
+          'vou te mandando o que você tem que fazer',
+          'vou te mandando o que precisa fazer',
+          'vou te mandando o que você precisa fazer',
+          'vou te mandando o que você tem que fazer',
+          'vou ir te mandando tudo o que você tem que fazer',
+          'vou ir te mandando tudo que você tem que fazer',
+          'vou ir te mandando tudo o que precisa fazer',
+          'vou ir te mandando tudo que precisa fazer',
+          'vou ir te mandando o que você tem que fazer',
+          'vou ir te mandando o que precisa fazer',
+          'vou ir te mandando o que você precisa fazer',
+          'vou ir te mandando o que você tem que fazer',
+          'vou te falar tudo o que você tem que fazer',
+          'vou te falar tudo que você tem que fazer',
+          'vou te falar tudo o que precisa fazer',
+          'vou te falar tudo que precisa fazer',
+          'vou te falar o que você tem que fazer',
+        ];
+        const g4 = [
+          'e você só responde o que eu te perguntar',
+          'e você só responde o que eu perguntar',
+          'e você só responde o que eu te pedir',
+          'e você só responde o que eu pedir',
+          'e você só responde o que eu for perguntar',
+          'e você só responde o que eu for pedir',
+          'e você só responde o que eu te perguntar',
+          'e você responde só o que eu te perguntar',
+          'e você responde só o que eu perguntar',
+          'e você responde só o que eu te pedir',
+          'e você responde só o que eu pedir',
+          'e você responde só o que eu for perguntar',
+          'e você responde só o que eu for pedir',
+          'e você só fala o que eu te perguntar',
+          'e você só me fala o que eu perguntar',
+          'e você só fala o que eu te pedir',
+          'e você só me fala o que eu pedir',
+          'e você só fala o que eu for perguntar',
+          'e você só me fala o que eu for perguntar',
+          'e você só fala o que eu for pedir',
+          'e você só me fala o que eu for pedir',
+        ];
+        const g5 = [
+          'beleza?',
+          'blz?',
+          'tranquilo?',
+          'demoro?',
+          'dmr?',
+          'certo?',
+          'pode ser?',
+          'entendeu?',
+          'tlgd?',
+        ];
+
+        const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+        const msgInteresse = `${pick(g1)}, ${pick(g2)}... ${pick(g3)}, ${pick(g4)}, ${pick(g5)}`;
+
+        await sendMessage(contato, msgInteresse);
+        estado.historico.push({ role: "assistant", content: msgInteresse });
+        await atualizarContato(contato, "Sim", "interesse", msgInteresse);
+        estado.interesseEnviado = true;
+        console.log(`[${contato}] Mensagem de interesse enviada: ${msgInteresse}`);
+        return;
+      }
+
+      if (mensagensPacote.length > 0) {
+        const contexto = mensagensPacote.map(m => m.texto).join("\n");
+        const classificacao = String(await gerarResposta(
+          [{ role: "system", content: promptClassificaAceite(contexto) }],
+          ["ACEITE", "RECUSA", "DUVIDA"]
+        )).toUpperCase();
+
+        console.log(`[${contato}] Resposta em interesse: ${classificacao}`);
+
+        if (classificacao.includes("ACEITE")) {
+          estado.etapa = "impulso";
+          await atualizarContato(contato, "Sim", "impulso", "[Avanço após aceite]");
+          console.log(`[${contato}] Aceite detectado → avançando para impulso`);
+        } else {
+          console.log(`[${contato}] Não foi aceite (stand-by).`);
+        }
+      }
+      return;
     }
 
     if (estado.etapa === 'impulso') {
