@@ -25,11 +25,6 @@ const OPTOUT_MSGS = {
   2: 'de boa, vou passar o trampo pra outra pessoa e não te chamo mais. não me manda mais mensagem',
 };
 
-function asText(x) {
-  if (typeof x === 'function') return x();
-  return String(x ?? '').trim();
-}
-
 function pick(arr) {
   return Array.isArray(arr) && arr.length
     ? arr[Math.floor(Math.random() * arr.length)]
