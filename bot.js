@@ -564,6 +564,10 @@ async function sendManychatBatch(phone, textOrLines) {
 async function sendMessage(to, text, opts = {}) {
   const { bypassBlock = false } = opts;
 
+  if (typeof text === 'function') {
+    try { text = text(); } catch (e) { text = String(text); }
+  }
+
   // pacing humano
   let extraWait = GLOBAL_PER_MSG_BASE_MS + Math.floor(Math.random() * GLOBAL_PER_MSG_JITTER_MS);
   const st = estadoContatos[to];
@@ -844,12 +848,17 @@ async function processarMensagensPendentes(contato) {
           console.error('[Abertura][inline selo/optout] erro:', e.message);
         }
 
-        if (!estado.msg1Enviada) {
-          await sendMessage(contato, msg1);
-          estado.historico.push({ role: 'assistant', content: msg1 });
-          await atualizarContato(contato, 'Sim', 'abertura', msg1);
-          console.log("[" + contato + "] Mensagem inicial enviada: " + msg1);
-          estado.msg1Enviada = true;
+        if (!estado.msg1Enviada && !estado.__msg1Lock) {
+          estado.__msg1Lock = true;
+          try {
+            await sendMessage(contato, msg1);
+            estado.historico.push({ role: 'assistant', content: msg1 });
+            await atualizarContato(contato, 'Sim', 'abertura', msg1);
+            console.log("[" + contato + "] Mensagem inicial enviada: " + msg1);
+            estado.msg1Enviada = true;
+          } finally {
+            estado.__msg1Lock = false;
+          }
         }
 
         estado.aberturaConcluida = true;
@@ -1044,16 +1053,17 @@ async function processarMensagensPendentes(contato) {
         const msg2 = () => `${pick(msg2Grupo1)} ${pick(msg2Grupo2)}, ${pick(msg2Grupo3)}`;
 
         if (!estado.msg2Enviada) {
-
           try {
+            estado.msg2Enviada = true; // garante 1x
             await delay(7000 + Math.floor(Math.random() * 6000));
-            await sendMessage(contato, msg2, { bypassBlock: false });
-            estado.historico.push({ role: 'assistant', content: msg2 });
-            await atualizarContato(contato, 'Sim', 'abertura', msg2);
-            console.log(`[${contato}] Segunda mensagem (forçada) enviada: ${msg2}`);
-            estado.msg2Enviada = true;
+            const m2 = msg2(); // monta a STRING
+            await sendMessage(contato, m2, { bypassBlock: false });
+            estado.historico.push({ role: 'assistant', content: m2 });
+            await atualizarContato(contato, 'Sim', 'abertura', m2);
+            console.log(`[${contato}] Segunda mensagem enviada: ${m2}`);
           } catch (e) {
-            console.error(`[${contato}] Falha ao enviar 2ª de abertura (forçada):`, e);
+            console.error(`[${contato}] Falha ao enviar 2ª de abertura:`, e);
+            estado.msg2Enviada = false; // libera retry se falhar
           }
         }
 
