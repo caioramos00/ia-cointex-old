@@ -623,6 +623,10 @@ function inicializarEstado(contato, tid = '', click_type = 'Orgânico') {
     instrMsg1Enviada: false,
     instrMsg2Enviada: false,
     instrMsg3Enviada: false,
+    acessoMsgsDisparadas: false,
+    acessoMsg1Enviada: false,
+    acessoMsg2Enviada: false,
+    acessoMsg3Enviada: false,
     aguardandoAceiteInstrucoes: false,
     mensagensPendentes: [],
     mensagensDesdeSolicitacao: [],
@@ -1652,12 +1656,10 @@ async function processarMensagensPendentes(contato) {
         console.log(`[${contato}] Classificação pós-instruções: ${cls}`);
 
         if (cls.includes("ACEITE")) {
-          // ✅ Avança para ACESSO (sem enviar credenciais aqui)
           estado.etapa = 'acesso';
           estado.tentativasAcesso = 0;
           estado.mensagensDesdeSolicitacao = [];
           await atualizarContato(contato, 'Sim', 'acesso', '[ACEITE após instruções]');
-          return;
         }
 
         console.log(`[${contato}] Stand-by em 'instruções' (aguardando ACEITE).`);
@@ -1668,80 +1670,99 @@ async function processarMensagensPendentes(contato) {
     }
 
     if (estado.etapa === 'acesso') {
-      console.log("[" + contato + "] Etapa 4: acesso");
+      console.log("[" + contato + "] Etapa 4: acesso (reformulada)");
+
+      if (
+        !estado.credenciais ||
+        !estado.credenciais.username ||
+        !estado.credenciais.password ||
+        !estado.credenciais.link
+      ) {
+        try {
+          await criarUsuarioDjango(contato);
+        } catch (e) {
+          console.error(`[${contato}] criarUsuarioDjango falhou: ${e?.message || e}`);
+        }
+      }
+
+      const cred = estado.credenciais;
+      if (!cred || !cred.username || !cred.password || !cred.link) {
+        console.log(`[${contato}] Sem credenciais válidas após tentativa; standby em 'acesso'.`);
+        // não dispara as mensagens — aguarda próxima iteração quando as credenciais existirem
+        return;
+      }
+
+      const email = cred.username;   // o backend retorna 'username' (é um e-mail)
+      const senha = cred.password;
+      const link = cred.link;
+
+      // 1) Montagem dos blocos (TUDO AQUI dentro)
+      const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
+
+      const bloco1A = ['Credenciais de treinamento', 'Acesso de laboratório', 'Dados de acesso de teste'];
+      const bloco2A = ['use apenas neste ambiente controlado', 'válido somente para este exercício', 'somente para fins de treinamento'];
+      const bloco3A = ['Usuário', 'E-mail de login', 'Login'];
+
+      const bloco1C = ['Link do ambiente', 'Endereço de login', 'URL do laboratório'];
+      const bloco2C = ['faça o login e avise com', 'assim que entrar, responda com', 'entrou? responda com'];
+      const bloco3C = ['CONFIRMADO', 'CONFIRMADO', 'CONFIRMADO'];
+
+      // 2) Três mensagens no formato exato (com quebras de linha)
+      const msg1 =
+        `${pick(bloco1A)}, ${pick(bloco2A)}:
+
+          ${pick(bloco3A)}:
+          ${email}
+
+          Senha:`;
+
+      const msg2 = `${senha}`;
+
+      const msg3 =
+        `
+          ${pick(bloco1C)}:
+
+          ${link}
+
+          ${pick(bloco2C)}, ${pick(bloco3C)}`;
+
+      // 3) Disparo anti-duplicata (usa chaves fixas)
+      await sendOnce(contato, estado, 'acesso.m1', msg1);
+      await sendOnce(contato, estado, 'acesso.m2', msg2);
+      await sendOnce(contato, estado, 'acesso.m3', msg3);
+
+      estado.credenciaisEntregues = true;
+      await atualizarContato(contato, 'Sim', 'acesso', '[Credenciais enviadas]');
+
+      // 4) Após enviar as 3, aguardamos CONFIRMADO (standby total nos demais)
+      const mensagensTexto = mensagensPacote.map(m => m.texto).join('\n');
       const tipoAcesso = String(await gerarResposta(
         [{ role: 'system', content: promptClassificaAcesso(mensagensTexto) }],
         ["CONFIRMADO", "NAO_CONFIRMADO", "DUVIDA", "NEUTRO"]
       )).toUpperCase();
-      console.log("[" + contato + "] Mensagens processadas: " + mensagensTexto + ", Classificação: " + tipoAcesso);
+
+      console.log("[" + contato + "] Classificação em acesso: " + tipoAcesso);
 
       if (tipoAcesso.includes('CONFIRMADO')) {
-        if (!estado.credenciaisEntregues) {
-          console.log(`[${contato}] Confirmado antes das credenciais — segurando e reforçando instrução de login.`);
-          await enviarLinhaPorLinha(contato,
-            'entra com o usuário e a senha que te passei e me avisa com a palavra ENTREI');
-          return;
-        }
-        const mensagensConfirmacao = [
-          'agora manda um PRINT (ou uma foto) do saldo disponível, ou manda o valor disponível em escrito, EXATAMENTE NESSE FORMATO: "5000", por exemplo',
-        ];
-        for (const msg of mensagensConfirmacao) {
-          await enviarLinhaPorLinha(contato, msg);
-          estado.historico.push({ role: 'assistant', content: msg });
-          await atualizarContato(contato, 'Sim', 'confirmacao', msg);
-        }
+        // Avança para confirmação
+        const follow =
+          'agora manda um PRINT (ou uma foto) do saldo disponível, ou manda o valor disponível em escrito, EXATAMENTE NESSE FORMATO: "5000", por exemplo';
+        await enviarLinhaPorLinha(contato, follow);
+        estado.historico.push({ role: 'assistant', content: follow });
+        await atualizarContato(contato, 'Sim', 'confirmacao', follow);
+
         estado.etapa = 'confirmacao';
         estado.mensagensDesdeSolicitacao = [];
         estado.tentativasAcesso = 0;
-        console.log("[" + contato + "] Etapa 5: confirmação - instruções enviadas");
-      } else if (tipoAcesso.includes('NAO_CONFIRMADO')) {
-        const respostasNaoConfirmadoAcesso = [
-          'mano, tenta de novo com os dados que te mandei. copia o usuário e senha certinho e usa o link. me avisa quando entrar',
-          'tenta de novo, mano. usa o usuário e senha que te passei e o link certinho. me chama quando entrar'
-        ];
-        if (estado.tentativasAcesso < 2) {
-          const resposta = respostasNaoConfirmadoAcesso[Math.floor(Math.random() * respostasNaoConfirmadoAcesso.length)];
-          await enviarLinhaPorLinha(contato, resposta);
-          estado.tentativasAcesso++;
-          estado.historico.push({ role: 'assistant', content: resposta });
-          await atualizarContato(contato, 'Sim', 'acesso', resposta);
-          console.log("[" + contato + "] Etapa 4: acesso - tentativa " + (estado.tentativasAcesso + 1) + "/2, insistindo");
-        } else {
-          const mensagem = 'não rolou, tenta de novo outra hora';
-          await enviarLinhaPorLinha(contato, mensagem);
-          estado.etapa = 'encerrado';
-          estado.encerradoAte = Date.now() + 3 * 60 * 60 * 1000;
-          estado.historico.push({ role: 'assistant', content: mensagem });
-          await atualizarContato(contato, 'Sim', 'encerrado', mensagem);
-          console.log("[" + contato + "] Etapa encerrada após 2 tentativas");
-        }
-      } else if (tipoAcesso.includes('DUVIDA')) {
-        const mensagemLower = mensagensTexto.toLowerCase();
-        let resposta = 'usa o usuário e senha que te passei, entra no link e me avisa com ENTREI';
-        const respostasDuvidasComuns = {
-          'onde coloco o usuário': 'no campo de login do link que te mandei. copia e cola usuário e senha',
-          'qual senha': 'a senha é a que te passei acima. copia e cola no login',
-          'o link não abre': 'tenta copiar e colar no navegador. me avisa se não rolar',
-          'nao tenho 4g': 'sem problema, mantém no wi-fi por enquanto',
-          'não tenho 4g': 'sem problema, mantém no wi-fi por enquanto'
-        };
-        for (const [duvida, respostaPronta] of Object.entries(respostasDuvidasComuns)) {
-          if (mensagemLower.includes(duvida)) {
-            resposta = respostaPronta;
-            break;
-          }
-        }
-        await enviarLinhaPorLinha(contato, resposta);
-        estado.historico.push({ role: 'assistant', content: resposta });
-        await atualizarContato(contato, 'Sim', 'acesso', resposta);
-        console.log("[" + contato + "] Etapa 4: acesso - respondeu dúvida, aguardando");
+        console.log("[" + contato + "] Etapa 5: confirmação — avançou após CONFIRMADO");
       } else {
-        console.log("[" + contato + "] Mensagem neutra recebida, ignorando: " + mensagensTexto);
+        // Standby absoluto: não responder até chegar CONFIRMADO
+        console.log("[" + contato + "] Acesso em standby (aguardando CONFIRMADO).");
         estado.mensagensPendentes = [];
       }
-      console.log(`[${contato}] Estado após processamento: etapa=${estado.etapa}, mensagensPendentes=${estado.mensagensPendentes.length}`);
       return;
     }
+
     else if (estado.etapa === 'confirmacao') {
       console.log("[" + contato + "] Etapa 5: confirmação");
       estado.mensagensDesdeSolicitacao.push(
