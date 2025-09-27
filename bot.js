@@ -569,7 +569,6 @@ async function sendMessage(to, text, opts = {}) {
     try { text = text(); } catch (e) { text = String(text); }
   }
 
-  // pacing humano
   let extraWait = GLOBAL_PER_MSG_BASE_MS + Math.floor(Math.random() * GLOBAL_PER_MSG_JITTER_MS);
   const st = estadoContatos[to];
   if (st?.primeiraRespostaPendente) {
@@ -578,7 +577,6 @@ async function sendMessage(to, text, opts = {}) {
   }
   await delay(extraWait);
 
-  // checagem de bloqueio no DB (pode pular com bypassBlock)
   if (!bypassBlock) {
     try {
       const { rows } = await pool.query(
@@ -599,10 +597,8 @@ async function sendMessage(to, text, opts = {}) {
   const { mod: transport, settings } = await getActiveTransport();
 
   if (transport.name === 'manychat') {
-    const lines = Array.isArray(text)
-      ? text
-      : String(text).split('\n').map(s => s.trim()).filter(Boolean);
-    return await sendManychatBatch(to, lines);
+    const payloadItems = Array.isArray(text) ? text.map(String) : [String(text)];
+    return await sendManychatBatch(to, payloadItems);
   }
 
   if (transport.name === 'twilio') {
@@ -610,7 +606,6 @@ async function sendMessage(to, text, opts = {}) {
     return transport.sendText({ to: sanitized, text }, settings);
   }
 
-  // meta (padrão)
   return transport.sendText({ to, text }, settings);
 }
 
@@ -1225,456 +1220,156 @@ async function processarMensagensPendentes(contato) {
           return; // standby só quando NÃO for ACEITE
         }
       }
+    }
 
-      if (estado.etapa === 'instruções') {
-        console.log("[" + contato + "] Etapa 3: instruções");
+    if (estado.etapa === 'instruções') {
+      console.log("[" + contato + "] Etapa 3: instruções");
 
-        if (!estado.instrucoesConcluida) {
-          const pick = (arr) =>
-            Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
+      if (!estado.instrucoesConcluida) {
+        const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
 
-          const msg1Grupo1 = [
-            'salvou o contato',
-            'salvou o número',
-            'salvou esse número',
-            'salvou esse contato',
-            'já salvou o contato',
-            'já salvou o número',
-            'já salvou esse número',
-            'já salvou esse contato',
-            'já salvou meu contato',
-            'já salvou meu número',
-            'salvou meu contato',
-            'salvou meu número',
-            'salvou o contato aí',
-            'salvou o número aí',
-            'salvou esse número aí',
-            'salvou esse contato aí',
-            'já salvou o contato aí',
-            'já salvou o número aí',
-            'já salvou esse número aí',
-            'já salvou esse contato aí',
-          ];
-          const msg1Grupo2 = [
-            'salva ai que se aparecer outro trampo mais tarde eu te chamo tambem',
-            'salva aí que se aparecer outro trampo mais tarde eu te chamo também',
-            'salva porque se aparecer outro trampo mais tarde eu te chamo tambem',
-            'salva porque se aparecer outro trampo mais tarde eu te chamo também',
-            'salva pq se aparecer outro trampo mais tarde eu te chamo tambem',
-            'salva pq se aparecer outro trampo mais tarde eu te chamo também',
-            'salva ai que se aparecer outro trampo eu te chamo tambem',
-            'salva aí que se aparecer outro trampo eu te chamo também',
-            'salva porque se aparecer outro trampo eu te chamo tambem',
-            'salva aí que se aparecer outro trampo eu te chamo tb',
-            'salva ai que se aparecer outro trampo eu te chamo tb',
-            'salva porque se aparecer outro trampo eu te chamo tb',
-            'salva pq se aparecer outro trampo eu te chamo tambem',
-            'salva pq se aparecer outro trampo eu te chamo também',
-            'salva pq se aparecer outro trampo eu te chamo tb',
-            'deixa salvo pq se aparecer outro trampo eu te chamo tambem',
-            'deixa salvo pq se aparecer outro trampo eu te chamo também',
-            'deixa salvo que se aparecer outro trampo eu te chamo tambem',
-            'deixa salvo que se aparecer outro trampo eu te chamo também',
-            'deixa salvo pq se aparecer outro trampo mais tarde eu te chamo tambem',
-            'deixa salvo pq se aparecer outro trampo mais tarde eu te chamo também',
-            'deixa salvo que se aparecer outro trampo mais tarde eu te chamo tambem',
-            'deixa salvo que se aparecer outro trampo mais tarde eu te chamo também',
-          ];
-          const msg1Grupo3 = [
-            'vou te mandar o passo a passo do que precisa pra fazer certinho',
-            'vou te mandar o passo a passo do que precisa pra fazer direitinho',
-            'vou te mandar o passo a passo do que precisa fazer certinho',
-            'vou te mandar o passo a passo do que precisa fazer direitinho',
-            'vou te mandar o passo a passo do que você precisa pra fazer certinho',
-            'vou te mandar o passo a passo do que você precisa pra fazer direitinho',
-            'vou te mandar o passo a passo do que você precisa fazer certinho',
-            'vou mandar o passo a passo do que você precisa fazer direitinho',
-            'vou mandar o passo a passo do que precisa pra fazer certinho',
-            'vou mandar o passo a passo do que precisa pra fazer direitinho',
-            'vou mandar o passo a passo do que precisa fazer certinho',
-            'vou mandar o passo a passo do que precisa fazer direitinho',
-            'agr vou mandar o passo a passo do que precisa pra fazer certinho',
-            'agora vou mandar o passo a passo do que precisa pra fazer certinho',
-            'agr vou mandar o passo a passo do que precisa pra fazer direitinho',
-            'agora vou mandar o passo a passo do que precisa pra fazer direitinho',
-            'vou mandar agora o passo a passo do que precisa pra fazer certinho',
-            'vou mandar agora o passo a passo do que precisa pra fazer direitinho',
-            'agr vou mandar o passo a passo do que precisa fazer certinho',
-            'agora vou mandar o passo a passo do que precisa fazer certinho',
-            'agora vou te mandar o passo a passo do que precisa fazer direitinho',
-            'agr vou mandar o passo a passo do que precisa fazer direitinho',
-            'agr vou te mandar o passo a passo do que precisa fazer direitinho',
-          ];
-          const instrMsg1 = `${pick(msg1Grupo1)}? ${pick(msg1Grupo2)}… ${pick(msg1Grupo3)}`;
+        // ---------- MENSAGEM 1 ----------
+        const msg1Grupo1 = [
+          'salvou o contato', 'salvou o número', 'salvou esse número', 'salvou esse contato',
+          'já salvou o contato', 'já salvou o número', 'já salvou esse número', 'já salvou esse contato'
+        ];
+        const msg1Grupo2 = [
+          'deixa salvo pq se aparecer outro trampo mais tarde eu te chamo também',
+          'salva aí que se aparecer outro trampo eu te chamo também',
+          'salva pq se aparecer outro trampo eu te chamo também'
+        ];
+        const msg1Grupo3 = [
+          'vou te mandar o passo a passo do que precisa fazer certinho',
+          'vou te mandar o passo a passo do que precisa pra fazer direitinho',
+          'agora vou te mandar o passo a passo, bem simples'
+        ];
+        const instrMsg1 = `${pick(msg1Grupo1)}? ${pick(msg1Grupo2)}… ${pick(msg1Grupo3)}`;
 
-          const pontos1Grupo1 = [
-            'você precisa de uma conta com pix ativo pra receber',
-            'você precisa ter uma conta com pix ativo pra receber',
-            'vc precisa de uma conta com pix ativo pra receber',
-            'vc precisa ter uma conta com pix ativo pra receber',
-            'você vai precisar de uma conta com pix ativo pra receber',
-            'você precisa de uma conta com pix pra receber',
-            'você precisa ter uma conta com pix pra receber',
-            'vc precisa de uma conta com pix pra receber',
-            'vc precisa ter uma conta com pix pra receber',
-            'você vai precisar de uma conta com pix pra receber',
-            'você precisa de uma conta bancária com pix ativo pra receber',
-            'você precisa ter uma conta bancária com pix ativo pra receber',
-            'vc precisa de uma conta bancária com pix ativo pra receber',
-            'vc precisa ter uma conta bancária com pix ativo pra receber',
-            'você vai precisar de uma conta bancária com pix ativo pra receber',
-            'você precisa de uma conta bancária com pix pra receber',
-            'você precisa ter uma conta bancária com pix pra receber',
-            'vc precisa de uma conta bancária com pix pra receber',
-            'vc precisa ter uma conta bancária com pix pra receber',
-            'você vai precisar de uma conta bancária com pix pra receber',
-          ];
-          const pontos1Grupo2 = [
-            'pode ser qualquer banco',
-            'pode ser qlqr banco',
-            'qualquer banco serve',
-            'qualquer banco',
-            'qlqr banco serve',
-          ];
-          const pontos1Grupo3 = [
-            'so nao da certo se for o SICOOB',
-            'só não dá certo se for o SICOOB',
-            'só não funciona se for o SICOOB',
-            'so nao funciona se for o SICOOB',
-            'só não dá se for o SICOOB',
-            'so nao da certo se for SICOOB',
-            'só não dá certo se for SICOOB',
-            'só não funciona se for SICOOB',
-            'so nao funciona se for SICOOB',
-            'só não dá se for SICOOB',
-            'so nao da certo se for o WISE',
-            'só não dá certo se for o WISE',
-            'só não funciona se for o WISE',
-            'so nao funciona se for o WISE',
-            'só não dá se for o WISE',
-            'so nao da certo se for WISE',
-            'só não dá certo se for WISE',
-            'só não funciona se for WISE',
-            'so nao funciona se for WISE',
-            'só não dá se for WISE',
-          ];
+        // ---------- MENSAGEM 2 (LISTA EM UMA ÚNICA MENSAGEM) ----------
+        const pontos1Grupo1 = [
+          'você precisa de uma conta bancária com pix pra receber',
+          'você precisa ter uma conta com pix pra receber',
+          'você vai precisar de uma conta com pix pra receber'
+        ];
+        const pontos1Grupo2 = ['pode ser qualquer banco', 'qualquer banco serve', 'pode ser qlqr banco'];
+        const pontos1Grupo3 = [
+          'só não dá certo se for o SICOOB', 'só não funciona se for o SICOOB',
+          'só não dá se for o SICOOB'
+        ];
 
-          const pontos2Grupo1 = [
-            'se tiver dados moveis',
-            'se tiver dados móveis',
-            'se tiver 5g',
-            'se tiver 4g',
-            'se tiver dados',
-            'se tiver internet no chip',
-            'se vc tiver dados moveis',
-            'se vc tiver dados móveis',
-            'se vc tiver 5g',
-            'se vc tiver 4g',
-            'se vc tiver dados',
-            'se vc tiver internet no chip',
-            'se você tiver dados moveis',
-            'se você tiver dados móveis',
-            'se você tiver 5g',
-            'se você tiver 4g',
-            'se você tiver dados',
-            'se você tiver internet no chip',
-          ];
-          const pontos2Grupo2 = [
-            'desativa o wi-fi',
-            'desliga o wi-fi',
-            'desativa o wifi',
-            'desliga o wifi',
-            'tira do wi-fi',
-            'tira do wifi',
-            'deixa desligado o wi-fi',
-            'deixa desligado o wifi',
-            'deixa desativado o wi-fi',
-            'deixa desativado o wifi',
-            'deixa o wi-fi desligado',
-            'deixa o wifi desligado',
-          ];
-          const pontos2Grupo3 = [
-            'mas se nao tiver deixa no wifi mesmo',
-            'mas se não tiver deixa no wifi mesmo',
-            'mas se nao tiver deixa no wi-fi mesmo',
-            'mas se não tiver deixa no wi-fi mesmo',
-            'mas se nao tiver deixa no wifi',
-            'mas se não tiver deixa no wifi',
-            'mas se nao tiver deixa no wi-fi',
-            'mas se não tiver deixa no wi-fi',
-            'mas se não tiver pode deixar no wifi mesmo',
-            'mas se não tiver pode deixar no wi-fi mesmo',
-            'mas se nao tiver pode deixar no wifi mesmo',
-            'mas se nao tiver pode deixar no wi-fi mesmo',
-            'mas se não tiver usa o wifi mesmo',
-            'mas se não tiver usa o wi-fi mesmo',
-            'mas se nao tiver usa o wifi mesmo',
-            'mas se nao tiver usa o wi-fi mesmo',
-            'mas se não tiver pode deixar no wifi',
-            'mas se não tiver pode deixar no wi-fi',
-            'mas se nao tiver pode deixar no wifi',
-            'mas se nao tiver pode deixar no wi-fi',
-          ];
+        const pontos2Grupo1 = [
+          'se você tiver internet no chip', 'se tiver dados móveis', 'se tiver 4g'
+        ];
+        const pontos2Grupo2 = [
+          'desliga o wi-fi', 'desativa o wi-fi', 'tira do wi-fi'
+        ];
+        const pontos2Grupo3 = [
+          'mas se não tiver, deixa no wi-fi mesmo', 'se não tiver, deixa no wi-fi', 'sem dados: mantém no wi-fi'
+        ];
 
-          const pontos3Grupo1 = [
-            'vou passar o email e a senha de uma conta pra você acessar',
-            'vou passar o e-mail e a senha de uma conta pra você acessar',
-            'vou passar o email e a senha de uma conta pra vc acessar',
-            'vou passar o e-mail e a senha de uma conta pra vc acessar',
-            'vou te passar o email e a senha de uma conta pra você acessar',
-            'vou te passar o e-mail e a senha de uma conta pra você acessar',
-            'vou te passar o email e a senha de uma conta pra vc acessar',
-            'vou te passar o e-mail e a senha de uma conta pra vc acessar',
-            'vou passar o email e a senha de uma conta pra você entrar',
-            'vou passar o e-mail e a senha de uma conta pra você entrar',
-            'vou passar o email e a senha de uma conta pra vc entrar',
-            'vou passar o e-mail e a senha de uma conta pra vc entrar',
-            'vou te passar o email e a senha de uma conta pra você entrar',
-            'vou te passar o e-mail e a senha de uma conta pra você entrar',
-          ];
-          const pontos3Grupo2 = [
-            'lá vai ter um saldo disponível',
-            'lá vai ter um saldo disponivel',
-            'vai ter um saldo disponível lá',
-            'vai ter um saldo disponivel lá',
-            'lá vai ter um dinheiro disponível',
-            'lá vai ter um dinheiro disponivel',
-            'vai ter um dinheiro disponível lá',
-            'vai ter um dinheiro disponivel lá',
-            'lá vai ter uma grana disponível',
-            'lá vai ter uma grana disponivel',
-            'vai ter uma grana disponível lá',
-            'vai ter uma grana disponivel lá',
-            'vai ter um dinheiro disponível pra saque lá',
-            'vai ter um dinheiro disponivel pra saque lá',
-            'lá vai ter um dinheiro disponível pra saque',
-            'lá vai ter um dinheiro disponivel pra saque',
-            'vai ter um saldo disponível pra saque lá',
-            'vai ter um saldo disponivel pra saque lá',
-            'lá vai ter um saldo disponível pra saque',
-            'lá vai ter um saldo disponivel pra saque',
-          ];
-          const pontos3Grupo3 = [
-            'é só você transferir pra sua conta, mais nada',
-            'é só vc transferir pra sua conta, mais nada',
-            'é só você transferir pra sua conta bancária, mais nada',
-            'é só vc transferir pra sua conta bancária, mais nada',
-            'é só você sacar pra sua conta, mais nada',
-            'é só vc sacar pra sua conta, mais nada',
-            'é só você sacar pra sua conta bancária, mais nada',
-            'é só vc sacar pra sua conta bancária, mais nada',
-            'você só precisa transferir pra sua conta, mais nada',
-            'vc só precisa transferir pra sua conta, mais nada',
-            'é só vc mandar pra sua conta, mais nada',
-            'é só você mandar pra sua conta, e já era',
-            'você só precisa transferir pra sua conta bancária, e já era',
-            'vc só precisa transferir pra sua conta bancária, e já era',
-            'é só vc mandar pra sua conta bancária, e já era',
-            'é só você mandar pra sua conta bancária, e já era',
-            'você só precisa sacar pra sua conta, e já era',
-            'vc só precisa sacar pra sua conta, e já era',
-            'você só precisa sacar pra sua conta bancária, e já era',
-            'vc só precisa sacar pra sua conta bancária, e já era',
-          ];
+        const pontos3Grupo1 = [
+          'vou te passar o e-mail e a senha de uma conta pra você entrar',
+          'vou te passar usuário e senha pra acessar uma conta'
+        ];
+        const pontos3Grupo2 = [
+          'lá vai ter um saldo disponível', 'vai ter um saldo disponível lá', 'tem um dinheiro disponível lá'
+        ];
+        const pontos3Grupo3 = [
+          'é só transferir pra sua conta, mais nada', 'você só precisa mandar pra sua conta, mais nada'
+        ];
 
-          const pontos4Grupo1 = [
-            'sua parte vai ser 2000',
-            'você vai receber 2000',
-            'sua parte é 2000',
-            'você recebe 2000',
-            'sua parte vai ser 2 mil',
-            'sua parte vai ser 2000',
-            'você vai receber 2 mil',
-            'sua parte é 2 mil',
-            'você recebe 2 mil',
-            'sua parte vai ser dois mil',
-            'você vai receber dois mil',
-            'sua parte é dois mil',
-            'você recebe dois mil',
-            'vc vai receber 2000 pelo trampo',
-            'vc vai receber 2 mil pelo trampo',
-            'vc vai receber dois mil pelo trampo',
-            'sua parte vai ser 2000 pelo trampo',
-            'sua parte vai ser 2 mil pelo trampo',
-            'sua parte vai ser dois mil pelo trampo',
-            'você vai receber 2000 pelo trampo',
-            'você vai receber 2000 nesse trampo',
-            'você vai receber 2 mil pelo trampo',
-            'você vai receber 2 mil nesse trampo',
-            'você vai receber dois mil pelo trampo',
-            'você vai receber dois mil nesse trampo',
-          ];
-          const pontos4Grupo2 = [
-            'o restante manda pra minha conta logo que cair',
-            'o restante você manda pra minha conta logo que cair',
-            'o restante vc manda pra minha conta logo que cair',
-            'o restante manda pra minha conta assim que cair',
-            'o restante você manda pra minha conta assim que cair',
-            'o restante vc manda pra minha conta assim que cair',
-            'o restante manda pra minha conta quando cair',
-            'o restante você manda pra minha conta quando cair',
-            'o restante vc manda pra minha conta quando cair',
-            'o resto você manda pra minha conta logo que cair',
-            'o resto vc manda pra minha conta logo que cair',
-            'o resto você manda pra minha conta assim que cair',
-            'o resto vc manda pra minha conta assim que cair',
-            'o resto você manda pra minha conta quando cair',
-            'o resto vc manda pra minha conta quando cair',
-            'o resto manda pra minha conta logo que cair',
-            'o que sobrar você manda pra minha conta logo que cair',
-            'o que sobrar vc manda pra minha conta logo que cair',
-            'o que sobrar você manda pra minha conta assim que cair',
-            'o que sobrar vc manda pra minha conta assim que cair',
-            'o que sobrar você manda pra minha conta quando cair',
-            'o que sobrar vc manda pra minha conta quando cair',
-          ];
-          const pontos4Grupo3 = [
-            'eu vou te passar a chave pix depois',
-            'depois eu te passo a chave pix',
-            'a chave pix eu te passo depois',
-            'eu te passo a chave pix depois',
-            'depois eu passo a chave pix',
-            'a chave pix eu passo depois',
-            'depois eu te passo a chave pix',
-            'depois eu passo a chave pix',
-            'eu vou te passar a chave pix mais tarde',
-            'mais tarde eu te passo a chave pix',
-            'a chave pix eu te passo mais tarde',
-            'eu te passo a chave pix mais tarde',
-            'mais tarde eu passo a chave pix',
-            'a chave pix eu passo mais tarde',
-            'mais tarde eu te passo a chave pix',
-            'mais tarde eu passo a chave pix',
-          ];
+        const pontos4Grupo1 = [
+          'você recebe 2000', 'sua parte é 2000', 'tua parte é 2000'
+        ];
+        const pontos4Grupo2 = [
+          'o restante manda pra minha conta assim que cair',
+          'o resto você manda pra minha conta quando cair'
+        ];
+        const pontos4Grupo3 = [
+          'a chave pix eu te passo depois', 'depois eu te passo a chave pix'
+        ];
 
-          const instrMsg2 =
-            `• ${pick(pontos1Grupo1)}, ${pick(pontos1Grupo2)}, ${pick(pontos1Grupo3)}\n` +
-            `• ${pick(pontos2Grupo1)}, ${pick(pontos2Grupo2)}, ${pick(pontos2Grupo3)}\n` +
-            `• ${pick(pontos3Grupo1)}, ${pick(pontos3Grupo2)}, ${pick(pontos3Grupo3)}\n` +
-            `• ${pick(pontos4Grupo1)}, ${pick(pontos4Grupo2)}, ${pick(pontos4Grupo3)}`;
+        const instrMsg2 =
+          `• ${pick(pontos1Grupo1)}, ${pick(pontos1Grupo2)}, ${pick(pontos1Grupo3)}\n` +
+          `• ${pick(pontos2Grupo1)}, ${pick(pontos2Grupo2)}, ${pick(pontos2Grupo3)}\n` +
+          `• ${pick(pontos3Grupo1)}, ${pick(pontos3Grupo2)}, ${pick(pontos3Grupo3)}\n` +
+          `• ${pick(pontos4Grupo1)}, ${pick(pontos4Grupo2)}, ${pick(pontos4Grupo3)}`;
 
-          const msg3Grupo1 = [
-            'é tranquilinho',
-            'é tranquilo',
-            'é bem tranquilo',
-            'é muito tranquilo',
-            'é mt tranquilo',
-            'não tem segredo',
-            'nao tem segredo',
-            'é sem segredo',
-            'não tem erro',
-            'nao tem erro',
-            'é sem erro',
-            'é suave',
-            'é isso',
-            'é só isso',
-            'é só isso mesmo',
-            'é só isso aí',
-            'é só isso msm',
-            'é só isso msm',
-            'é só isso aí msm',
-          ];
-          const msg3Grupo2 = [
-            'a gente vai fazendo parte por parte pra nao ter erro blz?',
-            'a gente vai fazendo parte por parte pra não ter erro blz?',
-            'a gente vai fazendo parte por parte pra nao ter erro beleza?',
-            'a gente vai fazendo parte por parte pra não ter erro beleza?',
-            'a gente vai fazendo parte por parte pra nao ter erro, blz?',
-            'a gente vai fazendo parte por parte pra não ter erro, blz?',
-            'a gente vai fazendo parte por parte pra nao ter erro, beleza?',
-            'a gente vai fazendo parte por parte pra não ter erro, beleza?',
-            'a gente vai fazendo parte por parte pra nao ter erro, pode ser?',
-            'a gente vai fazendo parte por parte pra não ter erro, pode ser?',
-            'a gnt vai fazendo parte por parte pra nao ter erro blz?',
-            'a gnt vai fazendo parte por parte pra não ter erro blz?',
-            'a gnt vai fazendo parte por parte pra nao ter erro beleza?',
-            'a gnt vai fazendo parte por parte pra não ter erro beleza?',
-            'a gnt vai fazendo parte por parte pra nao ter erro, blz?',
-            'a gnt vai fazendo parte por parte pra não ter erro, blz?',
-            'a gnt vai fazendo parte por parte pra nao ter erro, beleza?',
-            'a gnt vai fazendo parte por parte pra não ter erro, beleza?',
-            'a gnt vai fazendo parte por parte pra nao ter erro, pode ser?',
-            'a gnt vai fazendo parte por parte pra não ter erro, pode ser?',
-            'a gente faz parte por parte pra nao ter erro blz?',
-            'a gente faz parte por parte pra não ter erro blz?',
-            'a gente faz parte por parte pra nao ter erro beleza?',
-            'a gente faz parte por parte pra não ter erro beleza?',
-            'a gente faz parte por parte pra nao ter erro, blz?',
-            'a gente faz parte por parte pra não ter erro, blz?',
-          ];
-          const instrMsg3 = `${pick(msg3Grupo1)}… ${pick(msg3Grupo2)}?`;
+        // ---------- MENSAGEM 3 ----------
+        const msg3Grupo1 = ['é tranquilo', 'é sem erro', 'é só isso msm'];
+        const msg3Grupo2 = [
+          'a gente vai fazendo parte por parte pra não ter erro, beleza',
+          'a gente faz parte por parte pra não ter erro, blz',
+          'vamos seguir parte por parte pra não ter erro, pode ser'
+        ];
+        const instrMsg3 = `${pick(msg3Grupo1)}… ${pick(msg3Grupo2)}?`;
 
-          if (!estado.instrucoesSequenciada) {
-            estado.instrucoesSequenciada = true;
-            try {
-              // Msg 1
-              if (!estado.instrMsg1Enviada) {
-                estado.instrMsg1Enviada = true;
-                await sendMessage(contato, instrMsg1);
-                estado.historico.push({ role: 'assistant', content: instrMsg1 });
-                await atualizarContato(contato, 'Sim', 'instruções', instrMsg1);
-                console.log(`[${contato}] [instruções] Msg1 enviada: ${instrMsg1}`);
-              }
-
-              // Delay antes da lista
-              if (!estado.instrMsg2Enviada) {
-                await delay(7000 + Math.floor(Math.random() * 6000));
-                estado.instrMsg2Enviada = true;
-                await sendMessage(contato, instrMsg2); // única mensagem com \n
-                estado.historico.push({ role: 'assistant', content: instrMsg2 });
-                await atualizarContato(contato, 'Sim', 'instruções', instrMsg2);
-                console.log(`[${contato}] [instruções] Msg2 enviada (bullets em uma mensagem)`);
-              }
-
-              // Delay antes da confirmação
-              if (!estado.instrMsg3Enviada) {
-                await delay(7000 + Math.floor(Math.random() * 6000));
-                estado.instrMsg3Enviada = true;
-                await sendMessage(contato, instrMsg3);
-                estado.historico.push({ role: 'assistant', content: instrMsg3 });
-                await atualizarContato(contato, 'Sim', 'instruções', instrMsg3);
-                console.log(`[${contato}] [instruções] Msg3 enviada: ${instrMsg3}`);
-              }
-
-              estado.instrucoesConcluida = true;
-              estado.instrucoesEnviadas = true;
-              estado.aguardandoAceiteInstrucoes = true;
-            } catch (e) {
-              console.error(`[${contato}] Erro na sequência de instruções: ${e.message}`);
-            } finally {
-              estado.instrucoesSequenciada = false;
+        if (!estado.instrucoesSequenciada) {
+          estado.instrucoesSequenciada = true;
+          try {
+            if (!estado.instrMsg1Enviada) {
+              estado.instrMsg1Enviada = true;
+              await sendMessage(contato, instrMsg1);
+              estado.historico.push({ role: 'assistant', content: instrMsg1 });
+              await atualizarContato(contato, 'Sim', 'instruções', instrMsg1);
+              console.log(`[${contato}] [instruções] Msg1 enviada: ${instrMsg1}`);
             }
+
+            if (!estado.instrMsg2Enviada) {
+              await delay(7000 + Math.floor(Math.random() * 6000));
+              estado.instrMsg2Enviada = true;
+              await sendMessage(contato, instrMsg2); // 🔥 agora vai em UMA mensagem
+              estado.historico.push({ role: 'assistant', content: instrMsg2 });
+              await atualizarContato(contato, 'Sim', 'instruções', instrMsg2);
+              console.log(`[${contato}] [instruções] Msg2 enviada (bullets em uma mensagem)`);
+            }
+
+            if (!estado.instrMsg3Enviada) {
+              await delay(7000 + Math.floor(Math.random() * 6000));
+              estado.instrMsg3Enviada = true;
+              await sendMessage(contato, instrMsg3);
+              estado.historico.push({ role: 'assistant', content: instrMsg3 });
+              await atualizarContato(contato, 'Sim', 'instruções', instrMsg3);
+              console.log(`[${contato}] [instruções] Msg3 enviada: ${instrMsg3}`);
+            }
+
+            estado.instrucoesConcluida = true;
+            estado.instrucoesEnviadas = true;
+            estado.aguardandoAceiteInstrucoes = true;
+          } catch (e) {
+            console.error(`[${contato}] Erro na sequência de instruções: ${e.message}`);
+          } finally {
+            estado.instrucoesSequenciada = false;
           }
-
-          return;
-        }
-
-        // 2) Pós-instruções: aguarda resposta e classifica
-        if (mensagensPacote.length > 0) {
-          const contexto = mensagensPacote.map(m => m.texto).join("\n");
-          const cls = String(await gerarResposta(
-            [{ role: "system", content: promptClassificaAceite(contexto) }],
-            ["ACEITE", "RECUSA", "DUVIDA"]
-          )).toUpperCase();
-
-          console.log(`[${contato}] Classificação pós-instruções: ${cls}`);
-
-          if (cls.includes("ACEITE")) {
-            // Avança sem enviar dados sensíveis aqui (simulação/treinamento)
-            estado.etapa = 'acesso';
-            estado.tentativasAcesso = 0;
-            estado.mensagensDesdeSolicitacao = [];
-            await atualizarContato(contato, 'Sim', 'acesso', '[ACEITE após instruções]');
-            return;
-          }
-
-          // Diferente de ACEITE → standby silencioso
-          console.log(`[${contato}] Stand-by em 'instruções' (aguardando ACEITE para prosseguir).`);
-          return;
         }
 
         return;
       }
+
+      // Pós-instruções: aguarda resposta e classifica
+      if (mensagensPacote.length > 0) {
+        const contexto = mensagensPacote.map(m => m.texto).join("\n");
+        const cls = String(await gerarResposta(
+          [{ role: "system", content: promptClassificaAceite(contexto) }],
+          ["ACEITE", "RECUSA", "DUVIDA"]
+        )).toUpperCase();
+
+        console.log(`[${contato}] Classificação pós-instruções: ${cls}`);
+
+        if (cls.includes("ACEITE")) {
+          // ✅ Avança para ACESSO (sem enviar credenciais aqui)
+          estado.etapa = 'acesso';
+          estado.tentativasAcesso = 0;
+          estado.mensagensDesdeSolicitacao = [];
+          await atualizarContato(contato, 'Sim', 'acesso', '[ACEITE após instruções]');
+          return;
+        }
+
+        console.log(`[${contato}] Stand-by em 'instruções' (aguardando ACEITE).`);
+        return;
+      }
+
+      return;
     }
 
     if (estado.etapa === 'acesso') {
