@@ -6,7 +6,7 @@ const twilio = require('twilio'); // npm i twilio
 const qs = require('qs');
 
 const { pool } = require('./db.js');
-const { delay, sendMessage } = require('./bot.js');
+const { delay, sendMessage, retomarEnvio } = require('./bot.js');
 const { getBotSettings, updateBotSettings, getContatoByPhone } = require('./db.js');
 
 const LANDING_URL = 'https://grupo-whatsapp-trampos-lara-2025.onrender.com';
@@ -638,7 +638,6 @@ function setupRoutes(
               [contato]
             );
 
-            // se está bloqueado permanentemente, ignora para sempre (inclusive "BORA")
             if (flags?.[0]?.permanently_blocked || (flags?.[0]?.opt_out_count || 0) >= MAX_OPTOUTS) {
               return res.sendStatus(200); // silêncio definitivo
             }
@@ -646,7 +645,9 @@ function setupRoutes(
               if (REOPTIN_RX.test(texto)) {
                 const { allowed } = await clearOptOutIfAllowed(pool, contato);
                 if (!allowed) return res.sendStatus(200); // já excedeu o limite → silêncio
-                console.log(`[${contato}] Re-opt-in por "BORA" (abaixo do limite)`);
+                console.log(`[${contato}] Re-opt-in por "BORA" — retomando sequência se houver.`);
+                await retomarEnvio(contato);
+                return res.sendStatus(200);
               } else {
                 await sendMessage(contato, 'vc tinha parado as msgs. se quiser retomar, manda "BORA".');
                 return res.sendStatus(200);
@@ -1119,6 +1120,9 @@ function setupRoutes(
     if (isDNC && isReopt) {
       const { allowed } = await clearOptOutIfAllowed(pool, phone);
       if (!allowed) return res.json({ ok: true, ignored: 'limit_exceeded' });
+      console.log(`[${phone}] Re-opt-in ManyChat — retomando sequência se houver.`);
+      await retomarEnvio(phone);
+      return res.json({ ok: true, resumed: true });
     }
 
     // 7B) Detectar OPT-OUT no ManyChat e registrar contagem

@@ -36,6 +36,8 @@ async function setDoNotContact(contato, value = true) {
 }
 
 async function finalizeOptOut(contato, reasonText = '') {
+  let permanently = false;
+
   try {
     const { rows } = await pool.query(
       'SELECT opt_out_count, permanently_blocked FROM contatos WHERE id = $1 LIMIT 1',
@@ -47,7 +49,7 @@ async function finalizeOptOut(contato, reasonText = '') {
     }
 
     const next = (rows?.[0]?.opt_out_count || 0) + 1;
-    const permanently = next >= MAX_OPTOUTS;
+    permanently = next >= MAX_OPTOUTS;
 
     await pool.query(`
       UPDATE contatos
@@ -60,6 +62,7 @@ async function finalizeOptOut(contato, reasonText = '') {
     `, [contato, String(reasonText || '').slice(0, 200), next, permanently]);
 
     if (!permanently) {
+      // confirmação do opt-out (1º/2º) com bypass + delay humano
       await delay(rand(10000, 15000));
       await sendMessage(contato, OPTOUT_MSGS[next] || OPTOUT_MSGS[2], { bypassBlock: true });
     }
@@ -67,19 +70,29 @@ async function finalizeOptOut(contato, reasonText = '') {
     console.error(`[${contato}] Falha ao registrar opt-out: ${e.message}`);
   }
 
-  // encerra fluxos em memória
+  // encerra/pausa fluxos em memória
   const st = estadoContatos[contato];
   if (st?._timer2Abertura) clearTimeout(st._timer2Abertura);
   if (st?.merrecaTimeout) clearTimeout(st.merrecaTimeout);
   if (st?.posMerrecaTimeout) clearTimeout(st.posMerrecaTimeout);
+
   if (st) {
-    st.etapa = 'encerrado';
-    st.cancelarEnvio = true;
+    st.cancelarEnvio = true;      // interrompe envio atual
     st.enviandoMensagens = false;
     st.mensagensPendentes = [];
+
+    if (permanently) {
+      st.etapa = 'encerrado';     // silêncio definitivo
+      delete st.seqLines;
+      delete st.seqIdx;
+      st.paused = false;
+    } else {
+      // 1º/2º opt-out → apenas pausar; mantém seqLines/seqIdx p/ retomar
+      st.paused = true;
+    }
   }
 
-  console.log(`[${contato}] Opt-out concluído (contabilizado).`);
+  console.log(`[${contato}] Opt-out concluído (${permanently ? 'permanente' : 'temporário'}).`);
 }
 
 // Opt-out global: regex primeiro (hard stop), depois LLM com rótulos estritos.
@@ -117,6 +130,34 @@ async function checarOptOutGlobal(contato, mensagensTexto) {
     // Em caso de erro no LLM, NÃO bloqueie o usuário por engano
     return false;
   }
+}
+
+async function retomarEnvio(contato) {
+  const st = estadoContatos[contato];
+  if (!st || !Array.isArray(st.seqLines)) {
+    console.log(`[${contato}] Nada para retomar (sem seqLines).`);
+    return false;
+  }
+  const startIdx = st.seqIdx || 0;
+  const remaining = st.seqLines.slice(startIdx).join('\n');
+  if (!remaining.trim()) {
+    delete st.seqLines;
+    delete st.seqIdx;
+    st.paused = false;
+    console.log(`[${contato}] Nada para retomar (sequência já concluída).`);
+    return false;
+  }
+
+  // pequeno atraso humano antes de continuar
+  await delay(10000 + Math.floor(Math.random() * 5000));
+
+  // limpar flags de pausa/cancelamento e continuar a partir da próxima linha
+  st.cancelarEnvio = false;
+  st.paused = false;
+
+  // reutiliza o mesmo mecanismo, passando apenas as linhas restantes
+  await enviarLinhaPorLinha(contato, remaining);
+  return true;
 }
 
 // --- helpers --- //
@@ -199,7 +240,7 @@ async function enviarLinhaPorLinha(to, texto) {
     return;
   }
 
-  // Bloqueio por DNC / limite / bloqueio permanente
+  // Bloqueio por DNC / limite / bloqueio permanente (antes de começar)
   try {
     const { rows } = await pool.query(
       'SELECT do_not_contact, opt_out_count, permanently_blocked FROM contatos WHERE id = $1 LIMIT 1',
@@ -219,8 +260,7 @@ async function enviarLinhaPorLinha(to, texto) {
     }
   } catch (e) {
     console.error(`[${to}] Falha ao checar flags de contato: ${e.message}`);
-    // Em caso de falha no DB, melhor não enviar nada
-    return;
+    return; // falha segura
   }
 
   // Selo de identidade (apenas na 1ª resposta da abertura)
@@ -231,7 +271,6 @@ async function enviarLinhaPorLinha(to, texto) {
       const enabled = settings?.identity_enabled !== false;
       let label = (settings?.identity_label || '').trim();
 
-      // fallback discreto se label estiver vazio mas há contatos de suporte configurados
       if (!label) {
         const pieces = [];
         if (settings?.support_email) pieces.push(settings.support_email);
@@ -271,20 +310,31 @@ async function enviarLinhaPorLinha(to, texto) {
     console.error('[OptOutHint] Falha ao anexar sufixo:', e.message);
   }
 
-  // Envio linha a linha com pacing
+  // Envio linha a linha com memória de progresso (seqLines/seqIdx)
   estado.enviandoMensagens = true;
   console.log(`[${to}] Iniciando envio de mensagem: "${texto}"`);
 
   await delay(10000); // pacing inicial
 
   const linhas = texto.split('\n').filter(line => line.trim() !== '');
-  for (const linha of linhas) {
+
+  // snapshot da sequência no estado (só recria se o conteúdo mudou)
+  if (!Array.isArray(estado.seqLines) || estado.seqLines.join('\n') !== linhas.join('\n')) {
+    estado.seqLines = linhas.slice();
+    estado.seqIdx = 0; // começa do início desta sequência
+  }
+
+  for (let i = estado.seqIdx || 0; i < estado.seqLines.length; i++) {
+    const linha = estado.seqLines[i];
     try {
-      if (estado.cancelarEnvio) {
-        console.log(`[${to}] Loop interrompido: cancelarEnvio=true.`);
+      // 🛑 checkpoints de cancelamento/pausa
+      if (estado.cancelarEnvio || estado.paused) {
+        console.log(`[${to}] Loop interrompido: cancelarEnvio/paused=true.`);
         estado.enviandoMensagens = false;
-        break;
+        return; // mantém seqIdx para retomar
       }
+
+      // 🛑 rechecar bloqueio entre linhas (DNC/limite)
       try {
         const { rows } = await pool.query(
           'SELECT do_not_contact, opt_out_count, permanently_blocked FROM contatos WHERE id = $1 LIMIT 1',
@@ -295,15 +345,17 @@ async function enviarLinhaPorLinha(to, texto) {
         if (f.permanently_blocked || (f.opt_out_count || 0) >= MAX_OPTOUTS || f.do_not_contact) {
           console.log(`[${to}] Loop interrompido: bloqueado entre linhas (DNC/limite).`);
           estado.enviandoMensagens = false;
-          break;
+          return;
         }
       } catch (e) {
         console.error(`[${to}] Falha ao checar bloqueio entre linhas: ${e.message}`);
         estado.enviandoMensagens = false;
-        break;
+        return;
       }
+
       await delay(Math.max(500, linha.length * 30));
       await sendMessage(to, linha);
+      estado.seqIdx = i + 1; // avançou uma linha
       await delay(7000 + Math.floor(Math.random() * 1000));
     } catch (error) {
       console.error(`[${to}] Erro ao enviar linha "${linha}": ${error.message}`);
@@ -311,7 +363,12 @@ async function enviarLinhaPorLinha(to, texto) {
       return;
     }
   }
+
+  // sequência concluída — limpar snapshot
   estado.enviandoMensagens = false;
+  delete estado.seqLines;
+  delete estado.seqIdx;
+  estado.paused = false;
 }
 
 async function sendManychatBatch(phone, textOrLines) {
@@ -1536,4 +1593,4 @@ ${posChecklist}
   return textoFinal;
 }
 
-module.exports = { delay, gerarResposta, quebradizarTexto, enviarLinhaPorLinha, inicializarEstado, criarUsuarioDjango, processarMensagensPendentes, sendMessage, gerarSenhaAleatoria, gerarBlocoInstrucoes };
+module.exports = { delay, gerarResposta, quebradizarTexto, enviarLinhaPorLinha, inicializarEstado, criarUsuarioDjango, processarMensagensPendentes, sendMessage, gerarSenhaAleatoria, gerarBlocoInstrucoes, retomarEnvio };
