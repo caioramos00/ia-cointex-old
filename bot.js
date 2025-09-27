@@ -30,6 +30,7 @@ async function setDoNotContact(contato, value = true) {
   try {
     await pool.query('UPDATE contatos SET do_not_contact = $2 WHERE id = $1', [contato, !!value]);
     console.log(`[${contato}] do_not_contact atualizado para ${!!value}`);
+    if (!value) cancelarConfirmacaoOptOut(contato);
   } catch (e) {
     console.error(`[${contato}] Falha ao setar do_not_contact: ${e.message}`);
   }
@@ -43,10 +44,7 @@ async function finalizeOptOut(contato, reasonText = '') {
       'SELECT opt_out_count, permanently_blocked FROM contatos WHERE id = $1 LIMIT 1',
       [contato]
     );
-    if (rows?.[0]?.permanently_blocked || (rows?.[0]?.opt_out_count || 0) >= MAX_OPTOUTS) {
-      // já estava no silêncio definitivo
-      return;
-    }
+    if (rows?.[0]?.permanently_blocked || (rows?.[0]?.opt_out_count || 0) >= MAX_OPTOUTS) return;
 
     const next = (rows?.[0]?.opt_out_count || 0) + 1;
     permanently = next >= MAX_OPTOUTS;
@@ -61,68 +59,91 @@ async function finalizeOptOut(contato, reasonText = '') {
        WHERE id = $1
     `, [contato, String(reasonText || '').slice(0, 200), next, permanently]);
 
+    const st = estadoContatos[contato] || {};
+    if (st?._timer2Abertura) clearTimeout(st._timer2Abertura);
+    if (st?.merrecaTimeout) clearTimeout(st.merrecaTimeout);
+    if (st?.posMerrecaTimeout) clearTimeout(st.posMerrecaTimeout);
+
+    if (estadoContatos[contato]) {
+      estadoContatos[contato].cancelarEnvio = true;
+      estadoContatos[contato].enviandoMensagens = false;
+      estadoContatos[contato].mensagensPendentes = [];
+      if (permanently) {
+        estadoContatos[contato].etapa = 'encerrado';
+        delete estadoContatos[contato].seqLines;
+        delete estadoContatos[contato].seqIdx;
+        estadoContatos[contato].paused = false;
+      } else {
+        estadoContatos[contato].paused = true;
+      }
+    }
+
     if (!permanently) {
-      // confirmação do opt-out (1º/2º) com bypass + delay humano
-      await delay(rand(10000, 15000));
-      await sendMessage(contato, OPTOUT_MSGS[next] || OPTOUT_MSGS[2], { bypassBlock: true });
+      // agenda confirmação CANCELÁVEL
+      cancelarConfirmacaoOptOut(contato);
+      const delayMs = rand(10000, 15000);
+      const timer = setTimeout(async () => {
+        try {
+          const { rows: r } = await pool.query(
+            'SELECT do_not_contact, permanently_blocked FROM contatos WHERE id = $1 LIMIT 1',
+            [contato]
+          );
+          if (!r?.[0]?.do_not_contact || r?.[0]?.permanently_blocked) return;
+          await sendMessage(contato, OPTOUT_MSGS[next] || OPTOUT_MSGS[2], { bypassBlock: true });
+        } finally {
+          const st2 = estadoContatos[contato];
+          if (st2) st2._optoutTimer = null;
+        }
+      }, delayMs);
+      if (estadoContatos[contato]) estadoContatos[contato]._optoutTimer = timer;
     }
   } catch (e) {
     console.error(`[${contato}] Falha ao registrar opt-out: ${e.message}`);
   }
 
-  // encerra/pausa fluxos em memória
-  const st = estadoContatos[contato];
-  if (st?._timer2Abertura) clearTimeout(st._timer2Abertura);
-  if (st?.merrecaTimeout) clearTimeout(st.merrecaTimeout);
-  if (st?.posMerrecaTimeout) clearTimeout(st.posMerrecaTimeout);
-
-  if (st) {
-    st.cancelarEnvio = true;      // interrompe envio atual
-    st.enviandoMensagens = false;
-    st.mensagensPendentes = [];
-
-    if (permanently) {
-      st.etapa = 'encerrado';     // silêncio definitivo
-      delete st.seqLines;
-      delete st.seqIdx;
-      st.paused = false;
-    } else {
-      // 1º/2º opt-out → apenas pausar; mantém seqLines/seqIdx p/ retomar
-      st.paused = true;
-    }
-  }
-
   console.log(`[${contato}] Opt-out concluído (${permanently ? 'permanente' : 'temporário'}).`);
 }
 
-// Opt-out global: regex primeiro (hard stop), depois LLM com rótulos estritos.
-async function checarOptOutGlobal(contato, mensagensTexto) {
+async function checarOptOutGlobal(contato, mensagens) {
   try {
-    const texto = String(mensagensTexto || "").trim();
+    const arr = Array.isArray(mensagens) ? mensagens : [String(mensagens || '')];
 
-    // 1) Regra exata via regex (prioridade máxima)
-    if (OPTOUT_RX.test(texto)) {
-      await finalizeOptOut(contato, texto);
-      console.log(`[${contato}] Opt-out detectado via REGEX.`);
-      return true;
+    for (const txt of arr) {
+      const texto = String(txt || '').trim();
+      // 1) regex rápido
+      if (OPTOUT_RX.test(texto)) {
+        await finalizeOptOut(contato, texto);
+        console.log(`[${contato}] Opt-out detectado via REGEX em: "${texto}"`);
+        return true;
+      }
+      // 2) IA (se qualquer UMA for OPTOUT, para tudo)
+      const out = await gerarResposta(
+        [{ role: 'system', content: promptClassificaOptOut(texto) }],
+        ['OPTOUT', 'CONTINUAR']
+      );
+      if (String(out || '').trim().toUpperCase() === 'OPTOUT') {
+        await finalizeOptOut(contato, texto);
+        console.log(`[${contato}] Opt-out detectado via LLM em: "${texto}"`);
+        return true;
+      }
     }
 
-    // 2) Decisor unificado (usa seus prompts de opt-out e re-opt-in)
-    const label = await decidirOptLabel(texto);
-    if (label === 'OPTOUT') {
-      await finalizeOptOut(contato, texto);
-      console.log(`[${contato}] Opt-out detectado via IA.`);
-      return true;
-    }
-
-    console.log(`[${contato}] Sem opt-out (label=${label || "vazio"}).`);
+    console.log(`[${contato}] Sem opt-out nas mensagens analisadas.`);
     return false;
   } catch (err) {
     console.error(`[${contato}] Erro em checarOptOutGlobal:`, err?.message || err);
-    return false; // seguro
+    return false;
   }
 }
 
+function cancelarConfirmacaoOptOut(contato) {
+  const st = estadoContatos[contato];
+  if (st && st._optoutTimer) {
+    clearTimeout(st._optoutTimer);
+    st._optoutTimer = null;
+    console.log(`[${contato}] Confirmação de opt-out pendente CANCELADA.`);
+  }
+}
 
 async function retomarEnvio(contato) {
   const st = estadoContatos[contato];
@@ -220,36 +241,42 @@ Retorne estritamente JSON, exatamente neste formato:
 async function decidirOptLabel(texto) {
   const raw = String(texto || '').trim();
 
-  // Hard-stop mais abrangente (não mexe no seu prompt original; só cobre variações comuns)
-  const HARD_STOP = /(stop|unsubscribe|remover|remova|remove meu número|remova meu numero|excluir|exclui(r)?|apaga(r)?|cancelar|cancela|cancelamento|para(?!\w)|parem|pare|nao quero|não quero|nao vou querer(?: mais)?|não vou querer(?: mais)?|acho que (?:nao|não) vou querer(?: mais)?|nao vou fazer|não vou fazer|nao me chama(?:r)?|não me chama(?:r)?|nao me chame|não me chame)/i;
+  // Hard-stops mínimos (não removem nada do seu prompt; só reforçam sinais óbvios)
+  const HARD_STOP = /\b(
+  stop | unsubscribe | remover | remova | remove | excluir | exclui(r) ?| cancelar | cancela | cancelamento |
+    para(?!\w) | parem | pare | nao quero | não quero | não me chame | nao me chame |
+      remove meu número | remova meu numero |
+        golpe | golpista | crime | criminoso | denunciar | denúncia |
+        policia | polícia | federal | civil
+  ) \b / ix;
   if (HARD_STOP.test(raw)) return 'OPTOUT';
 
-  // Frases batidas de re-opt-in (normalizado)
+  // Fast-path de retomada para frases batidas (não substitui a IA; só agiliza)
   const norm = raw.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
   const RE_PHRASES = [
-    'mudei de ideia', 'quero fazer', 'quero sim',
+    'mudei de ideia', 'quero fazer', 'quero sim', 'vou querer sim',
     'pode continuar', 'pode seguir', 'pode mandar', 'pode prosseguir', 'pode enviar',
-    'vamos', 'vamo', 'bora', 'to dentro', 'tô dentro', 'topo', 'fechou', 'segue o baile'
+    'vamos', 'vamo', 'bora', 'to dentro', 'tô dentro', 'topo', 'fechou', 'fechado', 'partiu', 'segue'
   ];
   if (RE_PHRASES.some(p => norm.includes(p))) return 'REOPTIN';
 
-  // 1) seu prompt DE OPT-OUT (mantendo TODAS as palavras que você colocou)
+  // 1) seu prompt de OPT-OUT (com todas as palavras que você exigiu)
   try {
     const r1 = await gerarResposta(
       [{ role: 'system', content: promptClassificaOptOut(raw) }],
       ['OPTOUT', 'CONTINUAR']
     );
     if (String(r1 || '').trim().toUpperCase() === 'OPTOUT') return 'OPTOUT';
-  } catch {}
+  } catch { }
 
-  // 2) se não for opt-out → seu prompt DE RE-OPT-IN
+  // 2) não sendo opt-out → seu prompt de RE-OPT-IN
   try {
     const r2 = await gerarResposta(
       [{ role: 'system', content: promptClassificaReoptin(raw) }],
       ['REOPTIN', 'CONTINUAR']
     );
     if (String(r2 || '').trim().toUpperCase() === 'REOPTIN') return 'REOPTIN';
-  } catch {}
+  } catch { }
 
   // 3) default
   return 'CONTINUAR';
@@ -630,27 +657,23 @@ async function processarMensagensPendentes(contato) {
     // Usa o decisor único (se for rodar bem rápido, ótimo; se der erro, cai em CONTINUAR)
     const decision = await decidirOptLabel(mensagensTexto);
 
-    // Se está em DNC, só nos interessa saber se é REOPTIN
     if (dnc) {
-      if (decision === 'REOPTIN') {
+      // avalia cada mensagem
+      const labels = await Promise.all(
+        mensagensPacote.map(m => decidirOptLabel(m.texto || ''))
+      );
+      if (labels.some(l => l === 'REOPTIN')) {
         await setDoNotContact(contato, false);
-
-        // se você já implementou retomarEnvio, chama; senão, mantém seu comportamento atual de “aguardar mais uma”
+        cancelarConfirmacaoOptOut(contato);
         if (typeof retomarEnvio === 'function') {
           await delay(10000 + Math.floor(Math.random() * 5000));
           await retomarEnvio(contato);
-          return;
-        } else {
-          estado.reativadoAgora = true;
-          estado.aguardandoConfirmacaoPosReativacao = true;
-          console.log(`[${contato}] Reativado (classificador). Aguardando próxima mensagem para prosseguir.`);
-          return;
         }
-      } else {
-        console.log(`[${contato}] Ignorando processamento (do_not_contact=true).`);
-        estado.mensagensPendentes = [];
         return;
       }
+      console.log(`[${contato}] Ignorando processamento (do_not_contact=true).`);
+      estado.mensagensPendentes = [];
+      return;
     }
 
     const agora = Date.now();
@@ -664,7 +687,7 @@ async function processarMensagensPendentes(contato) {
       return;
     }
 
-    if (await checarOptOutGlobal(contato, mensagensTexto)) {
+    if (await checarOptOutGlobal(contato, mensagensPacote.map(m => m.texto))) {
       await atualizarContato(contato, 'Sim', 'encerrado', '[OPTOUT]');
       return;
     }
@@ -1605,4 +1628,4 @@ ${posChecklist}
   return textoFinal;
 }
 
-module.exports = { delay, gerarResposta, quebradizarTexto, enviarLinhaPorLinha, inicializarEstado, criarUsuarioDjango, processarMensagensPendentes, sendMessage, gerarSenhaAleatoria, gerarBlocoInstrucoes, retomarEnvio, decidirOptLabel };
+module.exports = { delay, gerarResposta, quebradizarTexto, enviarLinhaPorLinha, inicializarEstado, criarUsuarioDjango, processarMensagensPendentes, sendMessage, gerarSenhaAleatoria, gerarBlocoInstrucoes, retomarEnvio, decidirOptLabel, cancelarConfirmacaoOptOut };
