@@ -151,6 +151,7 @@ async function retomarEnvio(contato) {
     console.log(`[${contato}] Nada para retomar (sem seqLines).`);
     return false;
   }
+
   const startIdx = st.seqIdx || 0;
   const remaining = st.seqLines.slice(startIdx).join('\n');
   if (!remaining.trim()) {
@@ -161,10 +162,40 @@ async function retomarEnvio(contato) {
     return false;
   }
 
-  // pequeno atraso humano antes de continuar
-  await delay(10000 + Math.floor(Math.random() * 5000));
+  // mesmo delay das mensagens de opt-out (10–15s)
+  await delay(rand(10000, 15000));
 
-  // limpar flags de pausa/cancelamento e continuar a partir da próxima linha
+  // 1ª retomada => msg curta; 2ª retomada => aviso "última chance"
+  // usa opt_out_count do DB para decidir
+  try {
+    const { rows } = await pool.query(
+      'SELECT opt_out_count FROM contatos WHERE id = $1 LIMIT 1',
+      [contato]
+    );
+    const count = rows?.[0]?.opt_out_count || 0;
+
+    let retomadaMsg = null;
+    if (count === 1) {
+      retomadaMsg = 'certo, vamos continuar então';
+    } else if (count >= 2) {
+      retomadaMsg = 'última chance, se não for fazer já me avisa pq não posso ficar perdendo tempo não, vou tentar continuar de novo aqui, vamos lá';
+    }
+
+    if (retomadaMsg) {
+      await sendMessage(contato, retomadaMsg);
+      try {
+        // registra no histórico com a etapa atual (ou "retomada" se não houver)
+        await atualizarContato(contato, 'Sim', st.etapa || 'retomada', retomadaMsg);
+        st.historico?.push?.({ role: 'assistant', content: retomadaMsg });
+      } catch (e) {
+        console.error(`[${contato}] Falha ao logar mensagem de retomada: ${e.message}`);
+      }
+    }
+  } catch (e) {
+    console.error(`[${contato}] Falha ao buscar opt_out_count para retomada: ${e.message}`);
+  }
+
+  // limpar flags e continuar a partir da próxima linha
   st.cancelarEnvio = false;
   st.paused = false;
 
