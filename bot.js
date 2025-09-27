@@ -1688,26 +1688,83 @@ async function processarMensagensPendentes(contato) {
       const cred = estado.credenciais;
       if (!cred || !cred.username || !cred.password || !cred.link) {
         console.log(`[${contato}] Sem credenciais válidas após tentativa; standby em 'acesso'.`);
-        // não dispara as mensagens — aguarda próxima iteração quando as credenciais existirem
         return;
       }
 
-      const email = cred.username;   // o backend retorna 'username' (é um e-mail)
+      const email = cred.username;
       const senha = cred.password;
       const link = cred.link;
 
       // 1) Montagem dos blocos (TUDO AQUI dentro)
       const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
 
-      const bloco1A = ['Credenciais de treinamento', 'Acesso de laboratório', 'Dados de acesso de teste'];
-      const bloco2A = ['use apenas neste ambiente controlado', 'válido somente para este exercício', 'somente para fins de treinamento'];
-      const bloco3A = ['Usuário', 'E-mail de login', 'Login'];
+      const bloco1A = [
+        'vou mandar o e-mail e a senha da conta',
+        'vou mandar o email e a senha da conta',
+        'te mandar o e-mail e a senha da conta',
+        'te mandar o email e a senha da conta',
+        'esse é o e-mail e a senha da conta',
+        'esse é o email e a senha da conta',
+        'e-mail e a senha da conta',
+        'email e a senha da conta',
+        'e-mail e a senha da conta',
+        'email e a senha da conta',
+        'e-mail e a senha da conta',
+        'email e a senha da conta',
+      ];
+      const bloco2A = [
+        'só copia e cola pra não errar',
+        'só copia e cola pra não colocar errado',
+        'copia e cola pra não errar',
+        'copia e cola pra não colocar errado',
+        'só copia aqui e cola lá pra não errar',
+        'só copia aqui e cola lá pra não colocar errado',
+        'copia aqui e cola lá pra não errar',
+        'copia aqui e cola lá pra não colocar errado',
+      ];
+      const bloco3A = [
+        'E-mail',
+        'Email',
+      ];
 
-      const bloco1C = ['Link do ambiente', 'Endereço de login', 'URL do laboratório'];
-      const bloco2C = ['faça o login e avise com', 'assim que entrar, responda com', 'entrou? responda com'];
-      const bloco3C = ['CONFIRMADO', 'CONFIRMADO', 'CONFIRMADO'];
+      const bloco1C = [
+        'entra nesse link',
+        'entra por esse link',
+        'esse é o link',
+        'o link é esse',
+        'o link é esse aqui',
+        'segue o link',
+        'entra no link',
+        'clica no link',
+        'aperta no link'
+      ];
+      const bloco2C = [
+        'entra na conta mas nao mexe em nada ainda',
+        'entra na conta mas nao clica em nada ainda',
+        'entra na conta mas nao aperta em nada ainda',
+        'entra aí na conta mas nao mexe em nada ainda',
+        'entra aí na conta mas nao clica em nada ainda',
+        'entra aí na conta mas nao aperta em nada ainda',
+        'entra aí mas nao mexe em nada ainda',
+        'entra aí mas nao clica em nada ainda',
+        'entra aí mas nao aperta em nada ainda',
+        'entra aí na conta mas não muda nada ainda'
+      ];
+      const bloco3C = [
+        'assim que conseguir acessar me manda um "ENTREI"',
+        'assim que acessar me manda um "ENTREI"',
+        'assim que conseguir acessar a conta me manda um "ENTREI"',
+        'assim que acessar a conta me manda um "ENTREI"',
+        'assim que entrar na conta me manda um "ENTREI"',
+        'assim que logar na conta me manda um "ENTREI"',
+        'assim q conseguir acessar me manda um "ENTREI"',
+        'assim q acessar me manda um "ENTREI"',
+        'assim q conseguir acessar a conta me manda um "ENTREI"',
+        'assim q acessar a conta me manda um "ENTREI"',
+        'assim q entrar na conta me manda um "ENTREI"',
+        'assim q logar na conta me manda um "ENTREI"',
+      ];
 
-      // 2) Três mensagens no formato exato (com quebras de linha)
       const msg1 =
         `${pick(bloco1A)}, ${pick(bloco2A)}:
 
