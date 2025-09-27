@@ -70,98 +70,105 @@ async function finalizeOptOut(contato, reasonText = '') {
   console.log(`[${contato}] Opt-out concluído (contabilizado).`);
 }
 
+// Opt-out global: regex primeiro (hard stop), depois LLM com rótulos estritos.
 async function checarOptOutGlobal(contato, mensagensTexto) {
-  if (OPTOUT_RX.test(mensagensTexto)) {
-    await finalizeOptOut(contato, mensagensTexto);
-    console.log(`[${contato}] Opt-out detectado via regex.`);
-    return true;
+  try {
+    const texto = String(mensagensTexto || "").trim();
+
+    // 1) Regra exata via regex (prioridade máxima)
+    if (OPTOUT_RX.test(texto)) {
+      await finalizeOptOut(contato, texto);
+      console.log(`[${contato}] Opt-out detectado via REGEX.`);
+      return true;
+    }
+
+    // 2) Classificador via LLM (retorna "OPTOUT" ou "CONTINUAR")
+    const out = await gerarResposta(
+      [{ role: "system", content: promptClassificaOptOut(texto) }],
+      ["OPTOUT", "CONTINUAR"]  // <-- rótulos válidos (NÃO passe número)
+    );
+
+    const label = String(out || "").trim().toUpperCase();
+
+    if (label === "OPTOUT") {
+      await finalizeOptOut(contato, texto);
+      console.log(`[${contato}] Opt-out detectado via LLM (${label}).`);
+      return true;
+    }
+
+    // default seguro
+    console.log(`[${contato}] Sem opt-out (label=${label || "vazio"}).`);
+    return false;
+
+  } catch (err) {
+    console.error(`[${contato}] Erro em checarOptOutGlobal:`, err?.message || err);
+    // Em caso de erro no LLM, NÃO bloqueie o usuário por engano
+    return false;
   }
-  const out = await gerarResposta(
-    [{ role: 'system', content: promptClassificaOptOut(mensagensTexto) }], 6
-  );
-  if ((out || '').trim().toUpperCase().includes('OPTOUT')) {
-    await finalizeOptOut(contato);            // <-- idem
-    console.log(`[${contato}] Opt-out detectado via LLM.`);
-    return true;
-  }
-  return false;
 }
 
 // --- helpers --- //
-function toUpperSafe(x) {
-  return String(x || "").trim().toUpperCase();
-}
+function toUpperSafe(x) { return String(x || "").trim().toUpperCase(); }
 
-// Normaliza allowedLabels pra SEMPRE ser array de strings em UPPERCASE
 function normalizeAllowedLabels(allowedLabels) {
-  if (Array.isArray(allowedLabels)) return allowedLabels.map(toUpperSafe);
-  if (typeof allowedLabels === "string") {
-    // aceita "OPTOUT|CONTINUAR" ou "OPTOUT,CONTINUAR"
-    return allowedLabels.split(/[|,]/).map(toUpperSafe).filter(Boolean);
-  }
-  return []; // evita includes em tipos errados
+  if (Array.isArray(allowedLabels)) return allowedLabels.map(toUpperSafe).filter(Boolean);
+  if (typeof allowedLabels === "string") return allowedLabels.split(/[|,]/).map(toUpperSafe).filter(Boolean);
+  return [];
 }
 
-function pickValidLabel(raw, allowed) {
-  if (!raw || !allowed.length) return null;
-  const txt = toUpperSafe(raw.split(/\s+/)[0]); // pega 1ª palavra
-  return allowed.includes(txt) ? txt : null;
+function pickValidLabel(text, allowed) {
+  if (!allowed.length) return null;
+  const first = String(text || "").trim().split(/\s+/)[0];
+  const u = toUpperSafe(first);
+  return allowed.includes(u) ? u : null;
 }
 
 function extractJsonLabel(outputText, allowed) {
   try {
     const obj = JSON.parse(outputText || "{}");
     return pickValidLabel(obj.label, allowed);
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 // --- principal --- //
-async function gerarResposta(messages, allowedLabels = ["OPTOUT", "CONTINUAR"]) {
-  const allow = normalizeAllowedLabels(allowedLabels);
-  // define um default seguro caso tudo dê errado
-  const DEFAULT_LABEL = allow.includes("CONTINUAR") ? "CONTINUAR" : (allow[0] || "CONTINUAR");
+async function gerarResposta(messages, allowedLabels) {
+  const allow = normalizeAllowedLabels(allowedLabels || []);
+  const DEFAULT_LABEL = allow.includes("CONTINUAR") ? "CONTINUAR" : (allow[0] || "UNKNOWN");
 
   try {
     const promptStr = messages.map(m => m.content).join("\n");
-    console.log("[OpenAI] Enviando requisição (Responses): " + promptStr);
 
-    // 1) Tenta JSON “oficial” (novo parâmetro: text.format)
+    // 1) Tentativa pedindo JSON via prompt (sem response_format / text.format)
+    const promptJson = `${promptStr}
+
+Retorne estritamente JSON, exatamente neste formato:
+{"label":"${allow.join("|").toLowerCase()}"}`;
+
     let res = await openai.responses.create({
       model: "gpt-5",
-      input: promptStr,
-      max_output_tokens: 24,            // (>=16)
-      text: { format: "json" }          // <= substitui response_format
-      // não envie temperature/top_p se o snapshot recusar
+      input: promptJson,
+      max_output_tokens: 24  // (mínimo aceito é 16)
+      // não envie temperature/top_p/stop (snapshots do gpt-5 podem rejeitar)
     });
 
     let outText = String(res.output_text || "").trim();
     let label = extractJsonLabel(outText, allow);
 
-    // 2) Fallback A: não veio JSON válido? Pede “uma palavra” e valida
+    // 2) Fallback: se não for JSON válido, peça 1 palavra e valide
     if (!label) {
-      console.warn("[OpenAI] JSON inválido/vazio; tentando fallback one-word...");
       res = await openai.responses.create({
         model: "gpt-5",
-        input: `${promptStr}\n\nResponda apenas com uma palavra válida: ${allow.join("|")}`,
+        input: `${promptStr}\n\nResponda APENAS com UMA palavra válida: ${allow.join("|")}`,
         max_output_tokens: 24
       });
       const raw = String(res.output_text || "").trim();
       label = pickValidLabel(raw, allow);
     }
 
-    // 3) Fallback B: ainda inválido → default seguro
-    if (!label) {
-      console.warn("[OpenAI] Saída inválida após fallback; aplicando default.");
-      label = DEFAULT_LABEL;
-    }
-
-    console.log("[OpenAI] Resposta recebida:", label);
-    return label;
-  } catch (error) {
-    console.error("[OpenAI] Erro:", error?.message || error);
-    return DEFAULT_LABEL;
+    return label || DEFAULT_LABEL;
+  } catch (err) {
+    console.error("[OpenAI] Erro:", err?.message || err);
+    return DEFAULT_LABEL; // não quebra seu fluxo
   }
 }
 
@@ -829,7 +836,10 @@ async function processarMensagensPendentes(contato) {
     if (estado.etapa === 'impulso') {
       console.log("[" + contato + "] Etapa 2: impulso");
       const contextoAceite = mensagensPacote.map(msg => msg.texto).join('\n');
-      const tipoAceite = await gerarResposta([{ role: 'system', content: promptClassificaAceite(contextoAceite) }], 12);
+      const tipoAceite = await gerarResposta(
+        [{ role: 'system', content: promptClassificaAceite(contextoAceite) }],
+        ["ACEITE", "RECUSA", "DUVIDA"]
+      );
       console.log("[" + contato + "] Mensagens processadas: " + mensagensTexto + ", Classificação: " + tipoAceite);
 
       if (tipoAceite.includes('aceite') || tipoAceite.includes('duvida')) {
@@ -903,7 +913,11 @@ async function processarMensagensPendentes(contato) {
       console.log("[" + contato + "] Etapa 3: instruções");
       if (estado.instrucoesCompletas && mensagensPacote.length > 0) {
         console.log("[" + contato + "] Mensagem recebida durante espera: " + mensagensTexto);
-        const tipoAceite = await gerarResposta([{ role: 'system', content: promptClassificaAceite(mensagensTexto) }], 12);
+        const tipoAceite = await gerarResposta(
+          [{ role: 'system', content: promptClassificaAceite(mensagensTexto) }],
+          ["ACEITE", "RECUSA", "DUVIDA"]
+        );
+
         if (tipoAceite.includes('aceite') && !estado.mensagemDelayEnviada) {
           const mensagem = '5 minutinhos eu já te chamo aí';
           await enviarLinhaPorLinha(contato, mensagem);
@@ -954,7 +968,10 @@ async function processarMensagensPendentes(contato) {
 
     if (estado.etapa === 'acesso') {
       console.log("[" + contato + "] Etapa 4: acesso");
-      const tipoAcesso = await gerarResposta([{ role: 'system', content: promptClassificaAcesso(mensagensTexto) }], 12);
+      const tipoAcesso = await gerarResposta(
+        [{ role: 'system', content: promptClassificaAcesso(mensagensTexto) }],
+        ["CONFIRMADO", "NAO_CONFIRMADO", "DUVIDA", "NEUTRO"]
+      );
       console.log("[" + contato + "] Mensagens processadas: " + mensagensTexto + ", Classificação: " + tipoAcesso);
 
       if (tipoAcesso.includes('confirmado')) {
@@ -1017,7 +1034,10 @@ async function processarMensagensPendentes(contato) {
         tipoConfirmacao = 'confirmado';
         console.log("[" + contato + "] Mídia detectada, classificando como confirmado automaticamente");
       } else {
-        tipoConfirmacao = await gerarResposta([{ role: 'system', content: promptClassificaConfirmacao(mensagensTextoConfirmacao) }], 12);
+        tipoConfirmacao = await gerarResposta(
+          [{ role: 'system', content: promptClassificaConfirmacao(mensagensTextoConfirmacao) }],
+          ["CONFIRMADO", "NAO_CONFIRMADO", "DUVIDA", "NEUTRO"]
+        );
       }
 
       let saldoInformado = null;
@@ -1161,7 +1181,10 @@ async function processarMensagensPendentes(contato) {
       );
       const mensagensTextoSaque = mensagensDoLead.map(msg => msg.texto).join('\n');
       const temMidiaReal = mensagensPacote.some(msg => msg.temMidia);
-      const tipoRelevancia = await gerarResposta([{ role: 'system', content: promptClassificaRelevancia(mensagensTextoSaque, temMidiaReal) }], 12);
+      const tipoRelevancia = await gerarResposta(
+        [{ role: 'system', content: promptClassificaRelevancia(mensagensTextoSaque, temMidiaReal) }],
+        ["RELEVANTE", "IRRELEVANTE"]
+      );
       console.log("[" + contato + "] Mensagens processadas (apenas lead): " + mensagensTextoSaque + ", temMidiaReal: " + temMidiaReal + ", Resposta bruta OpenAI: \"" + tipoRelevancia + "\"");
 
       const relevanciaNormalizada = tipoRelevancia.trim().toLowerCase();
