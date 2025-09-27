@@ -173,14 +173,6 @@ const OPTOUT_PHRASES = [
 // Re-opt-in (estrito): "BORA"
 const REOPTIN_RX = /^\s*bora\s*$/i;
 
-// 1ª resposta (neutra e curtinha)
-function buildOpeningReply() {
-  const a = ['eae', 'salve', 'oi'];
-  const b = ['recebi sua msg', 'tô aqui', 'fala comigo'];
-  const c = ['me diz rapidão o que cê precisa'];
-  return [a[Math.floor(Math.random() * a.length)], b[Math.floor(Math.random() * b.length)], c[0]].join('\n');
-}
-
 function setupRoutes(
   app,
   pathModule,
