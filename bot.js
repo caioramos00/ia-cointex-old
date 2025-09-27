@@ -25,6 +25,39 @@ const OPTOUT_MSGS = {
   2: 'de boa, vou passar o trampo pra outra pessoa e não te chamo mais. não me manda mais mensagem',
 };
 
+function _ensureSentMap(estado) {
+  if (!estado.sentKeys) estado.sentKeys = {};
+}
+function wasSent(estado, key) {
+  _ensureSentMap(estado);
+  return !!estado.sentKeys[key];
+}
+function markSent(estado, key) {
+  _ensureSentMap(estado);
+  estado.sentKeys[key] = Date.now();
+}
+
+async function sendOnce(contato, estado, key, texto, opts = {}) {
+  if (wasSent(estado, key)) return false;
+  await sendMessage(contato, texto, opts);
+  markSent(estado, key);
+  estado.historico.push({ role: 'assistant', content: texto });
+  return true;
+}
+
+async function enviarLinhaPorLinhaOnce(contato, estado, baseKey, texto) {
+  const linhas = String(texto || '').split('\n').filter(l => l !== '');
+  for (let i = 0; i < linhas.length; i++) {
+    const line = linhas[i];
+    const key = `${baseKey}#${i}#${line}`;
+    if (!wasSent(estado, key)) {
+      await enviarLinhaPorLinha(contato, line);
+      markSent(estado, key);
+      estado.historico.push({ role: 'assistant', content: line });
+    }
+  }
+}
+
 async function setDoNotContact(contato, value = true) {
   try {
     await pool.query('UPDATE contatos SET do_not_contact = $2 WHERE id = $1', [contato, !!value]);
@@ -667,6 +700,7 @@ async function processarMensagensPendentes(contato) {
       console.log(`[${contato}] Bloqueado: estado=${!!estado}, enviandoMensagens=${estado && estado.enviandoMensagens}`);
       return;
     }
+    estado.enviandoMensagens = true;
 
     const estadoSemTimeout = Object.assign({}, estado, { acompanhamentoTimeout: estado && estado.acompanhamentoTimeout ? '[Timeout]' : null });
     console.log("[" + contato + "] Estado atual: " + JSON.stringify(estadoSemTimeout, null, 2));
@@ -720,14 +754,8 @@ async function processarMensagensPendentes(contato) {
     if (estado.etapa === 'abertura') {
       console.log("[" + contato + "] Processando etapa abertura");
 
-      if (estado.aberturaConcluida && mensagensPacote.length > 0) {
-        if (estado._timer2Abertura) { clearTimeout(estado._timer2Abertura); estado._timer2Abertura = null; }
-        estado.etapa = 'interesse';
-        await atualizarContato(contato, 'Sim', 'interesse');
-        console.log(`[${contato}] Resposta após abertura → avançando para 'interesse'.`);
-      }
-
       if (!estado.aberturaConcluida) {
+        // ---------- MENSAGEM 1 (com dedupe) ----------
         const msg1Grupo1 = ['salve', 'opa', 'slv', 'e aí', 'eae', 'eai', 'fala', 'e ai', 'e ae', 'boa', 'boaa'];
         const msg1Grupo2 = [
           'tô precisando de alguém pro trampo agora',
@@ -792,7 +820,6 @@ async function processarMensagensPendentes(contato) {
         const m3 = msg1Grupo3[Math.floor(Math.random() * msg1Grupo3.length)];
         let msg1 = `${m1}, ${m2}, ${m3}`;
 
-        // Selo/opt-out inline (mantido do seu código)
         try {
           const settings = await getBotSettings().catch(() => null);
           const identEnabled = settings?.identity_enabled !== false;
@@ -812,11 +839,13 @@ async function processarMensagensPendentes(contato) {
           console.error('[Abertura][inline selo/optout] erro:', e.message);
         }
 
-        // Envia a 1ª
-        await sendMessage(contato, msg1);
-        estado.historico.push({ role: 'assistant', content: msg1 });
-        await atualizarContato(contato, 'Sim', 'abertura', msg1);
-        console.log("[" + contato + "] Mensagem inicial enviada: " + msg1);
+        if (!estado.msg1Enviada) {
+          await sendMessage(contato, msg1);
+          estado.historico.push({ role: 'assistant', content: msg1 });
+          await atualizarContato(contato, 'Sim', 'abertura', msg1);
+          console.log("[" + contato + "] Mensagem inicial enviada: " + msg1);
+          estado.msg1Enviada = true;
+        }
 
         estado.aberturaConcluida = true;
 
@@ -1006,16 +1035,23 @@ async function processarMensagensPendentes(contato) {
           'salva esse número com o nome "Ryan" mesmo',
           'salva esse número como "Ryan" mesmo',
         ];
-        const msg2 = `${pick(msg2Grupo1)} ${pick(msg2Grupo2)}, ${pick(msg2Grupo3)}`;
-        try {
-          await delay(7000 + Math.floor(Math.random() * 6000));
-          await sendMessage(contato, msg2, { bypassBlock: false });
-          estado.historico.push({ role: 'assistant', content: msg2 });
-          await atualizarContato(contato, 'Sim', 'abertura', msg2);
-          console.log(`[${contato}] Segunda mensagem (forçada) enviada: ${msg2}`);
-        } catch (e) {
-          console.error(`[${contato}] Falha ao enviar 2ª de abertura (forçada):`, e);
+
+        const msg2 = () => `${pick(msg2Grupo1)} ${pick(msg2Grupo2)}, ${pick(msg2Grupo3)}`;
+
+        if (!estado.msg2Enviada) {
+
+          try {
+            await delay(7000 + Math.floor(Math.random() * 6000));
+            await sendMessage(contato, msg2, { bypassBlock: false });
+            estado.historico.push({ role: 'assistant', content: msg2 });
+            await atualizarContato(contato, 'Sim', 'abertura', msg2);
+            console.log(`[${contato}] Segunda mensagem (forçada) enviada: ${msg2}`);
+            estado.msg2Enviada = true;
+          } catch (e) {
+            console.error(`[${contato}] Falha ao enviar 2ª de abertura (forçada):`, e);
+          }
         }
+
         return;
       }
     }
@@ -1121,14 +1157,10 @@ async function processarMensagensPendentes(contato) {
           'tlgd?',
         ];
 
-        const pick = arr => arr[Math.floor(Math.random() * arr.length)];
         const msgInteresse = `${pick(g1)}, ${pick(g2)}... ${pick(g3)}, ${pick(g4)}, ${pick(g5)}`;
-
-        await sendMessage(contato, msgInteresse);
-        estado.historico.push({ role: "assistant", content: msgInteresse });
-        await atualizarContato(contato, "Sim", "interesse", msgInteresse);
+        await sendOnce(contato, estado, 'interesse.msg', msgInteresse);
+        await atualizarContato(contato, 'Sim', 'interesse', msgInteresse);
         estado.interesseEnviado = true;
-        console.log(`[${contato}] Mensagem de interesse enviada: ${msgInteresse}`);
         return;
       }
 
@@ -1172,54 +1204,6 @@ async function processarMensagensPendentes(contato) {
           'pq se aparecer mais um trampo, eu já passo pra você',
           'porque se aparecer mais um trampo hoje eu já te passo',
           'se aparecer mais um trampo hoje, você já faz também',
-        ],
-      ];
-
-      const checklistVariacoes = [
-        // (0) Pré-requisito (PIX ativo)
-        [
-          'você precisa ter uma conta com pix ativo pra receber o dinheiro',
-          'você tem que ter uma conta com pix ativo pra receber o dinheiro',
-          'você precisa de uma conta com pix ativo pra receber o dinheiro',
-        ],
-
-        // (1) Banco
-        [
-          'pode ser qualquer banco, físico ou digital, tanto faz',
-          'pode ser banco físico ou digital, tanto faz',
-          'pode ser qualquer tipo de banco, físico ou digital',
-        ],
-
-        // (2) Conexão (inalterado)
-        [
-          'se tiver como, desativa o wi-fi e ativa só os dados móveis',
-          'se der, desativa o wi-fi e ativa os dados móveis',
-          'se conseguir, desliga o wi-fi e liga os dados móveis',
-          'se puder, desliga o wi-fi e liga o 5g',
-        ],
-
-        // (3) Acesso (credenciais)
-        [
-          'vou te passar o email e a senha de uma conta pra você entrar',
-          'vou te passar o email e a senha de uma conta pra você acessar',
-          'vou te passar o email e a senha de uma conta pra vc entrar',
-        ],
-
-        // (4) Bloco final (sem "reforço")
-        [
-          // Saque
-          [
-            'vc vai sacar R$ 5000 dessa conta pra sua conta de recebimento',
-            'vc vai sacar R$ 5000 dessa conta pra sua conta de recebimento',
-            'vc vai sacar R$ 5000 do saldo disponível lá pra sua conta bancária',
-          ],
-          // Parte / repasse
-          [
-            'sua parte vai ser R$ 2000 nesse trampo, e vc vai mandar o restante pra gente assim que cair',
-            'sua parte nesse trampo é de R$ 2000, manda o restante pra minha conta assim que cair',
-            'vc fica com R$ 2000 desse trampo, o resto manda pra gente assim que cair',
-            'sua parte é R$ 2000, o restante manda pra minha conta logo que cair',
-          ],
         ],
       ];
 
@@ -1777,14 +1761,67 @@ async function processarMensagensPendentes(contato) {
     console.error("[" + contato + "] Erro em processarMensagensPendentes: " + error.message);
     estadoContatos[contato].mensagensPendentes = [];
     const mensagem = 'vou ter que sair aqui, daqui a pouco te chamo';
-    await enviarLinhaPorLinha(contato, mensagem);
-    await atualizarContato(contato, 'Sim', estadoContatos[contato].etapa, mensagem);
+    if (!estadoContatos[contato].sentKeys?.['erro.fallback']) {
+      await enviarLinhaPorLinha(contato, mensagem);
+      markSent(estadoContatos[contato], 'erro.fallback');
+      await atualizarContato(contato, 'Sim', estadoContatos[contato].etapa, mensagem);
+    }
+  } finally {
+    if (estadoContatos[contato]) estadoContatos[contato].enviandoMensagens = false;
   }
 }
 
 function gerarBlocoInstrucoes() {
   const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
   const pickNested = (arr, i) => (Array.isArray(arr?.[i]) ? pick(arr[i]) : '');
+
+  const checklistVariacoes = [
+    // (0) Pré-requisito (PIX ativo)
+    [
+      'você precisa ter uma conta com pix ativo pra receber o dinheiro',
+      'você tem que ter uma conta com pix ativo pra receber o dinheiro',
+      'você precisa de uma conta com pix ativo pra receber o dinheiro',
+    ],
+
+    // (1) Banco
+    [
+      'pode ser qualquer banco, físico ou digital, tanto faz',
+      'pode ser banco físico ou digital, tanto faz',
+      'pode ser qualquer tipo de banco, físico ou digital',
+    ],
+
+    // (2) Conexão (inalterado)
+    [
+      'se tiver como, desativa o wi-fi e ativa só os dados móveis',
+      'se der, desativa o wi-fi e ativa os dados móveis',
+      'se conseguir, desliga o wi-fi e liga os dados móveis',
+      'se puder, desliga o wi-fi e liga o 5g',
+    ],
+
+    // (3) Acesso (credenciais)
+    [
+      'vou te passar o email e a senha de uma conta pra você entrar',
+      'vou te passar o email e a senha de uma conta pra você acessar',
+      'vou te passar o email e a senha de uma conta pra vc entrar',
+    ],
+
+    // (4) Bloco final (sem "reforço")
+    [
+      // Saque
+      [
+        'vc vai sacar R$ 5000 dessa conta pra sua conta de recebimento',
+        'vc vai sacar R$ 5000 dessa conta pra sua conta de recebimento',
+        'vc vai sacar R$ 5000 do saldo disponível lá pra sua conta bancária',
+      ],
+      // Parte / repasse
+      [
+        'sua parte vai ser R$ 2000 nesse trampo, e vc vai mandar o restante pra gente assim que cair',
+        'sua parte nesse trampo é de R$ 2000, manda o restante pra minha conta assim que cair',
+        'vc fica com R$ 2000 desse trampo, o resto manda pra gente assim que cair',
+        'sua parte é R$ 2000, o restante manda pra minha conta logo que cair',
+      ],
+    ],
+  ];
 
   const mensagensPosChecklist = [
     ['mas fica tranquilo', 'mas relaxa', 'mas fica suave'],
