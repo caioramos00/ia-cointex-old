@@ -89,21 +89,21 @@ async function checarOptOutGlobal(contato, mensagensTexto) {
 
 async function gerarResposta(messages) {
   try {
-    console.log("[OpenAI] Enviando requisição: " + JSON.stringify(messages, null, 2));
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-5',
-      messages,
-      temperature: 1,
-      top_p: 0.1,
-      max_completion_tokens: 8,
+    const promptStr = messages.map(m => m.content).join("\n");
+    console.log("[OpenAI] Enviando requisição (Responses): " + promptStr);
+
+    const res = await openai.responses.create({
+      model: "gpt-5",
+      input: promptStr,
+      max_output_tokens: 8,
     });
-    const respostaBruta = completion.choices[0].message.content.trim();
-    const resposta = quebradizarTexto(respostaBruta);
+
+    const resposta = res.output_text.trim();
     console.log("[OpenAI] Resposta recebida: " + resposta);
-    return resposta;
+    return quebradizarTexto(resposta);
   } catch (error) {
     console.error("[OpenAI] Erro: " + error.message);
-    return 'deu um erro aqui, tenta de novo depois';
+    return "me chama mais tarde, preciso sair aqui";
   }
 }
 
