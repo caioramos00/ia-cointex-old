@@ -95,7 +95,7 @@ async function gerarResposta(messages) {
     const res = await openai.responses.create({
       model: "gpt-5",
       input: promptStr,
-      max_output_tokens: 8,
+      max_output_tokens: 16,
     });
 
     const resposta = res.output_text.trim();
