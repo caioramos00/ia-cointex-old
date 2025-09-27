@@ -139,10 +139,21 @@ const respostasDuvidasComuns = {
 
 function promptClassificaOptOut(texto) {
   return `
-Tarefa: Classifique se o usuário pediu explicitamente para PARAR de receber mensagens (opt-out definitivo).
+Você é um CLASSIFICADOR BINÁRIO. Decida se a mensagem do usuário é um pedido explícito para PARAR de receber mensagens. 
+Responda **somente** com uma das palavras abaixo (sem pontuação, sem frases, sem espaços extras).
+Priorize segurança: em caso de dúvida ou conflito entre sinais, devolva **OPTOUT**.
 
-Responda APENAS com UMA palavra:
-- OPTOUT  → quando houver pedido claro para parar, bloquear, remover, cancelar, sair, "não me chame", "não quero", "pare", "stop", "unsubscribe", "remova", "me tira", "excluir", etc., inclusive variações em pt/en, com gírias e abreviações.
+REGRAS DE AVALIAÇÃO (siga em ordem):
+1) Normalize mentalmente: minúsculas, sem acentos, ignore emojis, hashtags, URLs e ruído.
+2) Se houver um pedido explícito para parar, bloquear, excluir, remover, cancelar, sair, **ou** menções de denúncia/polícia/golpe/crime → **OPTOUT**.
+3) Se for apenas recusa momentânea (ex.: “agora não”, “depois”), dúvida, perguntas gerais, silêncio, mídia sem texto → **CONTINUAR**.
+4) Em mensagens com múltiplas frases, foque na intenção dominante do **trecho mais recente e assertivo**.
+5) Se houver tanto aceite quanto rejeição/ameaça (“vou querer sim … é golpe / polícia”), a rejeição prevalece → **OPTOUT**.
+6) Considere variações, gírias e abreviações em PT/EN/ES (ex.: “pare”, “para”, “parar”, “remove”, “unsubscribe”, “stop”, “block”, “spam”).
+7) Não explique nada. **Apenas o rótulo**.
+
+Saídas válidas (uma palavra):
+- OPTOUT  → quando houver pedido claro para parar, bloquear, remover, cancelar, sair, "não me chame", "não quero", "pare", "stop", "unsubscribe", "remova", "me tira", "excluir", etc., inclusive variações em pt/en, com gírias e abreviações; também quando citar “golpe”, “polícia”, “denunciar”, “crime”, “processo”, “advogado”, etc.
 - CONTINUAR → quando for só recusa momentânea ("agora não", "talvez depois"), dúvida, silêncio, ou qualquer outra coisa que NÃO seja pedido claro de parar.
 
 Exemplos (→ saída):
@@ -186,10 +197,23 @@ Exemplos (→ saída):
 "quem é?" → CONTINUAR
 "não" (sem pedir para parar) → CONTINUAR
 
+Exemplos adicionais (reforço; não substituem os anteriores):
+"para com isso" → OPTOUT
+"me tira da lista" → OPTOUT
+"excluir meu contato" → OPTOUT
+"bloquearam?" (apenas pergunta) → CONTINUAR
+"talvez depois" → CONTINUAR
+"tá me spamando" → OPTOUT
+"isso é fraude" → OPTOUT
+"vou denunciar" → OPTOUT
+"vou falar com meu advogado" → OPTOUT
+"não manda mais nada" → OPTOUT
+"só curiosidade, como funciona?" → CONTINUAR
+
 Texto do usuário:
 ${texto}
 Saída:`;
-};
+}
 
 function promptClassificaReoptin(texto) {
   return `

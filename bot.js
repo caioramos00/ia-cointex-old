@@ -241,14 +241,8 @@ Retorne estritamente JSON, exatamente neste formato:
 async function decidirOptLabel(texto) {
   const raw = String(texto || '').trim();
 
-  // Hard-stops mínimos (não removem nada do seu prompt; só reforçam sinais óbvios)
-  const HARD_STOP = /\b(
-  stop | unsubscribe | remover | remova | remove | excluir | exclui(r) ?| cancelar | cancela | cancelamento |
-    para(?!\w) | parem | pare | nao quero | não quero | não me chame | nao me chame |
-      remove meu número | remova meu numero |
-        golpe | golpista | crime | criminoso | denunciar | denúncia |
-        policia | polícia | federal | civil
-  ) \b / ix;
+  const HARD_STOP = /\b(?:stop|unsubscribe|remover|remova|remove|excluir|exclui(?:r)?|cancelar|cancela|cancelamento|para(?!\w)|parem|pare|nao quero|não quero|não me chame|nao me chame|remove meu número|remova meu numero|golpe|golpista|crime|criminoso|denunciar|denúncia|policia|polícia|federal|civil)\b/i;
+
   if (HARD_STOP.test(raw)) return 'OPTOUT';
 
   // Fast-path de retomada para frases batidas (não substitui a IA; só agiliza)
