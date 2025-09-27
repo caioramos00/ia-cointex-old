@@ -17,6 +17,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 const URL_RX = /https?:\/\/\S+/i;
 const OPTOUT_RX = /\b(pare|para(?!\w)|parar|não quero|nao quero|me remove|remova|me tira|me exclui|excluir|cancelar|unsubscribe|cancel|stop|parem|não mandar|nao mandar)\b/i;
+const REOPTIN_RX = /^\s*bora\s*$/i;
 
 async function setDoNotContact(contato, value = true) {
   try {
