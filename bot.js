@@ -95,7 +95,7 @@ async function gerarResposta(messages) {
       messages,
       temperature: 0,
       top_p: 0.1,
-      max_tokens: 8,
+      max_completion_tokens: 8,
     });
     const respostaBruta = completion.choices[0].message.content.trim();
     const resposta = quebradizarTexto(respostaBruta);
