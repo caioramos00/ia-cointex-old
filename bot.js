@@ -201,6 +201,11 @@ async function retomarEnvio(contato) {
 
   // reutiliza o mesmo mecanismo, passando apenas as linhas restantes
   await enviarLinhaPorLinha(contato, remaining);
+  if (!st.seqLines && st.seqKind === 'credenciais') {
+    st.credenciaisEntregues = true;
+    st.seqKind = null;
+    console.log(`[${contato}] Credenciais concluídas na retomada.`);
+  }
   return true;
 }
 
@@ -576,6 +581,7 @@ function inicializarEstado(contato, tid = '', click_type = 'Orgânico') {
     encerrado: false,
     ultimaMensagem: Date.now(),
     credenciais: null,
+    credenciaisEntregues: false,
     mensagensPendentes: [],
     mensagensDesdeSolicitacao: [],
     negativasAbertura: 0,
@@ -1064,22 +1070,29 @@ async function processarMensagensPendentes(contato) {
             const mensagensAcesso = [
               'vamos começar, beleza?',
               'não manda áudio e só responde com o que eu pedir',
-              "USUÁRIO: ",
-              estado.credenciais.username,
-              "SENHA: ",
-              estado.credenciais.password,
-              estado.credenciais.link,
+              'USUÁRIO: ',
+              String(estado.credenciais.username || '').trim(),
+              'SENHA: ',
+              String(estado.credenciais.password || '').trim(),
+              String(estado.credenciais.link || '').trim(),
               'me avisa assim que vc entrar. manda só "ENTREI" pra agilizar'
             ];
-            for (const msg of mensagensAcesso) {
-              await enviarLinhaPorLinha(contato, msg);
-              estado.historico.push({ role: 'assistant', content: msg });
-              await atualizarContato(contato, 'Sim', 'acesso', msg);
+
+            await enviarLinhaPorLinha(contato, mensagensAcesso.join('\n'));
+
+            const concluiu = !estado.seqLines;
+            estado.credenciaisEntregues = !!concluiu;
+
+            if (!concluiu) {
+              console.log(`[${contato}] Credenciais interrompidas (DNC/limite). Não avançar nem pedir print.`);
+              return;
             }
+
             estado.etapa = 'acesso';
             estado.tentativasAcesso = 0;
             estado.mensagensDesdeSolicitacao = [];
-            console.log("[" + contato + "] Etapa 4: acesso - credenciais enviadas");
+            await atualizarContato(contato, 'Sim', 'acesso', 'credenciais enviadas');
+            console.log(`[${contato}] Etapa 4: acesso - credenciais enviadas`);
           } else {
             const mensagem = 'ainda tô esperando os dados da conta, faz aí direitinho e me avisa';
             await enviarLinhaPorLinha(contato, mensagem);
@@ -1130,25 +1143,35 @@ async function processarMensagensPendentes(contato) {
 
           setTimeout(async () => {
             console.log("[" + contato + "] Timeout de 5 minutos expirado - avançando para acesso");
+            if (estado.credenciaisEntregues) return;
+
             if (estado.credenciais && estado.credenciais.username && estado.credenciais.password && estado.credenciais.link) {
               const mensagensAcesso = [
                 'vamos começar, beleza?',
                 'não manda áudio e só responde com o que eu pedir',
-                `USUÁRIO:`,
-                `${estado.credenciais.username}`,
-                `SENHA:`,
-                `${estado.credenciais.password}`,
-                `${estado.credenciais.link}`,
+                'USUÁRIO: ',
+                String(estado.credenciais.username || '').trim(),
+                'SENHA: ',
+                String(estado.credenciais.password || '').trim(),
+                String(estado.credenciais.link || '').trim(),
                 'me avisa assim que vc entrar. manda só "ENTREI" pra agilizar'
               ];
-              for (const msg of mensagensAcesso) {
-                await enviarLinhaPorLinha(contato, msg);
-                estado.historico.push({ role: 'assistant', content: msg });
-                await atualizarContato(contato, 'Sim', 'acesso', msg);
+
+              estado.seqKind = 'credenciais';
+              await enviarLinhaPorLinha(contato, mensagensAcesso.join('\n'));
+              const concluiu = !estado.seqLines;
+              estado.credenciaisEntregues = !!concluiu;
+              estado.seqKind = null;
+
+              if (!concluiu) {
+                console.log(`[${contato}] Credenciais interrompidas no timeout (DNC/limite). Não avançar nem pedir print.`);
+                return;
               }
+
               estado.etapa = 'acesso';
               estado.tentativasAcesso = 0;
               estado.mensagensDesdeSolicitacao = [];
+              await atualizarContato(contato, 'Sim', 'acesso', 'credenciais enviadas');
               console.log("[" + contato + "] Etapa 4: acesso - credenciais enviadas após timeout");
             } else {
               const mensagem = 'ainda tô esperando os dados da conta, faz aí direitinho e me avisa';
@@ -1177,6 +1200,12 @@ async function processarMensagensPendentes(contato) {
       console.log("[" + contato + "] Mensagens processadas: " + mensagensTexto + ", Classificação: " + tipoAcesso);
 
       if (tipoAcesso.includes('CONFIRMADO')) {
+        if (!estado.credenciaisEntregues) {
+          console.log(`[${contato}] Confirmado antes das credenciais — segurando e reforçando instrução de login.`);
+          await enviarLinhaPorLinha(contato,
+            'entra com o usuário e a senha que te passei e me avisa com a palavra ENTREI');
+          return;
+        }
         const mensagensConfirmacao = [
           'agora manda um PRINT (ou uma foto) do saldo disponível, ou manda o valor disponível em escrito, EXATAMENTE NESSE FORMATO: "5000", por exemplo',
         ];
