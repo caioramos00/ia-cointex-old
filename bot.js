@@ -30,6 +30,12 @@ function asText(x) {
   return String(x ?? '').trim();
 }
 
+function pick(arr) {
+  return Array.isArray(arr) && arr.length
+    ? arr[Math.floor(Math.random() * arr.length)]
+    : '';
+}
+
 function _ensureSentMap(estado) {
   if (!estado.sentKeys) estado.sentKeys = {};
 }
@@ -645,53 +651,69 @@ function inicializarEstado(contato, tid = '', click_type = 'Orgânico') {
 }
 
 async function criarUsuarioDjango(contato) {
-  try {
-    const DJANGO_API_URL = process.env.DJANGO_API_URL || 'https://www.cointex.cash/api/create-user/';
+  const DJANGO_API_URL = process.env.DJANGO_API_URL || 'https://www.cointex.cash/api/create-user/';
 
-    const st = estadoContatos[contato] || {};
-    const tid = st.tid || '';
-    const click_type = st.click_type || 'Orgânico';
+  const st = estadoContatos[contato] || {};
+  const tid = st.tid || '';
+  const click_type = st.click_type || 'Orgânico';
 
-    // normaliza para E.164 com +
-    const phone_e164 = /^\+/.test(contato) ? contato : `+${contato}`;
+  // normaliza para E.164 com +
+  const phone_e164 = /^\+/.test(contato) ? contato : `+${contato}`;
 
-    const body = {
-      tid,
-      click_type,
-      phone_number: phone_e164
-    };
+  const body = { tid, click_type, phone_number: phone_e164 };
 
-    console.log(`[${contato}] Enviando para API Cointex:`, JSON.stringify(body));
+  const MAX_TRIES = 3;
+  let lastErr;
 
-    const resp = await axios.post(DJANGO_API_URL, body, {
-      headers: { 'Content-Type': 'application/json' },
-      validateStatus: () => true
-    });
+  for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
+    try {
+      console.log(`[${contato}] Enviando para API Cointex (tentativa ${attempt}/${MAX_TRIES}):`, JSON.stringify(body));
 
-    console.log(`[${contato}] Cointex HTTP ${resp.status}`, resp.data);
+      const resp = await axios.post(DJANGO_API_URL, body, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 15000,
+        validateStatus: () => true
+      });
 
-    if (resp.status < 200 || resp.status >= 300) {
-      throw new Error(`Cointex retornou ${resp.status}`);
+      console.log(`[${contato}] Cointex HTTP ${resp.status}`, resp.data);
+
+      // retry específico pro bug "cannot access local variable 'phone_number'..."
+      const retriable500 =
+        resp.status === 500 &&
+        typeof resp.data?.message === 'string' &&
+        /cannot access local variable 'phone_number'/i.test(resp.data.message);
+
+      if (retriable500) {
+        await delay(250 + Math.floor(Math.random() * 750));
+        continue; // tenta novamente
+      }
+
+      if (resp.status < 200 || resp.status >= 300) {
+        throw new Error(`Cointex retornou ${resp.status}`);
+      }
+
+      const data = resp.data || {};
+      if (data.status === 'success' && Array.isArray(data.users) && data.users[0]) {
+        const u = data.users[0];
+        estadoContatos[contato].credenciais = {
+          username: u.email,
+          password: u.password,
+          link: u.login_url
+        };
+        console.log(`[${contato}] Usuário criado: ${u.email}`);
+      } else {
+        console.error(`[${contato}] Resposta inesperada da API Cointex: ${JSON.stringify(data)}`);
+      }
+      return; // sucesso
+    } catch (err) {
+      lastErr = err;
+      console.error(`[${contato}] Erro na API Django (tentativa ${attempt}/${MAX_TRIES}): ${err.message}`);
+      await delay(300 + Math.floor(Math.random() * 900)); // backoff simples
     }
+  }
 
-    const data = resp.data || {};
-    if (data.status === 'success' && Array.isArray(data.users) && data.users[0]) {
-      const u = data.users[0];
-      estadoContatos[contato].credenciais = {
-        username: u.email,
-        password: u.password,
-        link: u.login_url
-      };
-      console.log(`[${contato}] Usuário criado: ${u.email}`);
-    } else {
-      console.error(`[${contato}] Resposta inesperada da API Cointex: ${JSON.stringify(data)}`);
-    }
-  } catch (err) {
-    if (err.response) {
-      console.error(`[${contato}] Erro na API Django: HTTP ${err.response.status} ${JSON.stringify(err.response.data)}`);
-    } else {
-      console.error(`[${contato}] Erro na API Django: ${err.message}`);
-    }
+  if (lastErr) {
+    console.error(`[${contato}] Falha definitiva ao criar usuário na Cointex: ${lastErr.message}`);
   }
 }
 
