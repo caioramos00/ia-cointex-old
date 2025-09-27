@@ -388,7 +388,9 @@ async function sendManychatBatch(phone, textOrLines) {
   }
 }
 
-async function sendMessage(to, text) {
+async function sendMessage(to, text, opts = {}) {
+  const { bypassBlock = false, extraWait: extraWaitOverride } = opts;
+
   let extraWait =
     GLOBAL_PER_MSG_BASE_MS + Math.floor(Math.random() * GLOBAL_PER_MSG_JITTER_MS);
 
@@ -399,22 +401,30 @@ async function sendMessage(to, text) {
     st.primeiraRespostaPendente = false;
   }
 
+  if (Number.isFinite(extraWaitOverride)) {
+    // permite sobrescrever o pacing quando necessário (ex.: mensagens de opt-out)
+    extraWait = extraWaitOverride;
+  }
+
   await delay(extraWait);
 
-  try {
-    const { rows } = await pool.query(
-      'SELECT do_not_contact, opt_out_count, permanently_blocked FROM contatos WHERE id = $1 LIMIT 1',
-      [to]
-    );
-    const f = rows?.[0] || {};
-    const MAX_OPTOUTS = 3;
-    if (f.permanently_blocked || (f.opt_out_count || 0) >= MAX_OPTOUTS || f.do_not_contact) {
-      console.log(`[${to}] Envio cancelado no último instante (DNC/limite).`);
-      return { skipped: true, reason: 'blocked' };
+  // Freio de emergência (pula quando for bypass, ex.: OPTOUT_MSGS 1/2)
+  if (!bypassBlock) {
+    try {
+      const { rows } = await pool.query(
+        'SELECT do_not_contact, opt_out_count, permanently_blocked FROM contatos WHERE id = $1 LIMIT 1',
+        [to]
+      );
+      const f = rows?.[0] || {};
+      const MAX_OPTOUTS = 3;
+      if (f.permanently_blocked || (f.opt_out_count || 0) >= MAX_OPTOUTS || f.do_not_contact) {
+        console.log(`[${to}] Envio cancelado no último instante (DNC/limite).`);
+        return { skipped: true, reason: 'blocked' };
+      }
+    } catch (e) {
+      console.error(`[${to}] Falha ao re-checar bloqueio antes do envio: ${e.message}`);
+      return { skipped: true, reason: 'db_error' };
     }
-  } catch (e) {
-    console.error(`[${to}] Falha ao re-checar bloqueio antes do envio: ${e.message}`);
-    return { skipped: true, reason: 'db_error' };
   }
 
   const { mod: transport, settings } = await getActiveTransport();
@@ -434,6 +444,7 @@ async function sendMessage(to, text) {
   // meta (padrão)
   return transport.sendText({ to, text }, settings);
 }
+
 
 function inicializarEstado(contato, tid = '', click_type = 'Orgânico') {
   estadoContatos[contato] = {
