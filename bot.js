@@ -17,76 +17,50 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
 const URL_RX = /https?:\/\/\S+/i;
-const OPTOUT_RX = /\b(pare|para(?!\w)|parar|nÃ£o quero|nao quero|me remove|remova|me tira|me exclui|excluir|cancelar|unsubscribe|cancel|stop|parem|nÃ£o mandar|nao mandar)\b/i;
+const OPTOUT_RX = /\b(pare|para(?!\w)|parar|não quero|nao quero|me remove|remova|me tira|me exclui|excluir|cancelar|unsubscribe|cancel|stop|parem|não mandar|nao mandar)\b/i;
 
 const MAX_OPTOUTS = 3;
 const OPTOUT_MSGS = {
-  1: 'tranquilo, nÃ£o vou mais te mandar mensagem. qualquer coisa sÃ³ chamar',
-  2: 'de boa, vou passar o trampo pra outra pessoa e nÃ£o te chamo mais. nÃ£o me manda mais mensagem',
+  1: 'tranquilo, não vou mais te mandar mensagem. qualquer coisa só chamar',
+  2: 'de boa, vou passar o trampo pra outra pessoa e não te chamo mais. não me manda mais mensagem',
 };
 
-const crypto = require('crypto');
-
-// --- Outbox (idempotência) ---
-async function ensureOutboxSchema() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS outbox (
-      id BIGSERIAL PRIMARY KEY,
-      dedupe_key TEXT NOT NULL UNIQUE,
-      contato_id TEXT NOT NULL,
-      etapa TEXT NOT NULL,
-      linha_idx INTEGER NOT NULL DEFAULT 0,
-      texto_hash TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'sent'
-      provider_msg_id TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS outbox_contato_idx ON outbox (contato_id);
-  `);
-}
-ensureOutboxSchema().catch(err => console.error('[outbox] schema:', err.message));
-
-function normalizeTextForKey(s = '') {
-  return String(s).trim().replace(/\s+/g, ' ');
-}
-function buildDedupeKey({ to, etapa, linhaIdx = 0, text }) {
-  const payload = normalizeTextForKey(text || '');
-  const base = `${to}|${etapa}|${linhaIdx}|${payload}`;
-  return crypto.createHash('sha256').update(base).digest('hex');
+function asText(x) {
+  if (typeof x === 'function') return x();
+  return String(x ?? '').trim();
 }
 
-async function beginSendOnce(to, text, { linhaIdx = 0 } = {}) {
-  const etapa = (estadoContatos[to]?.etapa) || 'desconhecida';
-  const textoNorm = normalizeTextForKey(text);
-  const textoHash = crypto.createHash('sha256').update(textoNorm).digest('hex');
-  const dedupeKey = buildDedupeKey({ to, etapa, linhaIdx, text: textoNorm });
+function _ensureSentMap(estado) {
+  if (!estado.sentKeys) estado.sentKeys = {};
+}
+function wasSent(estado, key) {
+  _ensureSentMap(estado);
+  return !!estado.sentKeys[key];
+}
+function markSent(estado, key) {
+  _ensureSentMap(estado);
+  estado.sentKeys[key] = Date.now();
+}
 
-  // Reserva o envio (bloqueia duplicatas concorrentes)
-  const res = await pool.query(
-    `INSERT INTO outbox (dedupe_key, contato_id, etapa, linha_idx, texto_hash, status)
-     VALUES ($1, $2, $3, $4, $5, 'pending')
-     ON CONFLICT (dedupe_key) DO NOTHING`,
-    [dedupeKey, to, etapa, linhaIdx, textoHash]
-  );
-  if (res.rowCount === 0) {
-    return { allowed: false, dedupeKey };
+async function sendOnce(contato, estado, key, texto, opts = {}) {
+  if (wasSent(estado, key)) return false;
+  await sendMessage(contato, texto, opts);
+  markSent(estado, key);
+  estado.historico.push({ role: 'assistant', content: texto });
+  return true;
+}
+
+async function enviarLinhaPorLinhaOnce(contato, estado, baseKey, texto) {
+  const linhas = String(texto || '').split('\n').filter(l => l !== '');
+  for (let i = 0; i < linhas.length; i++) {
+    const line = linhas[i];
+    const key = `${baseKey}#${i}#${line}`;
+    if (!wasSent(estado, key)) {
+      await enviarLinhaPorLinha(contato, line);
+      markSent(estado, key);
+      estado.historico.push({ role: 'assistant', content: line });
+    }
   }
-  return { allowed: true, dedupeKey, etapa, linhaIdx };
-}
-
-async function commitSendOnce(dedupeKey, providerMsgId = null) {
-  await pool.query(
-    `UPDATE outbox SET status = 'sent', provider_msg_id = COALESCE($2, provider_msg_id)
-     WHERE dedupe_key = $1`,
-    [dedupeKey, providerMsgId]
-  );
-}
-
-async function rollbackSendOnce(dedupeKey) {
-  await pool.query(
-    `DELETE FROM outbox WHERE dedupe_key = $1 AND status = 'pending'`,
-    [dedupeKey]
-  );
 }
 
 async function setDoNotContact(contato, value = true) {
@@ -142,7 +116,7 @@ async function finalizeOptOut(contato, reasonText = '') {
     }
 
     if (!permanently) {
-      // agenda confirmaÃ§Ã£o CANCELÃVEL
+      // agenda confirmação CANCELÁVEL
       cancelarConfirmacaoOptOut(contato);
       const delayMs = rand(10000, 15000);
       const timer = setTimeout(async () => {
@@ -164,7 +138,7 @@ async function finalizeOptOut(contato, reasonText = '') {
     console.error(`[${contato}] Falha ao registrar opt-out: ${e.message}`);
   }
 
-  console.log(`[${contato}] Opt-out concluÃ­do (${permanently ? 'permanente' : 'temporÃ¡rio'}).`);
+  console.log(`[${contato}] Opt-out concluído (${permanently ? 'permanente' : 'temporário'}).`);
 }
 
 async function checarOptOutGlobal(contato, mensagens) {
@@ -173,7 +147,7 @@ async function checarOptOutGlobal(contato, mensagens) {
 
     for (const txt of arr) {
       const texto = String(txt || '').trim();
-      // 1) regex rÃ¡pido
+      // 1) regex rápido
       if (OPTOUT_RX.test(texto)) {
         await finalizeOptOut(contato, texto);
         console.log(`[${contato}] Opt-out detectado via REGEX em: "${texto}"`);
@@ -204,7 +178,7 @@ function cancelarConfirmacaoOptOut(contato) {
   if (st && st._optoutTimer) {
     clearTimeout(st._optoutTimer);
     st._optoutTimer = null;
-    console.log(`[${contato}] ConfirmaÃ§Ã£o de opt-out pendente CANCELADA.`);
+    console.log(`[${contato}] Confirmação de opt-out pendente CANCELADA.`);
   }
 }
 
@@ -221,14 +195,14 @@ async function retomarEnvio(contato) {
     delete st.seqLines;
     delete st.seqIdx;
     st.paused = false;
-    console.log(`[${contato}] Nada para retomar (sequÃªncia jÃ¡ concluÃ­da).`);
+    console.log(`[${contato}] Nada para retomar (sequência já concluída).`);
     return false;
   }
 
-  // mesmo delay das mensagens de opt-out (10â€“15s)
+  // mesmo delay das mensagens de opt-out (10–15s)
   await delay(rand(10000, 15000));
 
-  // 1Âª retomada => msg curta; 2Âª retomada => aviso "Ãºltima chance"
+  // 1ª retomada => msg curta; 2ª retomada => aviso "última chance"
   // usa opt_out_count do DB para decidir
   try {
     const { rows } = await pool.query(
@@ -239,15 +213,15 @@ async function retomarEnvio(contato) {
 
     let retomadaMsg = null;
     if (count === 1) {
-      retomadaMsg = 'certo, vamos continuar entÃ£o';
+      retomadaMsg = 'certo, vamos continuar então';
     } else if (count >= 2) {
-      retomadaMsg = 'Ãºltima chance, se nÃ£o for fazer jÃ¡ me avisa pq nÃ£o posso ficar perdendo tempo nÃ£o, vou tentar continuar de novo aqui, vamos lÃ¡';
+      retomadaMsg = 'última chance, se não for fazer já me avisa pq não posso ficar perdendo tempo não, vou tentar continuar de novo aqui, vamos lá';
     }
 
     if (retomadaMsg) {
       await sendMessage(contato, retomadaMsg);
       try {
-        // registra no histÃ³rico com a etapa atual (ou "retomada" se nÃ£o houver)
+        // registra no histórico com a etapa atual (ou "retomada" se não houver)
         await atualizarContato(contato, 'Sim', st.etapa || 'retomada', retomadaMsg);
         st.historico?.push?.({ role: 'assistant', content: retomadaMsg });
       } catch (e) {
@@ -258,7 +232,7 @@ async function retomarEnvio(contato) {
     console.error(`[${contato}] Falha ao buscar opt_out_count para retomada: ${e.message}`);
   }
 
-  // limpar flags e continuar a partir da prÃ³xima linha
+  // limpar flags e continuar a partir da próxima linha
   st.cancelarEnvio = false;
   st.paused = false;
 
@@ -267,7 +241,7 @@ async function retomarEnvio(contato) {
   if (!st.seqLines && st.seqKind === 'credenciais') {
     st.credenciaisEntregues = true;
     st.seqKind = null;
-    console.log(`[${contato}] Credenciais concluÃ­das na retomada.`);
+    console.log(`[${contato}] Credenciais concluídas na retomada.`);
   }
   return true;
 }
@@ -312,18 +286,18 @@ Retorne estritamente JSON, exatamente neste formato:
     let res = await openai.responses.create({
       model: "gpt-5",
       input: promptJson,
-      max_output_tokens: 24  // (mÃ­nimo aceito Ã© 16)
-      // nÃ£o envie temperature/top_p/stop (snapshots do gpt-5 podem rejeitar)
+      max_output_tokens: 24  // (mínimo aceito é 16)
+      // não envie temperature/top_p/stop (snapshots do gpt-5 podem rejeitar)
     });
 
     let outText = String(res.output_text || "").trim();
     let label = extractJsonLabel(outText, allow);
 
-    // 2) Fallback: se nÃ£o for JSON vÃ¡lido, peÃ§a 1 palavra e valide
+    // 2) Fallback: se não for JSON válido, peça 1 palavra e valide
     if (!label) {
       res = await openai.responses.create({
         model: "gpt-5",
-        input: `${promptStr}\n\nResponda APENAS com UMA palavra vÃ¡lida: ${allow.join("|")}`,
+        input: `${promptStr}\n\nResponda APENAS com UMA palavra válida: ${allow.join("|")}`,
         max_output_tokens: 24
       });
       const raw = String(res.output_text || "").trim();
@@ -333,27 +307,27 @@ Retorne estritamente JSON, exatamente neste formato:
     return label || DEFAULT_LABEL;
   } catch (err) {
     console.error("[OpenAI] Erro:", err?.message || err);
-    return DEFAULT_LABEL; // nÃ£o quebra seu fluxo
+    return DEFAULT_LABEL; // não quebra seu fluxo
   }
 }
 
 async function decidirOptLabel(texto) {
   const raw = String(texto || '').trim();
 
-  const HARD_STOP = /\b(?:stop|unsubscribe|remover|remova|remove|excluir|exclui(?:r)?|cancelar|cancela|cancelamento|para(?!\w)|parem|pare|nao quero|nÃ£o quero|nÃ£o me chame|nao me chame|remove meu nÃºmero|remova meu numero|golpe|golpista|crime|criminoso|denunciar|denÃºncia|policia|polÃ­cia|federal|civil)\b/i;
+  const HARD_STOP = /\b(?:stop|unsubscribe|remover|remova|remove|excluir|exclui(?:r)?|cancelar|cancela|cancelamento|para(?!\w)|parem|pare|nao quero|não quero|não me chame|nao me chame|remove meu número|remova meu numero|golpe|golpista|crime|criminoso|denunciar|denúncia|policia|polícia|federal|civil)\b/i;
 
   if (HARD_STOP.test(raw)) return 'OPTOUT';
 
-  // Fast-path de retomada para frases batidas (nÃ£o substitui a IA; sÃ³ agiliza)
+  // Fast-path de retomada para frases batidas (não substitui a IA; só agiliza)
   const norm = raw.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
   const RE_PHRASES = [
     'mudei de ideia', 'quero fazer', 'quero sim', 'vou querer sim',
     'pode continuar', 'pode seguir', 'pode mandar', 'pode prosseguir', 'pode enviar',
-    'vamos', 'vamo', 'bora', 'to dentro', 'tÃ´ dentro', 'topo', 'fechou', 'fechado', 'partiu', 'segue'
+    'vamos', 'vamo', 'bora', 'to dentro', 'tô dentro', 'topo', 'fechou', 'fechado', 'partiu', 'segue'
   ];
   if (RE_PHRASES.some(p => norm.includes(p))) return 'REOPTIN';
 
-  // 1) seu prompt de OPT-OUT (com todas as palavras que vocÃª exigiu)
+  // 1) seu prompt de OPT-OUT (com todas as palavras que você exigiu)
   try {
     const r1 = await gerarResposta(
       [{ role: 'system', content: promptClassificaOptOut(raw) }],
@@ -362,7 +336,7 @@ async function decidirOptLabel(texto) {
     if (String(r1 || '').trim().toUpperCase() === 'OPTOUT') return 'OPTOUT';
   } catch { }
 
-  // 2) nÃ£o sendo opt-out â†’ seu prompt de RE-OPT-IN
+  // 2) não sendo opt-out → seu prompt de RE-OPT-IN
   try {
     const r2 = await gerarResposta(
       [{ role: 'system', content: promptClassificaReoptin(raw) }],
@@ -376,7 +350,7 @@ async function decidirOptLabel(texto) {
 }
 
 function quebradizarTexto(resposta) {
-  return resposta.replace(/\b(vocÃª|vcÃª|cÃª|ce)\b/gi, 'vc');
+  return resposta.replace(/\b(você|vcê|cê|ce)\b/gi, 'vc');
 }
 
 function gerarSenhaAleatoria() {
@@ -386,7 +360,7 @@ function gerarSenhaAleatoria() {
 async function enviarLinhaPorLinha(to, texto) {
   const estado = estadoContatos[to];
   if (!estado) {
-    console.log(`[${to}] Erro: Estado nÃ£o encontrado em enviarLinhaPorLinha`);
+    console.log(`[${to}] Erro: Estado não encontrado em enviarLinhaPorLinha`);
     return;
   }
 
@@ -405,7 +379,7 @@ async function enviarLinhaPorLinha(to, texto) {
     return;
   }
 
-  // Selo de identidade (apenas na 1Âª resposta da abertura)
+  // Selo de identidade (apenas na 1ª resposta da abertura)
   try {
     const isFirstResponse = (estado.etapa === 'abertura' && !estado.aberturaConcluida);
     if (isFirstResponse) {
@@ -418,7 +392,7 @@ async function enviarLinhaPorLinha(to, texto) {
         if (settings?.support_email) pieces.push(settings.support_email);
         if (settings?.support_phone) pieces.push(settings.support_phone);
         if (settings?.support_url) pieces.push(settings.support_url);
-        if (pieces.length) label = `Suporte â€¢ ${pieces.join(' | ')}`;
+        if (pieces.length) label = `Suporte • ${pieces.join(' | ')}`;
       }
 
       if (enabled && label) {
@@ -429,17 +403,17 @@ async function enviarLinhaPorLinha(to, texto) {
     console.error('[SeloIdent] Falha ao avaliar/preparar label:', e.message);
   }
 
-  // Sufixo de opt-out (apenas na 1Âª resposta da abertura)
+  // Sufixo de opt-out (apenas na 1ª resposta da abertura)
   try {
     const isFirstResponse = (estado.etapa === 'abertura' && !estado.aberturaConcluida);
     if (isFirstResponse) {
       const settings = await getBotSettings().catch(() => null);
       const optHintEnabled = settings?.optout_hint_enabled !== false; // default ON
-      const suffix = (settings?.optout_suffix || 'Â· se nÃ£o quiser: NÃƒO QUERO').trim();
+      const suffix = (settings?.optout_suffix || '· se não quiser: NÃO QUERO').trim();
 
       if (optHintEnabled && suffix) {
         const linhasTmp = texto.split('\n');
-        // pega a Ãºltima linha nÃ£o-vazia
+        // pega a última linha não-vazia
         let idx = linhasTmp.length - 1;
         while (idx >= 0 && !linhasTmp[idx].trim()) idx--;
         if (idx >= 0 && !linhasTmp[idx].includes(suffix)) {
@@ -452,7 +426,7 @@ async function enviarLinhaPorLinha(to, texto) {
     console.error('[OptOutHint] Falha ao anexar sufixo:', e.message);
   }
 
-  // Envio linha a linha com memÃ³ria de progresso (seqLines/seqIdx)
+  // Envio linha a linha com memória de progresso (seqLines/seqIdx)
   estado.enviandoMensagens = true;
   console.log(`[${to}] Iniciando envio de mensagem: "${texto}"`);
 
@@ -460,23 +434,23 @@ async function enviarLinhaPorLinha(to, texto) {
 
   const linhas = texto.split('\n').filter(line => line.trim() !== '');
 
-  // snapshot da sequÃªncia no estado (sÃ³ recria se o conteÃºdo mudou)
+  // snapshot da sequência no estado (só recria se o conteúdo mudou)
   if (!Array.isArray(estado.seqLines) || estado.seqLines.join('\n') !== linhas.join('\n')) {
     estado.seqLines = linhas.slice();
-    estado.seqIdx = 0; // comeÃ§a do inÃ­cio desta sequÃªncia
+    estado.seqIdx = 0; // começa do início desta sequência
   }
 
   for (let i = estado.seqIdx || 0; i < estado.seqLines.length; i++) {
     const linha = estado.seqLines[i];
     try {
-      // ðŸ›‘ checkpoints de cancelamento/pausa
+      // 🛑 checkpoints de cancelamento/pausa
       if (estado.cancelarEnvio || estado.paused) {
         console.log(`[${to}] Loop interrompido: cancelarEnvio/paused=true.`);
         estado.enviandoMensagens = false;
-        return; // mantÃ©m seqIdx para retomar
+        return; // mantém seqIdx para retomar
       }
 
-      // ðŸ›‘ rechecar bloqueio entre linhas (DNC/limite)
+      // 🛑 rechecar bloqueio entre linhas (DNC/limite)
       try {
         const { rows } = await pool.query(
           'SELECT do_not_contact, opt_out_count, permanently_blocked FROM contatos WHERE id = $1 LIMIT 1',
@@ -495,8 +469,8 @@ async function enviarLinhaPorLinha(to, texto) {
       }
 
       await delay(Math.max(500, linha.length * 30));
-      await sendMessage(to, linha, { linhaIdx: i });
-      estado.seqIdx = i + 1; // avanÃ§ou uma linha
+      await sendMessage(to, linha);
+      estado.seqIdx = i + 1; // avançou uma linha
       await delay(7000 + Math.floor(Math.random() * 1000));
     } catch (error) {
       console.error(`[${to}] Erro ao enviar linha "${linha}": ${error.message}`);
@@ -505,7 +479,7 @@ async function enviarLinhaPorLinha(to, texto) {
     }
   }
 
-  // sequÃªncia concluÃ­da â€” limpar snapshot
+  // sequência concluída — limpar snapshot
   estado.enviandoMensagens = false;
   delete estado.seqLines;
   delete estado.seqIdx;
@@ -527,7 +501,7 @@ async function sendManychatBatch(phone, textOrLines) {
     estadoContatos[phone]?.manychat_subscriber_id ||
     null;
   if (!subscriberId) {
-    console.warn(`[ManyChat] subscriberId ausente para ${phone} â€” pulando envio externo (simulaÃ§Ã£o/local).`);
+    console.warn(`[ManyChat] subscriberId ausente para ${phone} — pulando envio externo (simulação/local).`);
     return { ok: true, skipped: true, reason: 'no-subscriber' };
   }
 
@@ -567,10 +541,10 @@ async function sendManychatBatch(phone, textOrLines) {
   }
 
   try {
-    // âœ… SEMPRE usar o namespace /fb (mesmo pro WhatsApp)
+    // ✅ SEMPRE usar o namespace /fb (mesmo pro WhatsApp)
     return await postMC('/fb/sending/sendContent', basePayload, 'sendContent/fb');
   } catch (e) {
-    // Janela de 24h estourada â†’ usar Flow (template)
+    // Janela de 24h estourada → usar Flow (template)
     const code = e.body?.code;
     const msg = (e.body?.message || '').toLowerCase();
     const is24h = code === 3011 || /24|window|tag/.test(msg);
@@ -579,7 +553,7 @@ async function sendManychatBatch(phone, textOrLines) {
 
     const flowNs = settings.manychat_fallback_flow_id || process.env.MANYCHAT_FALLBACK_FLOW_ID;
     if (!flowNs) {
-      throw new Error('ManyChat: fora da janela e MANYCHAT_FALLBACK_FLOW_ID nÃ£o configurado.');
+      throw new Error('ManyChat: fora da janela e MANYCHAT_FALLBACK_FLOW_ID não configurado.');
     }
 
     const flowPayload = { subscriber_id: Number(subscriberId), flow_ns: flowNs };
@@ -617,51 +591,25 @@ async function sendMessage(to, text, opts = {}) {
     }
   }
 
-  const gate = await beginSendOnce(to, text, { linhaIdx: opts.linhaIdx ?? 0 });
-  if (!gate.allowed) {
-    return { skipped: true, reason: 'duplicate' };
-  }
-
   const { mod: transport, settings } = await getActiveTransport();
 
   if (transport.name === 'manychat') {
     const lines = Array.isArray(text)
       ? text
       : String(text).split('\n').map(s => s.trim()).filter(Boolean);
-
-    try {
-      const res = await sendManychatBatch(to, lines);
-      await commitSendOnce(gate.dedupeKey, res?.message_id || res?.id || null);
-      return res;
-    } catch (e) {
-      await rollbackSendOnce(gate.dedupeKey);
-      throw e;
-    }
+    return await sendManychatBatch(to, lines);
   }
 
   if (transport.name === 'twilio') {
     const sanitized = to.replace(/^whatsapp:/, '');
-    try {
-      const res = await transport.sendText({ to: sanitized, text }, settings);
-      await commitSendOnce(gate.dedupeKey, res?.sid || res?.messageId || null);
-      return res;
-    } catch (e) {
-      await rollbackSendOnce(gate.dedupeKey);
-      throw e;
-    }
+    return transport.sendText({ to: sanitized, text }, settings);
   }
 
-  try {
-    const res = await transport.sendText({ to, text }, settings);
-    await commitSendOnce(gate.dedupeKey, res?.id || res?.message_id || null);
-    return res;
-  } catch (e) {
-    await rollbackSendOnce(gate.dedupeKey);
-    throw e;
-  }
+  // meta (padrão)
+  return transport.sendText({ to, text }, settings);
 }
 
-function inicializarEstado(contato, tid = '', click_type = 'OrgÃ¢nico') {
+function inicializarEstado(contato, tid = '', click_type = 'Orgânico') {
   estadoContatos[contato] = {
     etapa: 'abertura',
     primeiraRespostaPendente: true,
@@ -698,7 +646,7 @@ async function criarUsuarioDjango(contato) {
 
     const st = estadoContatos[contato] || {};
     const tid = st.tid || '';
-    const click_type = st.click_type || 'OrgÃ¢nico';
+    const click_type = st.click_type || 'Orgânico';
 
     // normaliza para E.164 com +
     const phone_e164 = /^\+/.test(contato) ? contato : `+${contato}`;
@@ -730,7 +678,7 @@ async function criarUsuarioDjango(contato) {
         password: u.password,
         link: u.login_url
       };
-      console.log(`[${contato}] UsuÃ¡rio criado: ${u.email}`);
+      console.log(`[${contato}] Usuário criado: ${u.email}`);
     } else {
       console.error(`[${contato}] Resposta inesperada da API Cointex: ${JSON.stringify(data)}`);
     }
@@ -757,6 +705,7 @@ async function processarMensagensPendentes(contato) {
       console.log(`[${contato}] Bloqueado: estado=${!!estado}, enviandoMensagens=${estado && estado.enviandoMensagens}`);
       return;
     }
+    estado.enviandoMensagens = true;
 
     const estadoSemTimeout = Object.assign({}, estado, { acompanhamentoTimeout: estado && estado.acompanhamentoTimeout ? '[Timeout]' : null });
     console.log("[" + contato + "] Estado atual: " + JSON.stringify(estadoSemTimeout, null, 2));
@@ -793,7 +742,7 @@ async function processarMensagensPendentes(contato) {
 
     const agora = Date.now();
     if (estado.etapa === 'encerrado' && estado.encerradoAte && agora < estado.encerradoAte) {
-      console.log("[" + contato + "] Lead em timeout atÃ© " + new Date(estado.encerradoAte).toLocaleTimeString());
+      console.log("[" + contato + "] Lead em timeout até " + new Date(estado.encerradoAte).toLocaleTimeString());
       return;
     }
 
@@ -810,71 +759,65 @@ async function processarMensagensPendentes(contato) {
     if (estado.etapa === 'abertura') {
       console.log("[" + contato + "] Processando etapa abertura");
 
-      if (estado.aberturaConcluida && mensagensPacote.length > 0) {
-        if (estado._timer2Abertura) { clearTimeout(estado._timer2Abertura); estado._timer2Abertura = null; }
-        estado.etapa = 'interesse';
-        await atualizarContato(contato, 'Sim', 'interesse');
-        console.log(`[${contato}] Resposta apÃ³s abertura â†’ avanÃ§ando para 'interesse'.`);
-      }
-
       if (!estado.aberturaConcluida) {
-        const msg1Grupo1 = ['salve', 'opa', 'slv', 'e aÃ­', 'eae', 'eai', 'fala', 'e ai', 'e ae', 'boa', 'boaa'];
+        // ---------- MENSAGEM 1 (com dedupe) ----------
+        const msg1Grupo1 = ['salve', 'opa', 'slv', 'e aí', 'eae', 'eai', 'fala', 'e ai', 'e ae', 'boa', 'boaa'];
         const msg1Grupo2 = [
-          'tÃ´ precisando de alguÃ©m pro trampo agora',
-          'preciso de alguÃ©m pra um trampo agora',
-          'tÃ´ precisando de alguÃ©m pra um trampo agora',
-          'preciso de alguÃ©m pro trampo agora',
-          'precisando de alguÃ©m pro trampo agora',
-          'precisando de alguÃ©m pra um trampo agora',
+          'tô precisando de alguém pro trampo agora',
+          'preciso de alguém pra um trampo agora',
+          'tô precisando de alguém pra um trampo agora',
+          'preciso de alguém pro trampo agora',
+          'precisando de alguém pro trampo agora',
+          'precisando de alguém pra um trampo agora',
           'to com vaga pra um trampo agora',
           'tenho vaga pra um trampo agora',
           'to com vaga pra um trampo',
         ];
         const msg1Grupo3 = [
-          'tÃ¡ disponÃ­vel?',
-          'tÃ¡ disponÃ­vel? ðŸŠ',
-          'tÃ¡ disponÃ­vel? ðŸŠðŸŠ',
-          'tÃ¡ disponÃ­vel? ðŸŠðŸŠðŸŠ',
+          'tá disponível?',
+          'tá disponível? 🍊',
+          'tá disponível? 🍊🍊',
+          'tá disponível? 🍊🍊🍊',
 
           'vai poder fazer?',
-          'vai poder fazer? ðŸŠ',
-          'vai poder fazer? ðŸŠðŸŠ',
-          'vai poder fazer? ðŸŠðŸŠðŸŠ',
+          'vai poder fazer? 🍊',
+          'vai poder fazer? 🍊🍊',
+          'vai poder fazer? 🍊🍊🍊',
 
           'bora fazer?',
-          'bora fazer? ðŸŠ',
-          'bora fazer? ðŸŠðŸŠ',
-          'bora fazer? ðŸŠðŸŠðŸŠ',
+          'bora fazer? 🍊',
+          'bora fazer? 🍊🍊',
+          'bora fazer? 🍊🍊🍊',
 
           'consegue fazer?',
-          'consegue fazer? ðŸŠ',
-          'consegue fazer? ðŸŠðŸŠ',
-          'consegue fazer? ðŸŠðŸŠðŸŠ',
+          'consegue fazer? 🍊',
+          'consegue fazer? 🍊🍊',
+          'consegue fazer? 🍊🍊🍊',
 
           'vamos fazer?',
-          'vamos fazer? ðŸŠ',
-          'vamos fazer? ðŸŠðŸŠ',
-          'vamos fazer? ðŸŠðŸŠðŸŠ',
+          'vamos fazer? 🍊',
+          'vamos fazer? 🍊🍊',
+          'vamos fazer? 🍊🍊🍊',
 
           'vai fazer?',
-          'vai fazer? ðŸŠ',
-          'vai fazer? ðŸŠðŸŠ',
-          'vai fazer? ðŸŠðŸŠðŸŠ',
+          'vai fazer? 🍊',
+          'vai fazer? 🍊🍊',
+          'vai fazer? 🍊🍊🍊',
 
           'vai poder?',
-          'vai poder? ðŸŠ',
-          'vai poder? ðŸŠðŸŠ',
-          'vai poder? ðŸŠðŸŠðŸŠ',
+          'vai poder? 🍊',
+          'vai poder? 🍊🍊',
+          'vai poder? 🍊🍊🍊',
 
           'consegue?',
-          'consegue? ðŸŠ',
-          'consegue? ðŸŠðŸŠ',
-          'consegue? ðŸŠðŸŠðŸŠ',
+          'consegue? 🍊',
+          'consegue? 🍊🍊',
+          'consegue? 🍊🍊🍊',
 
           'bora?',
-          'bora? ðŸŠ',
-          'bora? ðŸŠðŸŠ',
-          'bora? ðŸŠðŸŠðŸŠ'
+          'bora? 🍊',
+          'bora? 🍊🍊',
+          'bora? 🍊🍊🍊'
         ];
 
         const m1 = msg1Grupo1[Math.floor(Math.random() * msg1Grupo1.length)];
@@ -882,7 +825,6 @@ async function processarMensagensPendentes(contato) {
         const m3 = msg1Grupo3[Math.floor(Math.random() * msg1Grupo3.length)];
         let msg1 = `${m1}, ${m2}, ${m3}`;
 
-        // Selo/opt-out inline (mantido do seu cÃ³digo)
         try {
           const settings = await getBotSettings().catch(() => null);
           const identEnabled = settings?.identity_enabled !== false;
@@ -892,21 +834,23 @@ async function processarMensagensPendentes(contato) {
             if (settings?.support_email) pieces.push(settings.support_email);
             if (settings?.support_phone) pieces.push(settings.support_phone);
             if (settings?.support_url) pieces.push(settings.support_url);
-            if (pieces.length) label = `Suporte â€¢ ${pieces.join(' | ')}`;
+            if (pieces.length) label = `Suporte • ${pieces.join(' | ')}`;
           }
-          if (identEnabled && label) msg1 = `${label} â€” ${msg1}`;
+          if (identEnabled && label) msg1 = `${label} — ${msg1}`;
           const optHintEnabled = settings?.optout_hint_enabled !== false;
-          const suffix = (settings?.optout_suffix || 'Â· se nÃ£o quiser: NÃƒO QUERO').trim();
+          const suffix = (settings?.optout_suffix || '· se não quiser: NÃO QUERO').trim();
           if (optHintEnabled && suffix && !msg1.includes(suffix)) msg1 = `${msg1} ${suffix}`;
         } catch (e) {
           console.error('[Abertura][inline selo/optout] erro:', e.message);
         }
 
-        // Envia a 1Âª
-        await sendMessage(contato, msg1);
-        estado.historico.push({ role: 'assistant', content: msg1 });
-        await atualizarContato(contato, 'Sim', 'abertura', msg1);
-        console.log("[" + contato + "] Mensagem inicial enviada: " + msg1);
+        if (!estado.msg1Enviada) {
+          await sendMessage(contato, msg1);
+          estado.historico.push({ role: 'assistant', content: msg1 });
+          await atualizarContato(contato, 'Sim', 'abertura', msg1);
+          console.log("[" + contato + "] Mensagem inicial enviada: " + msg1);
+          estado.msg1Enviada = true;
+        }
 
         estado.aberturaConcluida = true;
 
@@ -954,27 +898,27 @@ async function processarMensagensPendentes(contato) {
           'n liga pro nome desse whats, dmr?',
           'n liga pro nome desse WhatsApp, dmr?',
           'n liga pro nome desse whatsapp, dmr?',
-          'nÃ£o liga pro nome desse whats,',
-          'nÃ£o liga pro nome desse WhatsApp,',
-          'nÃ£o liga pro nome desse whatsapp,',
-          'nÃ£o liga pro nome desse whats aq,',
-          'nÃ£o liga pro nome desse WhatsApp aq,',
-          'nÃ£o liga pro nome desse whatsapp aq,',
-          'nÃ£o liga pro nome desse whats aqui,',
-          'nÃ£o liga pro nome desse WhatsApp aqui,',
-          'nÃ£o liga pro nome desse whatsapp aqui,',
-          'nÃ£o liga pro nome desse whats, beleza?',
-          'nÃ£o liga pro nome desse WhatsApp, beleza?',
-          'nÃ£o liga pro nome desse whatsapp, beleza?',
-          'nÃ£o liga pro nome desse whats, blz?',
-          'nÃ£o liga pro nome desse WhatsApp, blz?',
-          'nÃ£o liga pro nome desse whatsapp, blz?',
-          'nÃ£o liga pro nome desse whats, tranquilo?',
-          'nÃ£o liga pro nome desse WhatsApp, tranquilo?',
-          'nÃ£o liga pro nome desse whatsapp, tranquilo?',
-          'nÃ£o liga pro nome desse whats, dmr?',
-          'nÃ£o liga pro nome desse WhatsApp, dmr?',
-          'nÃ£o liga pro nome desse whatsapp, dmr?',
+          'não liga pro nome desse whats,',
+          'não liga pro nome desse WhatsApp,',
+          'não liga pro nome desse whatsapp,',
+          'não liga pro nome desse whats aq,',
+          'não liga pro nome desse WhatsApp aq,',
+          'não liga pro nome desse whatsapp aq,',
+          'não liga pro nome desse whats aqui,',
+          'não liga pro nome desse WhatsApp aqui,',
+          'não liga pro nome desse whatsapp aqui,',
+          'não liga pro nome desse whats, beleza?',
+          'não liga pro nome desse WhatsApp, beleza?',
+          'não liga pro nome desse whatsapp, beleza?',
+          'não liga pro nome desse whats, blz?',
+          'não liga pro nome desse WhatsApp, blz?',
+          'não liga pro nome desse whatsapp, blz?',
+          'não liga pro nome desse whats, tranquilo?',
+          'não liga pro nome desse WhatsApp, tranquilo?',
+          'não liga pro nome desse whatsapp, tranquilo?',
+          'não liga pro nome desse whats, dmr?',
+          'não liga pro nome desse WhatsApp, dmr?',
+          'não liga pro nome desse whatsapp, dmr?',
           'ignora o nome desse whats,',
           'ignora o nome desse WhatsApp,',
           'ignora o nome desse whatsapp,',
@@ -996,77 +940,77 @@ async function processarMensagensPendentes(contato) {
           'ignora o nome desse whats, dmr?',
           'ignora o nome desse WhatsApp, dmr?',
           'ignora o nome desse whatsapp, dmr?',
-          'sÃ³ ignora o nome desse whats,',
-          'sÃ³ ignora o nome desse WhatsApp,',
-          'sÃ³ ignora o nome desse whatsapp,',
-          'sÃ³ ignora o nome desse whats aq,',
-          'sÃ³ ignora o nome desse WhatsApp aq,',
-          'sÃ³ ignora o nome desse whatsapp aq,',
-          'sÃ³ ignora o nome desse whats aqui,',
-          'sÃ³ ignora o nome desse WhatsApp aqui,',
-          'sÃ³ ignora o nome desse whatsapp aqui,',
-          'sÃ³ ignora o nome desse whats, beleza?',
-          'sÃ³ ignora o nome desse WhatsApp, beleza?',
-          'sÃ³ ignora o nome desse whatsapp, beleza?',
-          'sÃ³ ignora o nome desse whats, blz?',
-          'sÃ³ ignora o nome desse WhatsApp, blz?',
-          'sÃ³ ignora o nome desse whatsapp, blz?',
-          'sÃ³ ignora o nome desse whats, tranquilo?',
-          'sÃ³ ignora o nome desse WhatsApp, tranquilo?',
-          'sÃ³ ignora o nome desse whatsapp, tranquilo?',
-          'sÃ³ ignora o nome desse whats, dmr?',
-          'sÃ³ ignora o nome desse WhatsApp, dmr?',
-          'sÃ³ ignora o nome desse whatsapp, dmr?'
+          'só ignora o nome desse whats,',
+          'só ignora o nome desse WhatsApp,',
+          'só ignora o nome desse whatsapp,',
+          'só ignora o nome desse whats aq,',
+          'só ignora o nome desse WhatsApp aq,',
+          'só ignora o nome desse whatsapp aq,',
+          'só ignora o nome desse whats aqui,',
+          'só ignora o nome desse WhatsApp aqui,',
+          'só ignora o nome desse whatsapp aqui,',
+          'só ignora o nome desse whats, beleza?',
+          'só ignora o nome desse WhatsApp, beleza?',
+          'só ignora o nome desse whatsapp, beleza?',
+          'só ignora o nome desse whats, blz?',
+          'só ignora o nome desse WhatsApp, blz?',
+          'só ignora o nome desse whatsapp, blz?',
+          'só ignora o nome desse whats, tranquilo?',
+          'só ignora o nome desse WhatsApp, tranquilo?',
+          'só ignora o nome desse whatsapp, tranquilo?',
+          'só ignora o nome desse whats, dmr?',
+          'só ignora o nome desse WhatsApp, dmr?',
+          'só ignora o nome desse whatsapp, dmr?'
         ];
         const msg2Grupo2 = [
-          'nÃºmero empresarial q usamos pros trampo',
-          'nÃºmero empresarial que usamos pros trampo',
-          'nÃºmero comercial q usamos pros trampo',
-          'nÃºmero comercial que usamos pros trampo',
-          'nÃºmero business q usamos pros trampo',
-          'nÃºmero business que usamos pros trampo',
-          'nÃºmero empresarial q usamos pra trampos',
-          'nÃºmero empresarial que usamos pra trampos',
-          'nÃºmero comercial q usamos pra trampos',
-          'nÃºmero comercial que usamos pra trampos',
-          'nÃºmero business q usamos pra trampos',
-          'nÃºmero business que usamos pra trampos',
-          'nÃºmero empresarial q usamos pra um trampo',
-          'nÃºmero empresarial que usamos pra um trampo',
-          'nÃºmero comercial q usamos pra um trampo',
-          'nÃºmero comercial que usamos pra um trampo',
-          'nÃºmero business q usamos pra um trampo',
-          'nÃºmero business que usamos pra um trampo',
-          'nÃºmero empresarial q usamos pro trampo',
-          'nÃºmero empresarial que usamos pro trampo',
-          'nÃºmero comercial q usamos pro trampo',
-          'nÃºmero comercial que usamos pro trampo',
-          'nÃºmero business q usamos pro trampo',
-          'nÃºmero business que usamos pro trampo',
-          'Ã© nÃºmero empresarial q usamos pros trampo',
-          'Ã© nÃºmero empresarial que usamos pros trampo',
-          'Ã© nÃºmero comercial q usamos pros trampo',
-          'Ã© nÃºmero comercial que usamos pros trampo',
-          'Ã© nÃºmero business q usamos pros trampo',
-          'Ã© nÃºmero business que usamos pros trampo',
-          'Ã© nÃºmero empresarial q usamos pra trampos',
-          'Ã© nÃºmero empresarial que usamos pra trampos',
-          'Ã© nÃºmero comercial q usamos pra trampos',
-          'Ã© nÃºmero comercial que usamos pra trampos',
-          'Ã© nÃºmero business q usamos pra trampos',
-          'Ã© nÃºmero business que usamos pra trampos',
-          'Ã© nÃºmero empresarial q usamos pra um trampo',
-          'Ã© nÃºmero empresarial que usamos pra um trampo',
-          'Ã© nÃºmero comercial q usamos pra um trampo',
-          'Ã© nÃºmero comercial que usamos pra um trampo',
-          'Ã© nÃºmero business q usamos pra um trampo',
-          'Ã© nÃºmero business que usamos pra um trampo',
-          'Ã© nÃºmero empresarial q usamos pro trampo',
-          'Ã© nÃºmero empresarial que usamos pro trampo',
-          'Ã© nÃºmero comercial q usamos pro trampo',
-          'Ã© nÃºmero comercial que usamos pro trampo',
-          'Ã© nÃºmero business q usamos pro trampo',
-          'Ã© nÃºmero business que usamos pro trampo',
+          'número empresarial q usamos pros trampo',
+          'número empresarial que usamos pros trampo',
+          'número comercial q usamos pros trampo',
+          'número comercial que usamos pros trampo',
+          'número business q usamos pros trampo',
+          'número business que usamos pros trampo',
+          'número empresarial q usamos pra trampos',
+          'número empresarial que usamos pra trampos',
+          'número comercial q usamos pra trampos',
+          'número comercial que usamos pra trampos',
+          'número business q usamos pra trampos',
+          'número business que usamos pra trampos',
+          'número empresarial q usamos pra um trampo',
+          'número empresarial que usamos pra um trampo',
+          'número comercial q usamos pra um trampo',
+          'número comercial que usamos pra um trampo',
+          'número business q usamos pra um trampo',
+          'número business que usamos pra um trampo',
+          'número empresarial q usamos pro trampo',
+          'número empresarial que usamos pro trampo',
+          'número comercial q usamos pro trampo',
+          'número comercial que usamos pro trampo',
+          'número business q usamos pro trampo',
+          'número business que usamos pro trampo',
+          'é número empresarial q usamos pros trampo',
+          'é número empresarial que usamos pros trampo',
+          'é número comercial q usamos pros trampo',
+          'é número comercial que usamos pros trampo',
+          'é número business q usamos pros trampo',
+          'é número business que usamos pros trampo',
+          'é número empresarial q usamos pra trampos',
+          'é número empresarial que usamos pra trampos',
+          'é número comercial q usamos pra trampos',
+          'é número comercial que usamos pra trampos',
+          'é número business q usamos pra trampos',
+          'é número business que usamos pra trampos',
+          'é número empresarial q usamos pra um trampo',
+          'é número empresarial que usamos pra um trampo',
+          'é número comercial q usamos pra um trampo',
+          'é número comercial que usamos pra um trampo',
+          'é número business q usamos pra um trampo',
+          'é número business que usamos pra um trampo',
+          'é número empresarial q usamos pro trampo',
+          'é número empresarial que usamos pro trampo',
+          'é número comercial q usamos pro trampo',
+          'é número comercial que usamos pro trampo',
+          'é número business q usamos pro trampo',
+          'é número business que usamos pro trampo',
         ];
         const msg2Grupo3 = [
           'pode salvar como "Ryan"',
@@ -1077,35 +1021,42 @@ async function processarMensagensPendentes(contato) {
           'pode salvar com o nome "Ryan"',
           'pode salvar com o nome "Ryan" mesmo',
           'pode salvar com o nome Ryan mesmo',
-          'pode salvar esse nÃºmero como "Ryan"',
-          'pode salvar esse nÃºmero como Ryan',
-          'pode salvar esse nÃºmero com o nome Ryan',
-          'pode salvar esse nÃºmero com o nome "Ryan"',
-          'pode salvar esse nÃºmero com o nome "Ryan" mesmo',
-          'pode salvar esse nÃºmero como "Ryan" mesmo',
+          'pode salvar esse número como "Ryan"',
+          'pode salvar esse número como Ryan',
+          'pode salvar esse número com o nome Ryan',
+          'pode salvar esse número com o nome "Ryan"',
+          'pode salvar esse número com o nome "Ryan" mesmo',
+          'pode salvar esse número como "Ryan" mesmo',
           'salva como "Ryan"',
           'salva como Ryan',
           'salva com o nome Ryan',
           'salva com o nome "Ryan"',
           'salva com o nome "Ryan" mesmo',
           'salva com o nome Ryan mesmo',
-          'salva esse nÃºmero como "Ryan"',
-          'salva esse nÃºmero como Ryan',
-          'salva esse nÃºmero com o nome Ryan',
-          'salva esse nÃºmero com o nome "Ryan"',
-          'salva esse nÃºmero com o nome "Ryan" mesmo',
-          'salva esse nÃºmero como "Ryan" mesmo',
+          'salva esse número como "Ryan"',
+          'salva esse número como Ryan',
+          'salva esse número com o nome Ryan',
+          'salva esse número com o nome "Ryan"',
+          'salva esse número com o nome "Ryan" mesmo',
+          'salva esse número como "Ryan" mesmo',
         ];
-        const msg2 = `${pick(msg2Grupo1)} ${pick(msg2Grupo2)}, ${pick(msg2Grupo3)}`;
-        try {
-          await delay(7000 + Math.floor(Math.random() * 6000));
-          await sendMessage(contato, msg2, { bypassBlock: false });
-          estado.historico.push({ role: 'assistant', content: msg2 });
-          await atualizarContato(contato, 'Sim', 'abertura', msg2);
-          console.log(`[${contato}] Segunda mensagem (forÃ§ada) enviada: ${msg2}`);
-        } catch (e) {
-          console.error(`[${contato}] Falha ao enviar 2Âª de abertura (forÃ§ada):`, e);
+
+        const msg2 = () => `${pick(msg2Grupo1)} ${pick(msg2Grupo2)}, ${pick(msg2Grupo3)}`;
+
+        if (!estado.msg2Enviada) {
+
+          try {
+            await delay(7000 + Math.floor(Math.random() * 6000));
+            await sendMessage(contato, msg2, { bypassBlock: false });
+            estado.historico.push({ role: 'assistant', content: msg2 });
+            await atualizarContato(contato, 'Sim', 'abertura', msg2);
+            console.log(`[${contato}] Segunda mensagem (forçada) enviada: ${msg2}`);
+            estado.msg2Enviada = true;
+          } catch (e) {
+            console.error(`[${contato}] Falha ao enviar 2ª de abertura (forçada):`, e);
+          }
         }
+
         return;
       }
     }
@@ -1116,32 +1067,32 @@ async function processarMensagensPendentes(contato) {
       if (!estado.interesseEnviado) {
         const g1 = [
           'to bem corrido aqui',
-          'tÃ´ na correria aqui',
-          'tÃ´ na correria agora',
-          'tÃ´ bem corrido agora',
+          'tô na correria aqui',
+          'tô na correria agora',
+          'tô bem corrido agora',
           'to sem muito tempo aqui',
-          'tÃ´ sem muito tempo aqui',
-          'tÃ´ sem muito tempo agora',
+          'tô sem muito tempo aqui',
+          'tô sem muito tempo agora',
           'to sem tempo aqui',
-          'tÃ´ sem tempo aqui',
-          'tÃ´ sem tempo agora',
+          'tô sem tempo aqui',
+          'tô sem tempo agora',
           'to na maior correria aqui',
-          'tÃ´ na maior correria aqui',
-          'tÃ´ na maior correria agora',
+          'tô na maior correria aqui',
+          'tô na maior correria agora',
           'to na maior correria agora',
           'to meio sem tempo aqui',
-          'tÃ´ meio sem tempo aqui',
-          'tÃ´ meio sem tempo agora',
+          'tô meio sem tempo aqui',
+          'tô meio sem tempo agora',
           'to meio corrido aqui'
         ];
         const g2 = [
-          'fazendo vÃ¡rios ao mesmo tempo',
-          'fazendo vÃ¡rios trampos ao mesmo tempo',
-          'fazendo vÃ¡rios trampo ao mesmo tempo',
-          'fazendo vÃ¡rios trampos juntos',
-          'fazendo vÃ¡rios trampo juntos',
-          'fazendo vÃ¡rios trampos',
-          'fazendo vÃ¡rios trampo',
+          'fazendo vários ao mesmo tempo',
+          'fazendo vários trampos ao mesmo tempo',
+          'fazendo vários trampo ao mesmo tempo',
+          'fazendo vários trampos juntos',
+          'fazendo vários trampo juntos',
+          'fazendo vários trampos',
+          'fazendo vários trampo',
           'fazendo muitos trampos ao mesmo tempo',
           'fazendo muitos trampo ao mesmo tempo',
           'fazendo muitos trampos juntos',
@@ -1154,50 +1105,50 @@ async function processarMensagensPendentes(contato) {
           'fazendo muito trampo agora'
         ];
         const g3 = [
-          'vou te mandando tudo o que vocÃª tem que fazer',
-          'vou te mandando tudo que vocÃª tem que fazer',
+          'vou te mandando tudo o que você tem que fazer',
+          'vou te mandando tudo que você tem que fazer',
           'vou te mandando tudo o que precisa fazer',
           'vou te mandando tudo que precisa fazer',
-          'vou te mandando o que vocÃª tem que fazer',
+          'vou te mandando o que você tem que fazer',
           'vou te mandando o que precisa fazer',
-          'vou te mandando o que vocÃª precisa fazer',
-          'vou te mandando o que vocÃª tem que fazer',
-          'vou ir te mandando tudo o que vocÃª tem que fazer',
-          'vou ir te mandando tudo que vocÃª tem que fazer',
+          'vou te mandando o que você precisa fazer',
+          'vou te mandando o que você tem que fazer',
+          'vou ir te mandando tudo o que você tem que fazer',
+          'vou ir te mandando tudo que você tem que fazer',
           'vou ir te mandando tudo o que precisa fazer',
           'vou ir te mandando tudo que precisa fazer',
-          'vou ir te mandando o que vocÃª tem que fazer',
+          'vou ir te mandando o que você tem que fazer',
           'vou ir te mandando o que precisa fazer',
-          'vou ir te mandando o que vocÃª precisa fazer',
-          'vou ir te mandando o que vocÃª tem que fazer',
-          'vou te falar tudo o que vocÃª tem que fazer',
-          'vou te falar tudo que vocÃª tem que fazer',
+          'vou ir te mandando o que você precisa fazer',
+          'vou ir te mandando o que você tem que fazer',
+          'vou te falar tudo o que você tem que fazer',
+          'vou te falar tudo que você tem que fazer',
           'vou te falar tudo o que precisa fazer',
           'vou te falar tudo que precisa fazer',
-          'vou te falar o que vocÃª tem que fazer',
+          'vou te falar o que você tem que fazer',
         ];
         const g4 = [
-          'e vocÃª sÃ³ responde o que eu te perguntar',
-          'e vocÃª sÃ³ responde o que eu perguntar',
-          'e vocÃª sÃ³ responde o que eu te pedir',
-          'e vocÃª sÃ³ responde o que eu pedir',
-          'e vocÃª sÃ³ responde o que eu for perguntar',
-          'e vocÃª sÃ³ responde o que eu for pedir',
-          'e vocÃª sÃ³ responde o que eu te perguntar',
-          'e vocÃª responde sÃ³ o que eu te perguntar',
-          'e vocÃª responde sÃ³ o que eu perguntar',
-          'e vocÃª responde sÃ³ o que eu te pedir',
-          'e vocÃª responde sÃ³ o que eu pedir',
-          'e vocÃª responde sÃ³ o que eu for perguntar',
-          'e vocÃª responde sÃ³ o que eu for pedir',
-          'e vocÃª sÃ³ fala o que eu te perguntar',
-          'e vocÃª sÃ³ me fala o que eu perguntar',
-          'e vocÃª sÃ³ fala o que eu te pedir',
-          'e vocÃª sÃ³ me fala o que eu pedir',
-          'e vocÃª sÃ³ fala o que eu for perguntar',
-          'e vocÃª sÃ³ me fala o que eu for perguntar',
-          'e vocÃª sÃ³ fala o que eu for pedir',
-          'e vocÃª sÃ³ me fala o que eu for pedir',
+          'e você só responde o que eu te perguntar',
+          'e você só responde o que eu perguntar',
+          'e você só responde o que eu te pedir',
+          'e você só responde o que eu pedir',
+          'e você só responde o que eu for perguntar',
+          'e você só responde o que eu for pedir',
+          'e você só responde o que eu te perguntar',
+          'e você responde só o que eu te perguntar',
+          'e você responde só o que eu perguntar',
+          'e você responde só o que eu te pedir',
+          'e você responde só o que eu pedir',
+          'e você responde só o que eu for perguntar',
+          'e você responde só o que eu for pedir',
+          'e você só fala o que eu te perguntar',
+          'e você só me fala o que eu perguntar',
+          'e você só fala o que eu te pedir',
+          'e você só me fala o que eu pedir',
+          'e você só fala o que eu for perguntar',
+          'e você só me fala o que eu for perguntar',
+          'e você só fala o que eu for pedir',
+          'e você só me fala o que eu for pedir',
         ];
         const g5 = [
           'beleza?',
@@ -1211,14 +1162,10 @@ async function processarMensagensPendentes(contato) {
           'tlgd?',
         ];
 
-        const pick = arr => arr[Math.floor(Math.random() * arr.length)];
         const msgInteresse = `${pick(g1)}, ${pick(g2)}... ${pick(g3)}, ${pick(g4)}, ${pick(g5)}`;
-
-        await sendMessage(contato, msgInteresse);
-        estado.historico.push({ role: "assistant", content: msgInteresse });
-        await atualizarContato(contato, "Sim", "interesse", msgInteresse);
+        await sendOnce(contato, estado, 'interesse.msg', msgInteresse);
+        await atualizarContato(contato, 'Sim', 'interesse', msgInteresse);
         estado.interesseEnviado = true;
-        console.log(`[${contato}] Mensagem de interesse enviada: ${msgInteresse}`);
         return;
       }
 
@@ -1233,10 +1180,10 @@ async function processarMensagensPendentes(contato) {
 
         if (classificacao.includes("ACEITE")) {
           estado.etapa = "impulso";
-          await atualizarContato(contato, "Sim", "impulso", "[AvanÃ§o apÃ³s aceite]");
-          console.log(`[${contato}] Aceite detectado â†’ avanÃ§ando para impulso`);
+          await atualizarContato(contato, "Sim", "impulso", "[Avanço após aceite]");
+          console.log(`[${contato}] Aceite detectado → avançando para impulso`);
         } else {
-          console.log(`[${contato}] NÃ£o foi aceite (stand-by).`);
+          console.log(`[${contato}] Não foi aceite (stand-by).`);
         }
       }
       return;
@@ -1250,66 +1197,18 @@ async function processarMensagensPendentes(contato) {
         ["ACEITE", "RECUSA", "DUVIDA"]
       )).toUpperCase();
 
-      console.log(`[${contato}] Mensagens processadas: ${mensagensTexto}, ClassificaÃ§Ã£o: ${tipoAceite}`);
+      console.log(`[${contato}] Mensagens processadas: ${mensagensTexto}, Classificação: ${tipoAceite}`);
 
       const mensagensIntrodutorias = [
         [
-          'antes de mais nada, jÃ¡ salva meu contato, pode salvar como "Ryan"',
-          'antes de mais nada, jÃ¡ deixa meu contato salvo aÃ­, pode salvar como "Ryan"',
-          'antes de mais nada, jÃ¡ me adiciona aÃ­ nos seus contatos, pode salvar como "Ryan"',
+          'antes de mais nada, já salva meu contato, pode salvar como "Ryan"',
+          'antes de mais nada, já deixa meu contato salvo aí, pode salvar como "Ryan"',
+          'antes de mais nada, já me adiciona aí nos seus contatos, pode salvar como "Ryan"',
         ],
         [
-          'pq se aparecer mais um trampo, eu jÃ¡ passo pra vocÃª',
-          'porque se aparecer mais um trampo hoje eu jÃ¡ te passo',
-          'se aparecer mais um trampo hoje, vocÃª jÃ¡ faz tambÃ©m',
-        ],
-      ];
-
-      const checklistVariacoes = [
-        // (0) PrÃ©-requisito (PIX ativo)
-        [
-          'vocÃª precisa ter uma conta com pix ativo pra receber o dinheiro',
-          'vocÃª tem que ter uma conta com pix ativo pra receber o dinheiro',
-          'vocÃª precisa de uma conta com pix ativo pra receber o dinheiro',
-        ],
-
-        // (1) Banco
-        [
-          'pode ser qualquer banco, fÃ­sico ou digital, tanto faz',
-          'pode ser banco fÃ­sico ou digital, tanto faz',
-          'pode ser qualquer tipo de banco, fÃ­sico ou digital',
-        ],
-
-        // (2) ConexÃ£o (inalterado)
-        [
-          'se tiver como, desativa o wi-fi e ativa sÃ³ os dados mÃ³veis',
-          'se der, desativa o wi-fi e ativa os dados mÃ³veis',
-          'se conseguir, desliga o wi-fi e liga os dados mÃ³veis',
-          'se puder, desliga o wi-fi e liga o 5g',
-        ],
-
-        // (3) Acesso (credenciais)
-        [
-          'vou te passar o email e a senha de uma conta pra vocÃª entrar',
-          'vou te passar o email e a senha de uma conta pra vocÃª acessar',
-          'vou te passar o email e a senha de uma conta pra vc entrar',
-        ],
-
-        // (4) Bloco final (sem "reforÃ§o")
-        [
-          // Saque
-          [
-            'vc vai sacar R$ 5000 dessa conta pra sua conta de recebimento',
-            'vc vai sacar R$ 5000 dessa conta pra sua conta de recebimento',
-            'vc vai sacar R$ 5000 do saldo disponÃ­vel lÃ¡ pra sua conta bancÃ¡ria',
-          ],
-          // Parte / repasse
-          [
-            'sua parte vai ser R$ 2000 nesse trampo, e vc vai mandar o restante pra gente assim que cair',
-            'sua parte nesse trampo Ã© de R$ 2000, manda o restante pra minha conta assim que cair',
-            'vc fica com R$ 2000 desse trampo, o resto manda pra gente assim que cair',
-            'sua parte Ã© R$ 2000, o restante manda pra minha conta logo que cair',
-          ],
+          'pq se aparecer mais um trampo, eu já passo pra você',
+          'porque se aparecer mais um trampo hoje eu já te passo',
+          'se aparecer mais um trampo hoje, você já faz também',
         ],
       ];
 
@@ -1322,42 +1221,42 @@ async function processarMensagensPendentes(contato) {
           const blocoInstrucoes = gerarBlocoInstrucoes();
           const mensagemCompleta = mensagemIntro + "\n\n" + blocoInstrucoes;
           await enviarLinhaPorLinha(contato, mensagemCompleta);
-          estado.etapa = 'instruÃ§Ãµes';
+          estado.etapa = 'instruções';
           estado.instrucoesEnviadas = true;
           estado.instrucoesCompletas = true;
           estado.aguardandoAcompanhamento = true;
           estado.mensagemDelayEnviada = false;
           estado.historico.push({ role: 'assistant', content: mensagemCompleta });
-          await atualizarContato(contato, 'Sim', 'instruÃ§Ãµes', mensagemCompleta);
-          console.log("[" + contato + "] Etapa 3: instruÃ§Ãµes - checklist enviado");
+          await atualizarContato(contato, 'Sim', 'instruções', mensagemCompleta);
+          console.log("[" + contato + "] Etapa 3: instruções - checklist enviado");
         }
       } else if (tipoAceite.includes('RECUSA')) {
-        const msg = 'beleza, sem problema. se mudar de ideia Ã© sÃ³ chamar';
+        const msg = 'beleza, sem problema. se mudar de ideia é só chamar';
         await enviarLinhaPorLinha(contato, msg);
         estado.etapa = 'encerrado';
         estado.encerradoAte = Date.now() + 24 * 60 * 60 * 1000;
         estado.historico.push({ role: 'assistant', content: msg });
         await atualizarContato(contato, 'Sim', 'encerrado', msg);
-        console.log("[" + contato + "] Recusa sem insistÃªncia â†’ encerrado.");
+        console.log("[" + contato + "] Recusa sem insistência → encerrado.");
         return;
       }
       else {
         if (estado.reativadoAgora) {
-          console.log(`[${contato}] Reativado recentemente â†’ suprimindo nudge (manda aÃ­ se vai ou nÃ£o).`);
+          console.log(`[${contato}] Reativado recentemente → suprimindo nudge (manda aí se vai ou não).`);
         } else {
-          await enviarLinhaPorLinha(contato, 'manda aÃ­ se vai ou nÃ£o');
+          await enviarLinhaPorLinha(contato, 'manda aí se vai ou não');
           await atualizarContato(contato, 'Sim', 'impulso');
         }
       }
-      console.log(`[${contato}] Estado apÃ³s processamento: etapa=${estado.etapa}, mensagensPendentes=${estado.mensagensPendentes.length}`);
+      console.log(`[${contato}] Estado após processamento: etapa=${estado.etapa}, mensagensPendentes=${estado.mensagensPendentes.length}`);
       return;
     }
 
-    if (estado.etapa === 'instruÃ§Ãµes') {
-      console.log("[" + contato + "] Etapa 3: instruÃ§Ãµes");
+    if (estado.etapa === 'instruções') {
+      console.log("[" + contato + "] Etapa 3: instruções");
 
       if (estado.instrucoesCompletas && mensagensPacote.length > 0) {
-        // Qualquer interaÃ§Ã£o do usuÃ¡rio apÃ³s o envio do checklist dispara o bloco de acesso (se jÃ¡ tivermos as credenciais)
+        // Qualquer interação do usuário após o envio do checklist dispara o bloco de acesso (se já tivermos as credenciais)
         if (
           estado.credenciais &&
           estado.credenciais.username &&
@@ -1366,14 +1265,14 @@ async function processarMensagensPendentes(contato) {
           !estado.credenciaisEntregues
         ) {
           const mensagensAcesso = [
-            'vamos comeÃ§ar, beleza?',
-            'nÃ£o manda Ã¡udio e sÃ³ responde com o que eu pedir',
-            'USUÃRIO: ',
+            'vamos começar, beleza?',
+            'não manda áudio e só responde com o que eu pedir',
+            'USUÁRIO: ',
             String(estado.credenciais.username || '').trim(),
             'SENHA: ',
             String(estado.credenciais.password || '').trim(),
             String(estado.credenciais.link || '').trim(),
-            'me avisa assim que vc entrar. manda sÃ³ "ENTREI" pra agilizar'
+            'me avisa assim que vc entrar. manda só "ENTREI" pra agilizar'
           ];
 
           estado.seqKind = 'credenciais';
@@ -1382,7 +1281,7 @@ async function processarMensagensPendentes(contato) {
           estado.credenciaisEntregues = !!concluiu;
 
           if (!concluiu) {
-            // interrompido por DNC/limite: apenas nÃ£o avanÃ§a.
+            // interrompido por DNC/limite: apenas não avança.
             return;
           }
 
@@ -1391,12 +1290,12 @@ async function processarMensagensPendentes(contato) {
           estado.etapa = 'acesso';
           estado.tentativasAcesso = 0;
           estado.mensagensDesdeSolicitacao = [];
-          await atualizarContato(contato, 'Sim', 'acesso', 'credenciais enviadas (apÃ³s interaÃ§Ã£o)');
+          await atualizarContato(contato, 'Sim', 'acesso', 'credenciais enviadas (após interação)');
           return;
         }
 
-        // Ainda sem credenciais geradas â†’ sÃ³ registra e segue aguardando (sem "5 minutinhos" e sem timeout)
-        console.log(`[${contato}] InteraÃ§Ã£o recebida em 'instruÃ§Ãµes', mas ainda sem credenciais â€” aguardando backend`);
+        // Ainda sem credenciais geradas → só registra e segue aguardando (sem "5 minutinhos" e sem timeout)
+        console.log(`[${contato}] Interação recebida em 'instruções', mas ainda sem credenciais — aguardando backend`);
       }
       return;
     } else if (estado.etapa === 'acesso') {
@@ -1405,17 +1304,17 @@ async function processarMensagensPendentes(contato) {
         [{ role: 'system', content: promptClassificaAcesso(mensagensTexto) }],
         ["CONFIRMADO", "NAO_CONFIRMADO", "DUVIDA", "NEUTRO"]
       )).toUpperCase();
-      console.log("[" + contato + "] Mensagens processadas: " + mensagensTexto + ", ClassificaÃ§Ã£o: " + tipoAcesso);
+      console.log("[" + contato + "] Mensagens processadas: " + mensagensTexto + ", Classificação: " + tipoAcesso);
 
       if (tipoAcesso.includes('CONFIRMADO')) {
         if (!estado.credenciaisEntregues) {
-          console.log(`[${contato}] Confirmado antes das credenciais â€” segurando e reforÃ§ando instruÃ§Ã£o de login.`);
+          console.log(`[${contato}] Confirmado antes das credenciais — segurando e reforçando instrução de login.`);
           await enviarLinhaPorLinha(contato,
-            'entra com o usuÃ¡rio e a senha que te passei e me avisa com a palavra ENTREI');
+            'entra com o usuário e a senha que te passei e me avisa com a palavra ENTREI');
           return;
         }
         const mensagensConfirmacao = [
-          'agora manda um PRINT (ou uma foto) do saldo disponÃ­vel, ou manda o valor disponÃ­vel em escrito, EXATAMENTE NESSE FORMATO: "5000", por exemplo',
+          'agora manda um PRINT (ou uma foto) do saldo disponível, ou manda o valor disponível em escrito, EXATAMENTE NESSE FORMATO: "5000", por exemplo',
         ];
         for (const msg of mensagensConfirmacao) {
           await enviarLinhaPorLinha(contato, msg);
@@ -1425,11 +1324,11 @@ async function processarMensagensPendentes(contato) {
         estado.etapa = 'confirmacao';
         estado.mensagensDesdeSolicitacao = [];
         estado.tentativasAcesso = 0;
-        console.log("[" + contato + "] Etapa 5: confirmaÃ§Ã£o - instruÃ§Ãµes enviadas");
+        console.log("[" + contato + "] Etapa 5: confirmação - instruções enviadas");
       } else if (tipoAcesso.includes('NAO_CONFIRMADO')) {
         const respostasNaoConfirmadoAcesso = [
-          'mano, tenta de novo com os dados que te mandei. copia o usuÃ¡rio e senha certinho e usa o link. me avisa quando entrar',
-          'tenta de novo, mano. usa o usuÃ¡rio e senha que te passei e o link certinho. me chama quando entrar'
+          'mano, tenta de novo com os dados que te mandei. copia o usuário e senha certinho e usa o link. me avisa quando entrar',
+          'tenta de novo, mano. usa o usuário e senha que te passei e o link certinho. me chama quando entrar'
         ];
         if (estado.tentativasAcesso < 2) {
           const resposta = respostasNaoConfirmadoAcesso[Math.floor(Math.random() * respostasNaoConfirmadoAcesso.length)];
@@ -1439,17 +1338,17 @@ async function processarMensagensPendentes(contato) {
           await atualizarContato(contato, 'Sim', 'acesso', resposta);
           console.log("[" + contato + "] Etapa 4: acesso - tentativa " + (estado.tentativasAcesso + 1) + "/2, insistindo");
         } else {
-          const mensagem = 'nÃ£o rolou, tenta de novo outra hora';
+          const mensagem = 'não rolou, tenta de novo outra hora';
           await enviarLinhaPorLinha(contato, mensagem);
           estado.etapa = 'encerrado';
           estado.encerradoAte = Date.now() + 3 * 60 * 60 * 1000;
           estado.historico.push({ role: 'assistant', content: mensagem });
           await atualizarContato(contato, 'Sim', 'encerrado', mensagem);
-          console.log("[" + contato + "] Etapa encerrada apÃ³s 2 tentativas");
+          console.log("[" + contato + "] Etapa encerrada após 2 tentativas");
         }
       } else if (tipoAcesso.includes('DUVIDA')) {
         const mensagemLower = mensagensTexto.toLowerCase();
-        let resposta = 'usa o usuÃ¡rio e senha que te passei, entra no link e me avisa com ENTREI';
+        let resposta = 'usa o usuário e senha que te passei, entra no link e me avisa com ENTREI';
         for (const [duvida, respostaPronta] of Object.entries(respostasDuvidasComuns)) {
           if (mensagemLower.includes(duvida)) {
             resposta = respostaPronta;
@@ -1459,25 +1358,25 @@ async function processarMensagensPendentes(contato) {
         await enviarLinhaPorLinha(contato, resposta);
         estado.historico.push({ role: 'assistant', content: resposta });
         await atualizarContato(contato, 'Sim', 'acesso', resposta);
-        console.log("[" + contato + "] Etapa 4: acesso - respondeu dÃºvida, aguardando");
+        console.log("[" + contato + "] Etapa 4: acesso - respondeu dúvida, aguardando");
       } else {
         console.log("[" + contato + "] Mensagem neutra recebida, ignorando: " + mensagensTexto);
         estado.mensagensPendentes = [];
       }
-      console.log(`[${contato}] Estado apÃ³s processamento: etapa=${estado.etapa}, mensagensPendentes=${estado.mensagensPendentes.length}`);
+      console.log(`[${contato}] Estado após processamento: etapa=${estado.etapa}, mensagensPendentes=${estado.mensagensPendentes.length}`);
       return;
     }
     else if (estado.etapa === 'confirmacao') {
-      console.log("[" + contato + "] Etapa 5: confirmaÃ§Ã£o");
+      console.log("[" + contato + "] Etapa 5: confirmação");
       estado.mensagensDesdeSolicitacao.push(
-        ...mensagensPacote.map(m => (m.temMidia ? '[mÃ­dia]' : (m.texto || '')))
+        ...mensagensPacote.map(m => (m.temMidia ? '[mídia]' : (m.texto || '')))
       );
       const mensagensTextoConfirmacao = estado.mensagensDesdeSolicitacao.join('\n');
       const temMidiaConfirmacao = mensagensPacote.some(msg => msg.temMidia);
       let tipoConfirmacao;
       if (temMidiaConfirmacao) {
         tipoConfirmacao = 'CONFIRMADO';
-        console.log("[" + contato + "] MÃ­dia detectada, classificando como confirmado automaticamente");
+        console.log("[" + contato + "] Mídia detectada, classificando como confirmado automaticamente");
       } else {
         tipoConfirmacao = String(await gerarResposta(
           [{ role: 'system', content: promptClassificaConfirmacao(mensagensTextoConfirmacao) }],
@@ -1490,7 +1389,7 @@ async function processarMensagensPendentes(contato) {
         const candidatos = estado.mensagensDesdeSolicitacao
           .slice()
           .reverse()
-          .filter(msg => !msg.includes('[mÃ­dia]') && !URL_RX.test(msg))
+          .filter(msg => !msg.includes('[mídia]') && !URL_RX.test(msg))
           .map(msg => {
             const m = msg.match(/(\d{1,3}(\.\d{3})*|\d+)(,\d{2})?/);
             return m ? m[0] : null;
@@ -1501,11 +1400,11 @@ async function processarMensagensPendentes(contato) {
           saldoInformado = candidatos[0].replace(/\./g, '').replace(',', '.');
         } else if (temMidiaConfirmacao) {
           saldoInformado = '5000';
-          console.log(`[${contato}] MÃ­dia sem valor em texto; usando saldo default: ${saldoInformado}`);
+          console.log(`[${contato}] Mídia sem valor em texto; usando saldo default: ${saldoInformado}`);
         }
       }
 
-      console.log("[" + contato + "] Mensagens processadas: " + mensagensTextoConfirmacao + ", ClassificaÃ§Ã£o: " + tipoConfirmacao + ", Saldo informado: " + (saldoInformado || 'nenhum'));
+      console.log("[" + contato + "] Mensagens processadas: " + mensagensTextoConfirmacao + ", Classificação: " + tipoConfirmacao + ", Saldo informado: " + (saldoInformado || 'nenhum'));
 
       if (tipoConfirmacao.includes('CONFIRMADO') && saldoInformado) {
         estado.saldo_informado = saldoInformado;
@@ -1525,12 +1424,12 @@ async function processarMensagensPendentes(contato) {
           'vai pedir a senha de saque, vai ser uma dessas:'
         ];
         const parteVariacao = [
-          'tua parte no trampo Ã© de 2000',
-          'tua parte Ã© de 2000',
-          'nÃ£o esquece, sua parte Ã© de 2000',
-          'tua parte no trampo Ã© de R$ 2000',
-          'tua parte Ã© de R$ 2000',
-          'nÃ£o esquece, sua parte Ã© de R$ 2000'
+          'tua parte no trampo é de 2000',
+          'tua parte é de 2000',
+          'não esquece, sua parte é de 2000',
+          'tua parte no trampo é de R$ 2000',
+          'tua parte é de R$ 2000',
+          'não esquece, sua parte é de R$ 2000'
         ];
         const avisaVariacao = [
           'assim que cai me avisa',
@@ -1539,7 +1438,7 @@ async function processarMensagensPendentes(contato) {
           'me manda quando cair'
         ];
         const pixVariacao = [
-          'pra eu te passar como vocÃª vai mandar minha parte',
+          'pra eu te passar como você vai mandar minha parte',
           'pra eu poder te passar como vc vai mandar minha parte',
           'pra eu te falar como vc vai me mandar meu dinheiro',
           'pra eu te explicar como vc vai mandar minha parte',
@@ -1548,15 +1447,15 @@ async function processarMensagensPendentes(contato) {
         const avisoVariacao = [
           'sem gracinha',
           'certo pelo certo',
-          'nÃ£o pisa na bola',
+          'não pisa na bola',
           'faz direitinho',
           'manda certinho',
           'manda tudo certo'
         ];
         const confiancaVariacao = [
-          'tÃ´ confiando em vc, se fazer certinho tem mais trampo. se tiver qualquer problema pra sacar me manda um PRINT (ou uma foto da tela)',
-          'tÃ´ na fÃ© em vc, faz certo que te passo mais trampo. se tiver qualquer problema pra sacar me manda um PRINT (ou uma foto da tela)',
-          'tÃ´ na confianÃ§a, faz certo que vai ter mais. se tiver qualquer problema pra sacar me manda um PRINT (ou uma foto da tela)'
+          'tô confiando em vc, se fazer certinho tem mais trampo. se tiver qualquer problema pra sacar me manda um PRINT (ou uma foto da tela)',
+          'tô na fé em vc, faz certo que te passo mais trampo. se tiver qualquer problema pra sacar me manda um PRINT (ou uma foto da tela)',
+          'tô na confiança, faz certo que vai ter mais. se tiver qualquer problema pra sacar me manda um PRINT (ou uma foto da tela)'
         ];
         const senha1 = gerarSenhaAleatoria();
         const senha2 = '8293';
@@ -1577,13 +1476,13 @@ async function processarMensagensPendentes(contato) {
         }
         estado.etapa = 'saque';
         estado.mensagensDesdeSolicitacao = [];
-        console.log("[" + contato + "] Etapa 6: saque - instruÃ§Ãµes enviadas");
+        console.log("[" + contato + "] Etapa 6: saque - instruções enviadas");
       } else if (tipoConfirmacao.includes('NAO_CONFIRMADO')) {
         const respostasNaoConfirmadoConfirmacao = [
-          'me escreve o valor que tÃ¡ disponÃ­vel, EXATAMENTE nesse formato: R$ 5000, por exemplo',
-          'me manda aqui escrito o valor disponÃ­vel, EXATAMENTE nesse formato: R$ 5000, por exemplo',
-          'me escreve aqui o valor disponÃ­vel, EXATAMENTE nesse formato: R$ 5000, por exemplo',
-          'escreve aqui o valor disponÃ­vel, EXATAMENTE nesse formato: R$ 5000, por exemplo'
+          'me escreve o valor que tá disponível, EXATAMENTE nesse formato: R$ 5000, por exemplo',
+          'me manda aqui escrito o valor disponível, EXATAMENTE nesse formato: R$ 5000, por exemplo',
+          'me escreve aqui o valor disponível, EXATAMENTE nesse formato: R$ 5000, por exemplo',
+          'escreve aqui o valor disponível, EXATAMENTE nesse formato: R$ 5000, por exemplo'
         ];
         if (estado.tentativasConfirmacao < 2) {
           const resposta = respostasNaoConfirmadoConfirmacao[Math.floor(Math.random() * respostasNaoConfirmadoConfirmacao.length)];
@@ -1591,34 +1490,34 @@ async function processarMensagensPendentes(contato) {
           estado.tentativasConfirmacao++;
           estado.historico.push({ role: 'assistant', content: resposta });
           await atualizarContato(contato, 'Sim', 'confirmacao', resposta);
-          console.log("[" + contato + "] Etapa 5: confirmaÃ§Ã£o - tentativa " + (estado.tentativasConfirmacao + 1) + "/2, insistindo");
+          console.log("[" + contato + "] Etapa 5: confirmação - tentativa " + (estado.tentativasConfirmacao + 1) + "/2, insistindo");
         } else {
-          const mensagem = 'nÃ£o deu certo, tenta de novo outra hora';
+          const mensagem = 'não deu certo, tenta de novo outra hora';
           await enviarLinhaPorLinha(contato, mensagem);
           estado.etapa = 'encerrado';
           estado.encerradoAte = Date.now() + 3 * 60 * 60 * 1000;
           estado.historico.push({ role: 'assistant', content: mensagem });
           await atualizarContato(contato, 'Sim', 'encerrado', mensagem);
-          console.log(`[${contato}] Etapa encerrada apÃ³s 2 tentativas`);
+          console.log(`[${contato}] Etapa encerrada após 2 tentativas`);
         }
       } else if (tipoConfirmacao.includes('DUVIDA')) {
         const respostasDuvidasComuns = {
-          'nÃ£o tenho 4g': 'nÃ£o, tudo bem, vamos manter no wi-fi. o resto tÃ¡ pronto, bora seguir',
-          'qual cpf': 'usa o CPF da sua conta que vai receber a grana. faz aÃ­ e me avisa',
-          'onde fica o perfil': 'no app, geralmente tÃ¡ nas configuraÃ§Ãµes ou no canto superior, procura por PERFIL',
-          'nÃ£o tenho 5k': 'tenta arrumar uma conta com alguÃ©m, precisa ter 5k pra rolar',
-          'onde coloco o usuÃ¡rio': 'no campo de login no link que te mandei. copia o usuÃ¡rio e senha certinho',
-          'o link nÃ£o abre': 'tenta copiar e colar no navegador. me avisa se nÃ£o rolar',
-          'qual senha': 'a senha Ã© a que te mandei. copia e cola no login',
-          'nÃ£o achei perfil': 'no app, vai nas configuraÃ§Ãµes ou no canto superior, procura por PERFIL',
-          'onde tÃ¡ financeiro': 'no app, procura no menu ou configuraÃ§Ãµes, tÃ¡ como FINANCEIRO, depois me manda o valor em texto',
-          'qual valor mando': 'o valor que aparece em FINANCEIRO, sÃ³ escreve o nÃºmero em texto',
-          'como faÃ§o o saque': 'vai em FINANCEIRO, seleciona sacar, coloca TUDO pra sua conta e usa as senhas que te mandei',
+          'não tenho 4g': 'não, tudo bem, vamos manter no wi-fi. o resto tá pronto, bora seguir',
+          'qual cpf': 'usa o CPF da sua conta que vai receber a grana. faz aí e me avisa',
+          'onde fica o perfil': 'no app, geralmente tá nas configurações ou no canto superior, procura por PERFIL',
+          'não tenho 5k': 'tenta arrumar uma conta com alguém, precisa ter 5k pra rolar',
+          'onde coloco o usuário': 'no campo de login no link que te mandei. copia o usuário e senha certinho',
+          'o link não abre': 'tenta copiar e colar no navegador. me avisa se não rolar',
+          'qual senha': 'a senha é a que te mandei. copia e cola no login',
+          'não achei perfil': 'no app, vai nas configurações ou no canto superior, procura por PERFIL',
+          'onde tá financeiro': 'no app, procura no menu ou configurações, tá como FINANCEIRO, depois me manda o valor em texto',
+          'qual valor mando': 'o valor que aparece em FINANCEIRO, só escreve o número em texto',
+          'como faço o saque': 'vai em FINANCEIRO, seleciona sacar, coloca TUDO pra sua conta e usa as senhas que te mandei',
           'qual chave pix': 'te passo a chave assim que confirmar que caiu, saca primeiro e me avisa',
           'demora quanto': 'saca tudo agora, geralmente cai na hora. me avisa quando cair'
         };
         const mensagemLower = mensagensTextoConfirmacao.toLowerCase();
-        let resposta = 'me manda o valor que tÃ¡ em FINANCEIRO, sÃ³ o nÃºmero em texto';
+        let resposta = 'me manda o valor que tá em FINANCEIRO, só o número em texto';
         for (const [duvida, respostaPronta] of Object.entries(respostasDuvidasComuns)) {
           if (mensagemLower.includes(duvida)) {
             resposta = respostaPronta;
@@ -1628,17 +1527,17 @@ async function processarMensagensPendentes(contato) {
         await enviarLinhaPorLinha(contato, resposta);
         estado.historico.push({ role: 'assistant', content: resposta });
         await atualizarContato(contato, 'Sim', 'confirmacao', resposta);
-        console.log("[" + contato + "] Etapa 5: confirmaÃ§Ã£o - respondeu dÃºvida, aguardando");
+        console.log("[" + contato + "] Etapa 5: confirmação - respondeu dúvida, aguardando");
       } else {
-        console.log("[" + contato + "] Mensagem neutra recebida, aguardando valor vÃ¡lido: " + mensagensTextoConfirmacao);
+        console.log("[" + contato + "] Mensagem neutra recebida, aguardando valor válido: " + mensagensTextoConfirmacao);
         estado.mensagensPendentes = [];
       }
-      console.log(`[${contato}] Estado apÃ³s processamento: etapa=${estado.etapa}, mensagensPendentes=${estado.mensagensPendentes.length}`);
+      console.log(`[${contato}] Estado após processamento: etapa=${estado.etapa}, mensagensPendentes=${estado.mensagensPendentes.length}`);
       return;
     } else if (estado.etapa === 'saque') {
-      console.log("[" + contato + "] Etapa 6: saque - InÃ­cio do processamento");
+      console.log("[" + contato + "] Etapa 6: saque - Início do processamento");
       const mensagensDoLead = mensagensPacote.filter(
-        msg => !msg.texto.startsWith('USUÃRIO:') &&
+        msg => !msg.texto.startsWith('USUÁRIO:') &&
           !msg.texto.startsWith('SENHA:') &&
           !msg.texto.includes('saca') &&
           !msg.texto.includes('senha')
@@ -1657,38 +1556,38 @@ async function processarMensagensPendentes(contato) {
         estado.aguardandoPrint = false;
         estado.etapa = 'validacao';
         const respostas = [
-          ['calma ai', 'calma ai', 'calma aÃ­', 'perai', 'perai'][Math.floor(Math.random() * 5)],
-          ['pediu validaÃ§Ã£o', 'pediu pra validar a conta', 'pediu validaÃ§Ã£o bancÃ¡ria', 'caiu na validaÃ§Ã£o', 'pediu verificaÃ§Ã£o'][Math.floor(Math.random() * 5)],
-          ['confirma aÃ­, vai clicando em "PrÃ³ximo"', 'vai clicando em "PrÃ³ximo"', 'vai clicando em "PrÃ³ximo" ai', 'pode ir clicando em "PrÃ³ximo aÃ­"'][Math.floor(Math.random() * 4)],
-          ['vou falar com a menina aqui', 'vou falar com a menina que trabalha lÃ¡', 'vou falar com a menina do esquema aqui', 'vou falar com a menina que trampa lÃ¡'][Math.floor(Math.random() * 4)],
-          ['aguarda 5m', 'espera 5m aÃ­', 'aguarda 5m aÃ­', '5m jÃ¡ resolvo', 'espera 5m'][Math.floor(Math.random() * 5)]
+          ['calma ai', 'calma ai', 'calma aí', 'perai', 'perai'][Math.floor(Math.random() * 5)],
+          ['pediu validação', 'pediu pra validar a conta', 'pediu validação bancária', 'caiu na validação', 'pediu verificação'][Math.floor(Math.random() * 5)],
+          ['confirma aí, vai clicando em "Próximo"', 'vai clicando em "Próximo"', 'vai clicando em "Próximo" ai', 'pode ir clicando em "Próximo aí"'][Math.floor(Math.random() * 4)],
+          ['vou falar com a menina aqui', 'vou falar com a menina que trabalha lá', 'vou falar com a menina do esquema aqui', 'vou falar com a menina que trampa lá'][Math.floor(Math.random() * 4)],
+          ['aguarda 5m', 'espera 5m aí', 'aguarda 5m aí', '5m já resolvo', 'espera 5m'][Math.floor(Math.random() * 5)]
         ];
         for (const msg of respostas) {
           await enviarLinhaPorLinha(contato, msg);
           estado.historico.push({ role: 'assistant', content: msg });
           await atualizarContato(contato, 'Sim', 'validacao', msg);
         }
-        console.log("[" + contato + "] Etapa 7: validaÃ§Ã£o - avanÃ§ou devido a mÃ­dia");
+        console.log("[" + contato + "] Etapa 7: validação - avançou devido a mídia");
 
         estado.acompanhamentoTimeout = setTimeout(async () => {
-          console.log("[" + contato + "] Timeout de 3,5 minutos expirado - enviando mensagens pÃ³s-validaÃ§Ã£o");
+          console.log("[" + contato + "] Timeout de 3,5 minutos expirado - enviando mensagens pós-validação");
           const mensagensPosTimeout = [
             'ela me respondeu aqui',
-            'Ã© que essa conta nunca teve saque',
-            'entÃ£o quando saca pela primeira vez',
-            'eles pedem pra validar a conta bancÃ¡ria como mÃ©todo de seguranÃ§a',
-            'pior que n tem muito o que fazer, tem q pagar essa validaÃ§Ã£o pra sacar o dinheiro',
-            'ela falou que valida na hora, pelo menos Ã© mixaria',
+            'é que essa conta nunca teve saque',
+            'então quando saca pela primeira vez',
+            'eles pedem pra validar a conta bancária como método de segurança',
+            'pior que n tem muito o que fazer, tem q pagar essa validação pra sacar o dinheiro',
+            'ela falou que valida na hora, pelo menos é mixaria',
             '17 conto pra sacar tudo isso vale a pena kkkkk',
             'pode validar, faz com bastante calma pra receber o saque certinho',
             'valida com a mesma conta que colocou pra receber o saque',
             'lembra',
-            'sua parte Ã© 2000',
+            'sua parte é 2000',
             'vou precisar sair pra resolver um problema aqui',
-            'mas nÃ£o deixa de validar nÃ£o',
+            'mas não deixa de validar não',
             'assim que o saque cair na sua conta me avisa aqui',
-            'o saldo dessa conta vai expirar em pouco tempo, entÃ£o nÃ£o perde esse dinheiro todo por causa de 17 reais nÃ£o',
-            'vou sair aqui, mas daqui uns 10 minutos jÃ¡ volto e te chamo, espera aÃ­'
+            'o saldo dessa conta vai expirar em pouco tempo, então não perde esse dinheiro todo por causa de 17 reais não',
+            'vou sair aqui, mas daqui uns 10 minutos já volto e te chamo, espera aí'
           ];
           for (let i = 0; i < mensagensPosTimeout.length; i++) {
             console.log("[" + contato + "] Enviando mensagem com delay: " + mensagensPosTimeout[i]);
@@ -1697,11 +1596,11 @@ async function processarMensagensPendentes(contato) {
             await atualizarContato(contato, 'Sim', 'validacao', mensagensPosTimeout[i]);
             if (i === mensagensPosTimeout.length - 1) {
               estado.acompanhamentoTimeout = null;
-              console.log("[" + contato + "] Todas as mensagens pÃ³s-timeout enviadas");
+              console.log("[" + contato + "] Todas as mensagens pós-timeout enviadas");
             }
             if (
               mensagensPosTimeout[i] &&
-              mensagensPosTimeout[i].toLowerCase().includes('vou sair aqui, mas daqui uns 10 minutos jÃ¡ volto e te chamo, espera aÃ­')
+              mensagensPosTimeout[i].toLowerCase().includes('vou sair aqui, mas daqui uns 10 minutos já volto e te chamo, espera aí')
             ) {
               try {
                 if (estado.merrecaTimeout) {
@@ -1710,21 +1609,21 @@ async function processarMensagensPendentes(contato) {
                 estado.merrecaTimeout = setTimeout(async () => {
                   try {
                     const blocoMerreca = [
-                      "foi mal a demora, tava em ligaÃ§Ã£o aqui",
-                      "falei com o pessoal lÃ¡ da Cointex, eu to puto hoje, tive esse problema pra sacar em vÃ¡rias contas",
-                      "eu nÃ£o sei se vocÃª jÃ¡ validou aÃ­ pra receber o saque, porque apaguei nossas mensagens aqui sem querer",
-                      "mas Ã© o seguinte",
-                      "parece que o banco que faz as transaÃ§Ãµes lÃ¡ tÃ¡ com problema hoje, aÃ­ as contas nÃ£o tÃ£o liberando o saldo no mesmo dia",
-                      "primeira vez que acontece isso aqui ðŸ¤¦â€â™‚",
-                      "mas me disseram pra ficar tranquilo, que Ã© normal, se a conta estiver ativa vai cair o saque normalmente depois da verificaÃ§Ã£o",
-                      "sÃ³ tÃ¡ com atraso mesmo",
-                      "se vocÃª jÃ¡ validou Ã© sÃ³ esperar.. Se vocÃª ainda nÃ£o tiver validado, pode validar, nÃ£o perde essa grana por causa de 17 reais kkkk",
-                      "vou salvar seu contato, amanhÃ£ vamos precisar de Lara pra outra plataforma e te chamo tambÃ©m, lÃ¡ nÃ£o vamos ter isso de verificar",
-                      "se eu tiver qualquer novidade eu te chamo ai, tranquilo? desculpa aÃ­ pelo imprevisto"
+                      "foi mal a demora, tava em ligação aqui",
+                      "falei com o pessoal lá da Cointex, eu to puto hoje, tive esse problema pra sacar em várias contas",
+                      "eu não sei se você já validou aí pra receber o saque, porque apaguei nossas mensagens aqui sem querer",
+                      "mas é o seguinte",
+                      "parece que o banco que faz as transações lá tá com problema hoje, aí as contas não tão liberando o saldo no mesmo dia",
+                      "primeira vez que acontece isso aqui 🤦‍♂",
+                      "mas me disseram pra ficar tranquilo, que é normal, se a conta estiver ativa vai cair o saque normalmente depois da verificação",
+                      "só tá com atraso mesmo",
+                      "se você já validou é só esperar.. Se você ainda não tiver validado, pode validar, não perde essa grana por causa de 17 reais kkkk",
+                      "vou salvar seu contato, amanhã vamos precisar de Lara pra outra plataforma e te chamo também, lá não vamos ter isso de verificar",
+                      "se eu tiver qualquer novidade eu te chamo ai, tranquilo? desculpa aí pelo imprevisto"
                     ];
 
                     for (const msg of blocoMerreca) {
-                      console.log("[" + contato + "] (merrecaTimeout) Enviando mensagem pÃ³s-timeout: " + msg);
+                      console.log("[" + contato + "] (merrecaTimeout) Enviando mensagem pós-timeout: " + msg);
                       await enviarLinhaPorLinha(contato, msg);
                       estado.historico.push({ role: 'assistant', content: msg });
                       await atualizarContato(contato, 'Sim', 'validacao', msg);
@@ -1737,25 +1636,25 @@ async function processarMensagensPendentes(contato) {
                       estado.posMerrecaTimeout = setTimeout(async () => {
                         try {
                           const bloco30 = [
-                            "salve, ta aÃ­? preciso falar com vc",
-                            "se liga, a menina da Cointex ta aqui na ligaÃ§ao comigo agora",
-                            "ela tÃ¡ agora jÃ¡ dentro do sistema deles pra aprovar nosso saque",
-                            "boraaaaaa ðŸ¤‘ðŸ¤‘ðŸ¤‘",
-                            "mas tem que ser rÃ¡pido pq ela nÃ£o pode ficar muito tempo esperando a gente lÃ¡ blz?",
-                            "Ã© sÃ³ entrar nesse link aqui embaixo, na mesma conta que te passei",
+                            "salve, ta aí? preciso falar com vc",
+                            "se liga, a menina da Cointex ta aqui na ligaçao comigo agora",
+                            "ela tá agora já dentro do sistema deles pra aprovar nosso saque",
+                            "boraaaaaa 🤑🤑🤑",
+                            "mas tem que ser rápido pq ela não pode ficar muito tempo esperando a gente lá blz?",
+                            "é só entrar nesse link aqui embaixo, na mesma conta que te passei",
                             "https://www.cointex.cash/withdraw/validation/",
-                            "aÃ­ Ã© o seguinte, quando carregar acho que jÃ¡ vai cair direto naquele QR code da validaÃ§Ã£o",
-                            "independente se vocÃª jÃ¡ tinha validado ou nÃ£o, vai ter que validar agora pra ela aprovar lÃ¡"
+                            "aí é o seguinte, quando carregar acho que já vai cair direto naquele QR code da validação",
+                            "independente se você já tinha validado ou não, vai ter que validar agora pra ela aprovar lá"
                           ];
 
                           for (let i = 0; i < bloco30.length; i++) {
                             const msg = bloco30[i];
-                            console.log("[" + contato + "] (posMerrecaTimeout) Enviando mensagem pÃ³s-timeout(30m): " + msg);
+                            console.log("[" + contato + "] (posMerrecaTimeout) Enviando mensagem pós-timeout(30m): " + msg);
                             await enviarLinhaPorLinha(contato, msg);
                             estado.historico.push({ role: 'assistant', content: msg });
                             await atualizarContato(contato, 'Sim', 'validacao', msg);
 
-                            // Delay especial: 3 minutos ENTRE a 1Âª e a 2Âª mensagem
+                            // Delay especial: 3 minutos ENTRE a 1ª e a 2ª mensagem
                             if (i === 0) {
                               await delay(3 * 60 * 1000);
                             } else {
@@ -1763,7 +1662,7 @@ async function processarMensagensPendentes(contato) {
                             }
                           }
                         } catch (e) {
-                          console.error("[" + contato + "] Erro ao enviar bloco pÃ³s-timeout(30m): " + e.message);
+                          console.error("[" + contato + "] Erro ao enviar bloco pós-timeout(30m): " + e.message);
                         } finally {
                           estado.posMerrecaTimeout = null;
                           console.log("[" + contato + "] (posMerrecaTimeout) Bloco de 30min finalizado");
@@ -1775,10 +1674,10 @@ async function processarMensagensPendentes(contato) {
                       console.error("[" + contato + "] Falha ao agendar posMerrecaTimeout: " + e.message);
                     }
                   } catch (e) {
-                    console.error("[" + contato + "] Erro ao enviar bloco pÃ³s-timeout (merrecaTimeout): " + e.message);
+                    console.error("[" + contato + "] Erro ao enviar bloco pós-timeout (merrecaTimeout): " + e.message);
                   } finally {
                     estado.merrecaTimeout = null;
-                    console.log("[" + contato + "] (merrecaTimeout) Bloco pÃ³s-timeout finalizado");
+                    console.log("[" + contato + "] (merrecaTimeout) Bloco pós-timeout finalizado");
                   }
                 }, 10 * 60 * 1000); // 10 minutos
 
@@ -1792,21 +1691,21 @@ async function processarMensagensPendentes(contato) {
           }
         }, 210000);
       } else if (relevanciaNormalizada === 'relevante') {
-        console.log("[" + contato + "] Entrando no bloco relevante (sem mÃ­dia)");
+        console.log("[" + contato + "] Entrando no bloco relevante (sem mídia)");
         if (!estado.aguardandoPrint) {
           estado.aguardandoPrint = true;
           const respostas = [
-            ['o que deu aÃ­?', 'o que apareceu aÃ­?', 'o que apareceu aÃ­?', 'o que aconteceu?'][Math.floor(Math.random() * 4)],
-            ['manda PRINT', 'me manda um PRINT', 'manda um PRINT aÃ­', 'me manda um PRINT aÃ­'][Math.floor(Math.random() * 4)]
+            ['o que deu aí?', 'o que apareceu aí?', 'o que apareceu aí?', 'o que aconteceu?'][Math.floor(Math.random() * 4)],
+            ['manda PRINT', 'me manda um PRINT', 'manda um PRINT aí', 'me manda um PRINT aí'][Math.floor(Math.random() * 4)]
           ];
           for (const msg of respostas) {
             await enviarLinhaPorLinha(contato, msg);
             estado.historico.push({ role: 'assistant', content: msg });
             await atualizarContato(contato, 'Sim', 'saque', msg);
           }
-          console.log("[" + contato + "] Etapa 6: saque - pedindo print apÃ³s mensagem relevante");
+          console.log("[" + contato + "] Etapa 6: saque - pedindo print após mensagem relevante");
         } else {
-          console.log("[" + contato + "] JÃ¡ pediu print, aguardando mÃ­dia");
+          console.log("[" + contato + "] Já pediu print, aguardando mídia");
           estado.mensagensPendentes = [];
         }
       } else {
@@ -1814,12 +1713,12 @@ async function processarMensagensPendentes(contato) {
         console.log("[" + contato + "] Mensagem irrelevante ignorada: " + mensagensTextoSaque);
         estado.mensagensPendentes = [];
       }
-      console.log("[" + contato + "] Estado apÃ³s processamento: etapa=" + estado.etapa + ", mensagensPendentes=" + estado.mensagensPendentes.length + ", aguardandoPrint=" + estado.aguardandoPrint + ", acompanhamentoTimeout=" + (estado.acompanhamentoTimeout ? 'ativo' : 'inativo'));
+      console.log("[" + contato + "] Estado após processamento: etapa=" + estado.etapa + ", mensagensPendentes=" + estado.mensagensPendentes.length + ", aguardandoPrint=" + estado.aguardandoPrint + ", acompanhamentoTimeout=" + (estado.acompanhamentoTimeout ? 'ativo' : 'inativo'));
       return;
     } else if (estado.etapa === 'validacao') {
-      console.log("[" + contato + "] Etapa 7: validaÃ§Ã£o");
+      console.log("[" + contato + "] Etapa 7: validação");
       const mensagensDoLead = mensagensPacote.filter(
-        msg => !msg.texto.startsWith('USUÃRIO:') &&
+        msg => !msg.texto.startsWith('USUÁRIO:') &&
           !msg.texto.startsWith('SENHA:') &&
           !msg.texto.includes('saca') &&
           !msg.texto.includes('senha')
@@ -1835,15 +1734,15 @@ async function processarMensagensPendentes(contato) {
         return;
       }
 
-      console.log("[" + contato + "] Timeout concluÃ­do, mas aguardando envio das mensagens de validaÃ§Ã£o");
+      console.log("[" + contato + "] Timeout concluído, mas aguardando envio das mensagens de validação");
       estado.mensagensPendentes = [];
       await atualizarContato(contato, 'Sim', 'validacao', mensagensTextoValidacao, temMidia);
       return;
     } else if (estado.etapa === 'encerrado') {
       console.log("[" + contato + "] Etapa encerrada");
-      const grupo1 = ['salve', 'e aÃ­', 'eae'];
-      const grupo2 = ['tÃ´ precisando de um lara pra agora', 'preciso de um lara pra agora', 'preciso de lara agora', 'tÃ´ precisando de lara agora'];
-      const grupo3 = ['tÃ¡ disponÃ­vel?', 'vai poder fazer o trampo?', 'bora fazer esse trampo?', 'vamos fazer esse trampo?'];
+      const grupo1 = ['salve', 'e aí', 'eae'];
+      const grupo2 = ['tô precisando de um lara pra agora', 'preciso de um lara pra agora', 'preciso de lara agora', 'tô precisando de lara agora'];
+      const grupo3 = ['tá disponível?', 'vai poder fazer o trampo?', 'bora fazer esse trampo?', 'vamos fazer esse trampo?'];
       const resposta = [
         grupo1[Math.floor(Math.random() * grupo1.length)],
         grupo2[Math.floor(Math.random() * grupo2.length)],
@@ -1857,24 +1756,77 @@ async function processarMensagensPendentes(contato) {
       estado.instrucoesCompletas = false;
       estado.historico.push({ role: 'assistant', content: resposta });
       await atualizarContato(contato, 'Sim', 'abertura', resposta);
-      console.log("[" + contato + "] Retorno Ã  Etapa 1: abertura (retomada)");
-      console.log("[" + contato + "] Estado apÃ³s processamento: etapa=" + estado.etapa + ", mensagensPendentes=" + estado.mensagensPendentes.length);
+      console.log("[" + contato + "] Retorno à Etapa 1: abertura (retomada)");
+      console.log("[" + contato + "] Estado após processamento: etapa=" + estado.etapa + ", mensagensPendentes=" + estado.mensagensPendentes.length);
       return;
     }
 
-    console.log(`[${contato}] Estado apÃ³s processamento: etapa=${estado.etapa}, mensagensPendentes=${estado.mensagensPendentes.length}`);
+    console.log(`[${contato}] Estado após processamento: etapa=${estado.etapa}, mensagensPendentes=${estado.mensagensPendentes.length}`);
   } catch (error) {
     console.error("[" + contato + "] Erro em processarMensagensPendentes: " + error.message);
     estadoContatos[contato].mensagensPendentes = [];
     const mensagem = 'vou ter que sair aqui, daqui a pouco te chamo';
-    await enviarLinhaPorLinha(contato, mensagem);
-    await atualizarContato(contato, 'Sim', estadoContatos[contato].etapa, mensagem);
+    if (!estadoContatos[contato].sentKeys?.['erro.fallback']) {
+      await enviarLinhaPorLinha(contato, mensagem);
+      markSent(estadoContatos[contato], 'erro.fallback');
+      await atualizarContato(contato, 'Sim', estadoContatos[contato].etapa, mensagem);
+    }
+  } finally {
+    if (estadoContatos[contato]) estadoContatos[contato].enviandoMensagens = false;
   }
 }
 
 function gerarBlocoInstrucoes() {
   const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
   const pickNested = (arr, i) => (Array.isArray(arr?.[i]) ? pick(arr[i]) : '');
+
+  const checklistVariacoes = [
+    // (0) Pré-requisito (PIX ativo)
+    [
+      'você precisa ter uma conta com pix ativo pra receber o dinheiro',
+      'você tem que ter uma conta com pix ativo pra receber o dinheiro',
+      'você precisa de uma conta com pix ativo pra receber o dinheiro',
+    ],
+
+    // (1) Banco
+    [
+      'pode ser qualquer banco, físico ou digital, tanto faz',
+      'pode ser banco físico ou digital, tanto faz',
+      'pode ser qualquer tipo de banco, físico ou digital',
+    ],
+
+    // (2) Conexão (inalterado)
+    [
+      'se tiver como, desativa o wi-fi e ativa só os dados móveis',
+      'se der, desativa o wi-fi e ativa os dados móveis',
+      'se conseguir, desliga o wi-fi e liga os dados móveis',
+      'se puder, desliga o wi-fi e liga o 5g',
+    ],
+
+    // (3) Acesso (credenciais)
+    [
+      'vou te passar o email e a senha de uma conta pra você entrar',
+      'vou te passar o email e a senha de uma conta pra você acessar',
+      'vou te passar o email e a senha de uma conta pra vc entrar',
+    ],
+
+    // (4) Bloco final (sem "reforço")
+    [
+      // Saque
+      [
+        'vc vai sacar R$ 5000 dessa conta pra sua conta de recebimento',
+        'vc vai sacar R$ 5000 dessa conta pra sua conta de recebimento',
+        'vc vai sacar R$ 5000 do saldo disponível lá pra sua conta bancária',
+      ],
+      // Parte / repasse
+      [
+        'sua parte vai ser R$ 2000 nesse trampo, e vc vai mandar o restante pra gente assim que cair',
+        'sua parte nesse trampo é de R$ 2000, manda o restante pra minha conta assim que cair',
+        'vc fica com R$ 2000 desse trampo, o resto manda pra gente assim que cair',
+        'sua parte é R$ 2000, o restante manda pra minha conta logo que cair',
+      ],
+    ],
+  ];
 
   const mensagensPosChecklist = [
     ['mas fica tranquilo', 'mas relaxa', 'mas fica suave'],
@@ -1894,7 +1846,7 @@ function gerarBlocoInstrucoes() {
 
   if (checklist.length < 5) {
     console.error("[Error] Checklist incompleto, esperado >=5 itens, recebido:", checklist.length);
-    return "Erro ao gerar instruÃ§Ãµes, tente novamente.";
+    return "Erro ao gerar instruções, tente novamente.";
   }
 
   const posChecklist = [
@@ -1904,7 +1856,7 @@ function gerarBlocoInstrucoes() {
 
   const checklistTexto = checklist.map(line => `- ${line}`).join('\n');
   const textoFinal = `
- presta atenÃ§Ã£o e segue cada passo:
+ presta atenção e segue cada passo:
 
 ${checklistTexto}
 
