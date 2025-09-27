@@ -14,10 +14,18 @@ const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirma
 const estadoContatos = require('./state.js');
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
 const URL_RX = /https?:\/\/\S+/i;
 const OPTOUT_RX = /\b(pare|para(?!\w)|parar|não quero|nao quero|me remove|remova|me tira|me exclui|excluir|cancelar|unsubscribe|cancel|stop|parem|não mandar|nao mandar)\b/i;
-const REOPTIN_RX = /^\s*bora\s*$/i;
+const REOPTIN_RX = /\b(mudei de ideia|quero sim|topo|tô dentro|to dentro|bora|vamos|pode ser|fechado|fechou|partiu)\b/i;
+
+const MAX_OPTOUTS = 3;
+const OPTOUT_MSGS = {
+  1: "tranquilo, não vou mais te mandar mensagem. qualquer coisa só chamar",
+  2: "fechou, sem problema. se mudar de ideia é só chamar",
+  3: "ok, vou parar por aqui"
+};
 
 async function setDoNotContact(contato, value = true) {
   try {
@@ -52,8 +60,9 @@ async function finalizeOptOut(contato, reasonText = '') {
        WHERE id = $1
     `, [contato, String(reasonText || '').slice(0, 200), next, permanently]);
 
-    // Envia confirmação só no 1º e 2º opt-out; no 3º, silêncio
     if (!permanently) {
+      // atraso humano 7–15s
+      await delay(rand(7000, 15000));
       await sendMessage(contato, OPTOUT_MSGS[next] || OPTOUT_MSGS[2]);
     }
   } catch (e) {
@@ -497,11 +506,32 @@ async function processarMensagensPendentes(contato) {
     const dnc = !!dncRows?.[0]?.do_not_contact;
     const isReoptInHere = REOPTIN_RX.test((mensagensTexto || '').trim());
 
-    if (dnc && !isReoptInHere) {
-      console.log(`[${contato}] Ignorando processamento (do_not_contact=true)`);
-      estado.mensagensPendentes = []; // esvazia fila para não acumular
+    // --- CONSUMO DA REATIVAÇÃO --- //
+    if (estado.aguardandoConfirmacaoPosReativacao && mensagensPacote.length > 0) {
+      console.log(`[${contato}] Recebeu mensagem pós-reativação → liberando fluxo normal (sem enviar nada).`);
+      estado.aguardandoConfirmacaoPosReativacao = false;
+      estado.reativadoAgora = false;
+      // prossegue o processamento normalmente
+    }
+
+    if (dnc && isReoptInHere) {
+      // limpa DNC sem falar nada
+      await setDoNotContact(contato, false);   // já existe em bot.js
+      // sinaliza que acabou de reativar -> suprimir nudges e esperar MAIS UMA mensagem
+      estado.reativadoAgora = true;
+      estado.aguardandoConfirmacaoPosReativacao = true;
+      console.log(`[${contato}] Reativado por opt-in (silencioso). Aguardando próxima msg para prosseguir.`);
+      // NÃO envie nada agora; apenas retorne
       return;
     }
+
+    // comportamento antigo permanece:
+    if (dnc && !isReoptInHere) {
+      console.log(`[${contato}] Ignorando processamento (do_not_contact=true)`);
+      estado.mensagensPendentes = [];
+      return;
+    }
+
 
     const agora = Date.now();
     if (estado.etapa === 'encerrado' && estado.encerradoAte && agora < estado.encerradoAte) {
@@ -836,13 +866,15 @@ async function processarMensagensPendentes(contato) {
     if (estado.etapa === 'impulso') {
       console.log("[" + contato + "] Etapa 2: impulso");
       const contextoAceite = mensagensPacote.map(msg => msg.texto).join('\n');
-      const tipoAceite = await gerarResposta(
+      const tipoAceite = String(await gerarResposta(
         [{ role: 'system', content: promptClassificaAceite(contextoAceite) }],
         ["ACEITE", "RECUSA", "DUVIDA"]
-      );
-      console.log("[" + contato + "] Mensagens processadas: " + mensagensTexto + ", Classificação: " + tipoAceite);
+      )).toUpperCase();
 
-      if (tipoAceite.includes('aceite') || tipoAceite.includes('duvida')) {
+      console.log(`[${contato}] Mensagens processadas: ${mensagensTexto}, Classificação: ${tipoAceite}`);
+
+
+      if (tipoAceite.includes('ACEITE') || tipoAceite.includes('DUVIDA')) {
         if (!estado.instrucoesEnviadas) {
           const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
           const intro1 = pick(mensagensIntrodutorias?.[0]);
@@ -889,7 +921,7 @@ async function processarMensagensPendentes(contato) {
             console.log("[" + contato + "] Etapa 3: instruções - credenciais não disponíveis");
           }
         }
-      } else if (tipoAceite.includes('recusa')) {
+      } else if (tipoAceite.includes('RECUSA')) {
         const msg = 'beleza, sem problema. se mudar de ideia é só chamar';
         await enviarLinhaPorLinha(contato, msg);
         estado.etapa = 'encerrado';
@@ -900,10 +932,12 @@ async function processarMensagensPendentes(contato) {
         return;
       }
       else {
-        const mensagem = 'manda aí se vai ou não';
-        await enviarLinhaPorLinha(contato, mensagem);
-        estado.historico.push({ role: 'assistant', content: mensagem });
-        await atualizarContato(contato, 'Sim', 'impulso', mensagem);
+        if (estado.reativadoAgora) {
+          console.log(`[${contato}] Reativado recentemente → suprimindo nudge (manda aí se vai ou não).`);
+        } else {
+          await enviarLinhaPorLinha(contato, 'manda aí se vai ou não');
+          await atualizarContato(contato, 'Sim', 'impulso');
+        }
       }
       console.log(`[${contato}] Estado após processamento: etapa=${estado.etapa}, mensagensPendentes=${estado.mensagensPendentes.length}`);
       return;
@@ -918,7 +952,7 @@ async function processarMensagensPendentes(contato) {
           ["ACEITE", "RECUSA", "DUVIDA"]
         );
 
-        if (tipoAceite.includes('aceite') && !estado.mensagemDelayEnviada) {
+        if (tipoAceite.includes('ACEITE') && !estado.mensagemDelayEnviada) {
           const mensagem = '5 minutinhos eu já te chamo aí';
           await enviarLinhaPorLinha(contato, mensagem);
           estado.mensagemDelayEnviada = true;
@@ -968,13 +1002,13 @@ async function processarMensagensPendentes(contato) {
 
     if (estado.etapa === 'acesso') {
       console.log("[" + contato + "] Etapa 4: acesso");
-      const tipoAcesso = await gerarResposta(
+      const tipoAcesso = String(await gerarResposta(
         [{ role: 'system', content: promptClassificaAcesso(mensagensTexto) }],
         ["CONFIRMADO", "NAO_CONFIRMADO", "DUVIDA", "NEUTRO"]
-      );
+      )).toUpperCase();
       console.log("[" + contato + "] Mensagens processadas: " + mensagensTexto + ", Classificação: " + tipoAcesso);
 
-      if (tipoAcesso.includes('confirmado')) {
+      if (tipoAcesso.includes('CONFIRMADO')) {
         const mensagensConfirmacao = [
           'agora manda um PRINT (ou uma foto) do saldo disponível, ou manda o valor disponível em escrito, EXATAMENTE NESSE FORMATO: "5000", por exemplo',
         ];
@@ -987,7 +1021,7 @@ async function processarMensagensPendentes(contato) {
         estado.mensagensDesdeSolicitacao = [];
         estado.tentativasAcesso = 0;
         console.log("[" + contato + "] Etapa 5: confirmação - instruções enviadas");
-      } else if (tipoAcesso.includes('nao_confirmado')) {
+      } else if (tipoAcesso.includes('NAO_CONFIRMADO')) {
         if (estado.tentativasAcesso < 2) {
           const resposta = respostasNaoConfirmadoAcesso[Math.floor(Math.random() * respostasNaoConfirmadoAcesso.length)];
           await enviarLinhaPorLinha(contato, resposta);
@@ -1004,7 +1038,7 @@ async function processarMensagensPendentes(contato) {
           await atualizarContato(contato, 'Sim', 'encerrado', mensagem);
           console.log("[" + contato + "] Etapa encerrada após 2 tentativas");
         }
-      } else if (tipoAcesso.includes('duvida')) {
+      } else if (tipoAcesso.includes('DUVIDA')) {
         const mensagemLower = mensagensTexto.toLowerCase();
         let resposta = 'usa o usuário e senha que te passei, entra no link e me avisa com ENTREI';
         for (const [duvida, respostaPronta] of Object.entries(respostasDuvidasComuns)) {
@@ -1031,17 +1065,17 @@ async function processarMensagensPendentes(contato) {
       const temMidiaConfirmacao = mensagensPacote.some(msg => msg.temMidia);
       let tipoConfirmacao;
       if (temMidiaConfirmacao) {
-        tipoConfirmacao = 'confirmado';
+        tipoConfirmacao = 'CONFIRMADO';
         console.log("[" + contato + "] Mídia detectada, classificando como confirmado automaticamente");
       } else {
-        tipoConfirmacao = await gerarResposta(
+        tipoConfirmacao = String(await gerarResposta(
           [{ role: 'system', content: promptClassificaConfirmacao(mensagensTextoConfirmacao) }],
           ["CONFIRMADO", "NAO_CONFIRMADO", "DUVIDA", "NEUTRO"]
-        );
+        )).toUpperCase();
       }
 
       let saldoInformado = null;
-      if (tipoConfirmacao.includes('confirmado')) {
+      if (tipoConfirmacao.includes('CONFIRMADO')) {
         const candidatos = estado.mensagensDesdeSolicitacao
           .slice()
           .reverse()
@@ -1062,7 +1096,7 @@ async function processarMensagensPendentes(contato) {
 
       console.log("[" + contato + "] Mensagens processadas: " + mensagensTextoConfirmacao + ", Classificação: " + tipoConfirmacao + ", Saldo informado: " + (saldoInformado || 'nenhum'));
 
-      if (tipoConfirmacao.includes('confirmado') && saldoInformado) {
+      if (tipoConfirmacao.includes('CONFIRMADO') && saldoInformado) {
         estado.saldo_informado = saldoInformado;
         const saqueVariacoes = [
           'beleza, saca R$ 5155 (descontando a taxa de 3%, vai cair R$ 5000 certinho) dessa conta',
@@ -1133,7 +1167,7 @@ async function processarMensagensPendentes(contato) {
         estado.etapa = 'saque';
         estado.mensagensDesdeSolicitacao = [];
         console.log("[" + contato + "] Etapa 6: saque - instruções enviadas");
-      } else if (tipoConfirmacao.includes('nao_confirmado')) {
+      } else if (tipoConfirmacao.includes('NAO_CONFIRMADO')) {
         if (estado.tentativasConfirmacao < 2) {
           const resposta = respostasNaoConfirmadoConfirmacao[Math.floor(Math.random() * respostasNaoConfirmadoConfirmacao.length)];
           await enviarLinhaPorLinha(contato, resposta);
@@ -1150,7 +1184,7 @@ async function processarMensagensPendentes(contato) {
           await atualizarContato(contato, 'Sim', 'encerrado', mensagem);
           console.log(`[${contato}] Etapa encerrada após 2 tentativas`);
         }
-      } else if (tipoConfirmacao.includes('duvida')) {
+      } else if (tipoConfirmacao.includes('DUVIDA')) {
         const mensagemLower = mensagensTextoConfirmacao.toLowerCase();
         let resposta = 'me manda o valor que tá em FINANCEIRO, só o número em texto';
         for (const [duvida, respostaPronta] of Object.entries(respostasDuvidasComuns)) {
