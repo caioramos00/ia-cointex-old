@@ -16,20 +16,52 @@ const CONTACT_TOKEN = process.env.CONTACT_TOKEN;
 const sentContactByWa = new Set();
 const sentContactByClid = new Set();
 
-const LOG_LEVEL = (process.env.LOG_LEVEL || 'info').toLowerCase(); // debug|info|warn|error
-const isDebug = () => LOG_LEVEL === 'debug';
+const MAX_OPTOUTS = 3;
+const OPTOUT_MSGS = {
+  1: 'tranquilo, não vou mais te mandar mensagem. qualquer coisa só chamar',
+  2: 'de boa, vou passar o trampo pra outra pessoa e não te chamo mais. não me manda mais mensagem',
+};
 
-function maskPhone(p) {
-  const s = String(p || '');
-  if (s.length < 6) return '***';
-  return s.slice(0, 2) + '*****' + s.slice(-2);
+async function registerOptOut(pool, contato, reasonText = '') {
+  const { rows } = await pool.query(
+    'SELECT opt_out_count FROM contatos WHERE id = $1 LIMIT 1',
+    [contato]
+  );
+  const next = (rows?.[0]?.opt_out_count || 0) + 1;
+  const permanently = next >= MAX_OPTOUTS;
+
+  await pool.query(
+    `UPDATE contatos
+       SET do_not_contact = TRUE,
+           do_not_contact_at = NOW(),
+           do_not_contact_reason = $2,
+           opt_out_count = $3,
+           permanently_blocked = $4
+     WHERE id = $1`,
+    [contato, String(reasonText).slice(0, 200), next, permanently]
+  );
+
+  return { next, permanently };
 }
-function mcLog(level, msg, data) {
-  const lv = level.toLowerCase();
-  const order = { debug: 10, info: 20, warn: 30, error: 40 };
-  if ((order[lv] || 20) < (order[LOG_LEVEL] || 20)) return;
-  if (data) console[lv === 'debug' ? 'log' : lv](`[ManyChat] ${msg}`, data);
-  else console[lv === 'debug' ? 'log' : lv](`[ManyChat] ${msg}`);
+
+async function clearOptOutIfAllowed(pool, contato) {
+  const { rows } = await pool.query(
+    'SELECT opt_out_count, permanently_blocked FROM contatos WHERE id = $1 LIMIT 1',
+    [contato]
+  );
+  const c = rows?.[0] || {};
+  if (c.permanently_blocked || (c.opt_out_count || 0) >= MAX_OPTOUTS) {
+    return { allowed: false };
+  }
+  await pool.query(
+    `UPDATE contatos
+        SET do_not_contact = FALSE,
+            do_not_contact_at = NULL,
+            do_not_contact_reason = NULL
+      WHERE id = $1`,
+    [contato]
+  );
+  return { allowed: true };
 }
 
 function checkAuth(req, res, next) {
@@ -610,20 +642,19 @@ function setupRoutes(
 
             // 1) Re-opt-in
             const { rows: flags } = await pool.query(
-              'SELECT do_not_contact FROM contatos WHERE id = $1 LIMIT 1',
+              'SELECT do_not_contact, opt_out_count, permanently_blocked FROM contatos WHERE id = $1 LIMIT 1',
               [contato]
             );
-            if (flags[0]?.do_not_contact) {
+
+            // se está bloqueado permanentemente, ignora para sempre (inclusive "BORA")
+            if (flags?.[0]?.permanently_blocked || (flags?.[0]?.opt_out_count || 0) >= MAX_OPTOUTS) {
+              return res.sendStatus(200); // silêncio definitivo
+            }
+            if (flags?.[0]?.do_not_contact) {
               if (REOPTIN_RX.test(texto)) {
-                await pool.query(
-                  `UPDATE contatos
-                     SET do_not_contact = FALSE,
-                         do_not_contact_at = NULL,
-                         do_not_contact_reason = NULL
-                   WHERE id = $1`,
-                  [contato]
-                );
-                console.log(`[${contato}] Re-opt-in por "BORA"`);
+                const { allowed } = await clearOptOutIfAllowed(pool, contato);
+                if (!allowed) return res.sendStatus(200); // já excedeu o limite → silêncio
+                console.log(`[${contato}] Re-opt-in por "BORA" (abaixo do limite)`);
                 await sendMessage(contato, 'fechou, voltamos então. bora.');
               } else {
                 await sendMessage(contato, 'vc tinha parado as msgs. se quiser retomar, manda "BORA".');
@@ -635,19 +666,12 @@ function setupRoutes(
             const isToken = OPTOUT_TOKENS.has(n);
             const isPhrase = OPTOUT_PHRASES.some((p) => n.includes(p));
             if (isToken || isPhrase) {
-              await pool.query(
-                `UPDATE contatos
-                   SET do_not_contact = TRUE,
-                       do_not_contact_at = NOW(),
-                       do_not_contact_reason = $2
-                 WHERE id = $1`,
-                [contato, texto.slice(0, 200)]
-              );
-              console.log(`[${contato}] OPT-OUT ativado por: "${texto}"`);
-              await sendMessage(
-                contato,
-                'tranquilo, vamos parar então, vou passar o trampo pra outra pessoa. se mudar de ideia só mandar um "BORA" aí que voltamos a fazer'
-              );
+              const { next, permanently } = await registerOptOut(pool, contato, texto);
+              console.log(`[${contato}] OPT-OUT #${next} ${permanently ? '(permanente)' : ''} por: "${texto}"`);
+
+              if (!permanently) {
+                await sendMessage(contato, OPTOUT_MSGS[next] || OPTOUT_MSGS[2]); // 1ª ou 2ª msg
+              }
               return res.sendStatus(200);
             }
           } catch (e) {
@@ -1082,6 +1106,42 @@ function setupRoutes(
     } catch (e) {
       log('error', 'Erro ao salvarContato', { err: e.message });
     }
+
+    // 7A) Respeitar DO NOT CONTACT (antes de qualquer processamento)
+    const { rows: flags } = await pool.query(
+      'SELECT do_not_contact, opt_out_count, permanently_blocked FROM contatos WHERE id = $1 LIMIT 1',
+      [phone]
+    );
+    const isDNC = !!flags?.[0]?.do_not_contact;
+    const isBlocked = !!flags?.[0]?.permanently_blocked || (flags?.[0]?.opt_out_count || 0) >= MAX_OPTOUTS;
+    const isReopt = REOPTIN_RX.test((textIn || '').trim());
+
+    if (isBlocked) {
+      // silêncio definitivo, inclusive para "BORA"
+      return res.json({ ok: true, ignored: 'permanently_blocked' });
+    }
+    if (isDNC && !isReopt) {
+      console.log(`[${phone}] Ignorando (do_not_contact=true) no ManyChat: "${(textIn || '').slice(0, 80)}"`);
+      return res.json({ ok: true, ignored: 'do_not_contact' });
+    }
+    if (isDNC && isReopt) {
+      const { allowed } = await clearOptOutIfAllowed(pool, phone);
+      if (!allowed) return res.json({ ok: true, ignored: 'limit_exceeded' });
+      await sendMessage(phone, 'fechou, voltamos então. bora.');
+    }
+
+    // 7B) Detectar OPT-OUT no ManyChat e registrar contagem
+const n = norm(textIn || '');
+const isToken = OPTOUT_TOKENS.has(n);
+const isPhrase = OPTOUT_PHRASES.some(p => n.includes(p));
+if (isToken || isPhrase) {
+  const { next, permanently } = await registerOptOut(pool, phone, textIn || '');
+  console.log(`[${phone}] OPT-OUT #${next} ${permanently ? '(permanente)' : ''} por: "${textIn}"`);
+  if (!permanently) {
+    await sendMessage(phone, OPTOUT_MSGS[next] || OPTOUT_MSGS[2]); // 1ª ou 2ª msg
+  }
+  return res.json({ ok: true });
+}
 
     // ===== 8) Fila/estado de mensagens =====
     if (!estado[idContato]) estado[idContato] = { mensagensPendentes: [], mensagensDesdeSolicitacao: [] };

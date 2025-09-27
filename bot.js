@@ -27,24 +27,51 @@ async function setDoNotContact(contato, value = true) {
   }
 }
 
-async function finalizeOptOut(contato) {
-  const confirm = 'tranquilo, não vou mais te mandar mensagem. qualquer coisa só chamar';
-  try { await sendMessage(contato, confirm); } 
-  catch (e) { console.error(`[${contato}] Falha ao enviar confirmação de opt-out: ${e.message}`); }
-  await setDoNotContact(contato, true);
+async function finalizeOptOut(contato, reasonText = '') {
+  try {
+    const { rows } = await pool.query(
+      'SELECT opt_out_count, permanently_blocked FROM contatos WHERE id = $1 LIMIT 1',
+      [contato]
+    );
+    if (rows?.[0]?.permanently_blocked || (rows?.[0]?.opt_out_count || 0) >= MAX_OPTOUTS) {
+      // já estava no silêncio definitivo
+      return;
+    }
 
+    const next = (rows?.[0]?.opt_out_count || 0) + 1;
+    const permanently = next >= MAX_OPTOUTS;
+
+    await pool.query(`
+      UPDATE contatos
+         SET do_not_contact = TRUE,
+             do_not_contact_at = NOW(),
+             do_not_contact_reason = $2,
+             opt_out_count = $3,
+             permanently_blocked = $4
+       WHERE id = $1
+    `, [contato, String(reasonText || '').slice(0, 200), next, permanently]);
+
+    // Envia confirmação só no 1º e 2º opt-out; no 3º, silêncio
+    if (!permanently) {
+      await sendMessage(contato, OPTOUT_MSGS[next] || OPTOUT_MSGS[2]);
+    }
+  } catch (e) {
+    console.error(`[${contato}] Falha ao registrar opt-out: ${e.message}`);
+  }
+
+  // encerra fluxos em memória
   const st = estadoContatos[contato];
   if (st?._timer2Abertura) clearTimeout(st._timer2Abertura);
   if (st?.merrecaTimeout) clearTimeout(st.merrecaTimeout);
   if (st?.posMerrecaTimeout) clearTimeout(st.posMerrecaTimeout);
   if (st) st.etapa = 'encerrado';
 
-  console.log(`[${contato}] Opt-out concluído → confirmação enviada e fluxo encerrado.`);
+  console.log(`[${contato}] Opt-out concluído (contabilizado).`);
 }
 
 async function checarOptOutGlobal(contato, mensagensTexto) {
   if (OPTOUT_RX.test(mensagensTexto)) {
-    await finalizeOptOut(contato);            // <-- envia msg e só depois marca DNC
+    await finalizeOptOut(contato, mensagensTexto);
     console.log(`[${contato}] Opt-out detectado via regex.`);
     return true;
   }
@@ -59,14 +86,15 @@ async function checarOptOutGlobal(contato, mensagensTexto) {
   return false;
 }
 
-async function gerarResposta(messages, max_tokens = 60) {
+async function gerarResposta(messages) {
   try {
     console.log("[OpenAI] Enviando requisição: " + JSON.stringify(messages, null, 2));
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-5',
       messages,
-      temperature: 0.7,
-      max_tokens
+      temperature: 0,
+      top_p: 0.1,
+      max_output_tokens: 8,
     });
     const respostaBruta = completion.choices[0].message.content.trim();
     const resposta = quebradizarTexto(respostaBruta);
@@ -93,21 +121,32 @@ async function enviarLinhaPorLinha(to, texto) {
     return;
   }
 
+  // Bloqueio por DNC / limite / bloqueio permanente
   try {
     const { rows } = await pool.query(
-      'SELECT do_not_contact FROM contatos WHERE id = $1 LIMIT 1',
+      'SELECT do_not_contact, opt_out_count, permanently_blocked FROM contatos WHERE id = $1 LIMIT 1',
       [to]
     );
-    if (rows[0]?.do_not_contact) {
-      console.log(`[${to}] Bloqueado (do_not_contact=true). Abortando envio.`);
+    const flags = rows?.[0] || {};
+    const MAX_OPTOUTS = 3;
+    const atingiuLimite = (flags.opt_out_count || 0) >= MAX_OPTOUTS;
+
+    if (flags.permanently_blocked || atingiuLimite || flags.do_not_contact) {
+      console.log(
+        `[${to}] Bloqueado para envio (permanently_blocked=${!!flags.permanently_blocked}, ` +
+        `opt_out_count=${flags.opt_out_count || 0}, do_not_contact=${!!flags.do_not_contact}). Abortando envio.`
+      );
+      estado.enviandoMensagens = false;
       return;
     }
   } catch (e) {
-    console.error(`[${to}] Falha ao checar do_not_contact: ${e.message}`);
+    console.error(`[${to}] Falha ao checar flags de contato: ${e.message}`);
+    // Em caso de falha no DB, melhor não enviar nada
+    return;
   }
 
+  // Selo de identidade (apenas na 1ª resposta da abertura)
   try {
-    // 1ª resposta da sessão = ainda em 'abertura' e !aberturaConcluida
     const isFirstResponse = (estado.etapa === 'abertura' && !estado.aberturaConcluida);
     if (isFirstResponse) {
       const settings = await getBotSettings().catch(() => null);
@@ -131,6 +170,7 @@ async function enviarLinhaPorLinha(to, texto) {
     console.error('[SeloIdent] Falha ao avaliar/preparar label:', e.message);
   }
 
+  // Sufixo de opt-out (apenas na 1ª resposta da abertura)
   try {
     const isFirstResponse = (estado.etapa === 'abertura' && !estado.aberturaConcluida);
     if (isFirstResponse) {
@@ -140,7 +180,7 @@ async function enviarLinhaPorLinha(to, texto) {
 
       if (optHintEnabled && suffix) {
         const linhasTmp = texto.split('\n');
-        // pega a última linha não-vazia (sua "linha 3")
+        // pega a última linha não-vazia
         let idx = linhasTmp.length - 1;
         while (idx >= 0 && !linhasTmp[idx].trim()) idx--;
         if (idx >= 0 && !linhasTmp[idx].includes(suffix)) {
@@ -153,10 +193,11 @@ async function enviarLinhaPorLinha(to, texto) {
     console.error('[OptOutHint] Falha ao anexar sufixo:', e.message);
   }
 
+  // Envio linha a linha com pacing
   estado.enviandoMensagens = true;
   console.log(`[${to}] Iniciando envio de mensagem: "${texto}"`);
 
-  await delay(10000); // mantém seu pacing
+  await delay(10000); // pacing inicial
 
   const linhas = texto.split('\n').filter(line => line.trim() !== '');
   for (const linha of linhas) {
@@ -382,6 +423,19 @@ async function processarMensagensPendentes(contato) {
       : [];
     const mensagensTexto = mensagensPacote.map(msg => msg.texto).join('\n');
     const temMidia = mensagensPacote.some(msg => msg.temMidia);
+
+    const { rows: dncRows } = await pool.query(
+      'SELECT do_not_contact FROM contatos WHERE id = $1 LIMIT 1',
+      [contato]
+    );
+    const dnc = !!dncRows?.[0]?.do_not_contact;
+    const isReoptInHere = REOPTIN_RX.test((mensagensTexto || '').trim());
+
+    if (dnc && !isReoptInHere) {
+      console.log(`[${contato}] Ignorando processamento (do_not_contact=true)`);
+      estado.mensagensPendentes = []; // esvazia fila para não acumular
+      return;
+    }
 
     const agora = Date.now();
     if (estado.etapa === 'encerrado' && estado.encerradoAte && agora < estado.encerradoAte) {
