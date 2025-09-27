@@ -1206,48 +1206,25 @@ async function processarMensagensPendentes(contato) {
 
         console.log(`[${contato}] Resposta em interesse: ${classificacao}`);
 
-        if (classificacao.includes("ACEITE")) {
-          estado.etapa = "impulso";
-          await atualizarContato(contato, "Sim", "impulso", "[Avanço após aceite]");
-          console.log(`[${contato}] Aceite detectado → avançando para impulso`);
-        } else {
-          console.log(`[${contato}] Não foi aceite (stand-by).`);
-        }
-      }
-      return;
-    }
+        if (classificacao.includes("ACEITE") || classificacao.includes("DUVIDA")) {
+          // avança DIRETO para instruções
+          const pick = arr => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
+          const mensagensIntrodutorias = [
+            [
+              'salva meu contato (ex.: "Ryan")',
+              'já deixa meu contato salvo aí',
+              'me adiciona nos seus contatos'
+            ],
+            [
+              'se surgir mais tarefa, te aciono',
+              'se aparecer outra, te passo',
+              'se pintar mais uma hoje, te mando'
+            ]
+          ];
+          const intro = [pick(mensagensIntrodutorias[0]), pick(mensagensIntrodutorias[1])].filter(Boolean).join('\n');
+          const bloco = gerarBlocoInstrucoes(); // usa seu gerador atual
+          const mensagemCompleta = `${intro}\n\n${bloco}`.trim();
 
-    if (estado.etapa === 'impulso') {
-      console.log("[" + contato + "] Etapa 2: impulso");
-      const contextoAceite = mensagensPacote.map(msg => msg.texto).join('\n');
-      const tipoAceite = String(await gerarResposta(
-        [{ role: 'system', content: promptClassificaAceite(contextoAceite) }],
-        ["ACEITE", "RECUSA", "DUVIDA"]
-      )).toUpperCase();
-
-      console.log(`[${contato}] Mensagens processadas: ${mensagensTexto}, Classificação: ${tipoAceite}`);
-
-      const mensagensIntrodutorias = [
-        [
-          'antes de mais nada, já salva meu contato, pode salvar como "Ryan"',
-          'antes de mais nada, já deixa meu contato salvo aí, pode salvar como "Ryan"',
-          'antes de mais nada, já me adiciona aí nos seus contatos, pode salvar como "Ryan"',
-        ],
-        [
-          'pq se aparecer mais um trampo, eu já passo pra você',
-          'porque se aparecer mais um trampo hoje eu já te passo',
-          'se aparecer mais um trampo hoje, você já faz também',
-        ],
-      ];
-
-      if (tipoAceite.includes('ACEITE') || tipoAceite.includes('DUVIDA')) {
-        if (!estado.instrucoesEnviadas) {
-          const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
-          const intro1 = pick(mensagensIntrodutorias?.[0]);
-          const intro2 = pick(mensagensIntrodutorias?.[1]);
-          const mensagemIntro = [intro1, intro2].filter(Boolean).join('\n');
-          const blocoInstrucoes = gerarBlocoInstrucoes();
-          const mensagemCompleta = mensagemIntro + "\n\n" + blocoInstrucoes;
           await enviarLinhaPorLinha(contato, mensagemCompleta);
           estado.etapa = 'instruções';
           estado.instrucoesEnviadas = true;
@@ -1256,27 +1233,21 @@ async function processarMensagensPendentes(contato) {
           estado.mensagemDelayEnviada = false;
           estado.historico.push({ role: 'assistant', content: mensagemCompleta });
           await atualizarContato(contato, 'Sim', 'instruções', mensagemCompleta);
-          console.log("[" + contato + "] Etapa 3: instruções - checklist enviado");
+          return;
         }
-      } else if (tipoAceite.includes('RECUSA')) {
-        const msg = 'beleza, sem problema. se mudar de ideia é só chamar';
-        await enviarLinhaPorLinha(contato, msg);
-        estado.etapa = 'encerrado';
-        estado.encerradoAte = Date.now() + 24 * 60 * 60 * 1000;
-        estado.historico.push({ role: 'assistant', content: msg });
-        await atualizarContato(contato, 'Sim', 'encerrado', msg);
-        console.log("[" + contato + "] Recusa sem insistência → encerrado.");
-        return;
-      }
-      else {
-        if (estado.reativadoAgora) {
-          console.log(`[${contato}] Reativado recentemente → suprimindo nudge (manda aí se vai ou não).`);
-        } else {
-          await enviarLinhaPorLinha(contato, 'manda aí se vai ou não');
-          await atualizarContato(contato, 'Sim', 'impulso');
+
+        if (classificacao.includes("RECUSA")) {
+          const msg = 'beleza, sem problema. se mudar de ideia é só chamar';
+          await enviarLinhaPorLinha(contato, msg);
+          estado.etapa = 'encerrado';
+          estado.encerradoAte = Date.now() + 24 * 60 * 60 * 1000;
+          estado.historico.push({ role: 'assistant', content: msg });
+          await atualizarContato(contato, 'Sim', 'encerrado', msg);
+          return;
         }
+
+        console.log(`[${contato}] Não foi aceite (stand-by).`);
       }
-      console.log(`[${contato}] Estado após processamento: etapa=${estado.etapa}, mensagensPendentes=${estado.mensagensPendentes.length}`);
       return;
     }
 
@@ -1284,7 +1255,6 @@ async function processarMensagensPendentes(contato) {
       console.log("[" + contato + "] Etapa 3: instruções");
 
       if (estado.instrucoesCompletas && mensagensPacote.length > 0) {
-        // Qualquer interação do usuário após o envio do checklist dispara o bloco de acesso (se já tivermos as credenciais)
         if (
           estado.credenciais &&
           estado.credenciais.username &&
