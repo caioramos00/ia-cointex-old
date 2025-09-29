@@ -1104,6 +1104,7 @@ async function processarMensagensPendentes(contato) {
             console.log("[" + contato + "] Etapa 'interesse'");
 
             if (!estado.interesseEnviado) {
+                const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
                 await delay(7000 + Math.floor(Math.random() * 6000));
                 const g1 = [
                     'to bem corrido aqui',
@@ -1202,15 +1203,10 @@ async function processarMensagensPendentes(contato) {
                     'tlgd?',
                 ];
 
+                estado.interesseEnviado = true;
                 const msgInteresse = `${pick(g1)}, ${pick(g2)}... ${pick(g3)}, ${pick(g4)}, ${pick(g5)}`;
                 const sent = await sendOnce(contato, estado, 'interesse.msg', msgInteresse);
-                if (sent) {
-                    estado.interesseEnviado = true;
-                    await atualizarContato(contato, 'Sim', 'interesse', msgInteresse);
-                } else if (wasSent(estado, 'interesse.msg')) {
-                    estado.interesseEnviado = true;
-                }
-
+                if (sent) await atualizarContato(contato, 'Sim', 'interesse', msgInteresse);
                 estado.mensagensPendentes = [];
                 estado.mensagensDesdeSolicitacao = [];
                 return;
@@ -1225,7 +1221,7 @@ async function processarMensagensPendentes(contato) {
 
                 console.log(`[${contato}] Resposta em interesse: ${classificacao}`);
 
-                if (classificacao.includes("ACEITE")) {
+                if (classificacao.trim() === "ACEITE") {
                     estado.etapa = 'instruções';
                     estado.primeiraRespostaPendente = false;
                     estado.instrucoesEnviadas = false;
@@ -1835,7 +1831,7 @@ async function processarMensagensPendentes(contato) {
 
             console.log("[" + contato + "] Classificação em acesso: " + tipoAcesso);
 
-            if (tipoAcesso.includes('CONFIRMADO')) {
+            if (tipoAcesso.trim() === 'CONFIRMADO') {
                 estado.etapa = 'confirmacao';
                 estado.mensagensDesdeSolicitacao = [];
                 estado.tentativasAcesso = 0;
@@ -1845,10 +1841,10 @@ async function processarMensagensPendentes(contato) {
                 console.log("[" + contato + "] Etapa 5: confirmação — avançou após CONFIRMADO");
                 return;
             } else {
-                console.log("[" + contato + "] Acesso em standby (aguardando CONFIRMADO).");
+                console.log(`[${contato}] Acesso aguardando CONFIRMADO. Retorno: ${tipoAcesso}`);
                 estado.mensagensPendentes = [];
+                return;
             }
-            return;
         }
 
         if (estado.etapa === 'confirmacao') {
@@ -1925,7 +1921,7 @@ async function processarMensagensPendentes(contato) {
             );
 
             const temMidia = mensagensPacote.some(m => m.temMidia);
-            const textoAgregado = estado.mensagensDesdeSolicitacao.join('\n');
+            const textoAgregado = estado.mensagensDesdeSolicitacao.join('\n'); // já contém o pacote atual
             const mNumero = textoAgregado.match(/(\d{1,3}(?:\.\d{3})*|\d+)(?:,\d{2})?/);
             const numeroExtraido = mNumero ? mNumero[0] : null;
 
@@ -1945,26 +1941,81 @@ async function processarMensagensPendentes(contato) {
         else if (estado.etapa === 'saque') {
             console.log("[" + contato + "] Etapa 6: saque - Início do processamento");
 
+            // 6.1) Dispara exatamente 3 MENSAGENS (com variações em blocos), uma única vez.
             if (!estado.saqueInstrucoesEnviadas) {
-                const pacote = [
-                    "<SAQUE_INSTRUCAO_1>",
-                    "<SAQUE_INSTRUCAO_2>",
-                    "<SAQUE_INSTRUCAO_3>",
-                    "<SAQUE_INSTRUCAO_4>",
-                    "<SAQUE_INSTRUCAO_5>",
-                    "<SAQUE_INSTRUCAO_6>",
-                    "<SAQUE_INSTRUCAO_7>",
-                    "<SAQUE_INSTRUCAO_8>"
-                ];
-                for (const linha of pacote) {
-                    await enviarLinhaPorLinha(contato, linha);
-                    estado.historico.push({ role: 'assistant', content: linha });
-                    await atualizarContato(contato, 'Sim', 'saque', linha);
+                // flags de dedupe/retomada (como nas outras etapas)
+                estado.saqueMsg1Enviada = !!estado.saqueMsg1Enviada;
+                estado.saqueMsg2Enviada = !!estado.saqueMsg2Enviada;
+                estado.saqueMsg3Enviada = !!estado.saqueMsg3Enviada;
+
+                const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
+
+                // ---------- MSG 1: "{b1}, {b2}, {b3}, {b4}… {b5}, {b6}" ----------
+                const m1b1 = ['beleza', 'certo', 'tranquilo', 'fechou', 'show'];
+                const m1b2 = ['segue o saque agora', 'vamos pro saque agora', 'faz o saque agora', 'pode iniciar o saque'];
+                const m1b3 = ['do jeitinho que te falei', 'conforme te passei', 'igual expliquei', 'como combinamos'];
+                const m1b4 = ['vai cair certinho depois', 'vai certinho depois', 'fica tudo certo no final', 'sem erro no final'];
+                const m1b5 = ['nessa mesma conta', 'na conta que te passei', 'na conta aí', 'na conta de agora'];
+                const m1b6 = ['agora', 'já agora', 'de uma vez', 'nesse instante'];
+
+                const msg1 = `${pick(m1b1)}, ${pick(m1b2)}, ${pick(m1b3)}, ${pick(m1b4)}… ${pick(m1b5)}, ${pick(m1b6)}`;
+
+                // ---------- MSG 2 (preserva QUEBRAS DE LINHA):
+                // "{b1}, {b2}:\n\n{senha aleatória 1}\n8293\n{senha aleatória 2}" ----------
+                const m2b1 = ['vai pedir uma senha de saque', 'vai pedir a senha de saque', 'ele pede a senha de saque'];
+                const m2b2 = ['usa uma dessas', 'vai ser uma dessas', 'pode usar uma dessas'];
+
+                const s1 = gerarSenhaAleatoria();
+                const s2 = '8293';
+                const s3 = gerarSenhaAleatoria();
+
+                const msg2 = `${pick(m2b1)}, ${pick(m2b2)}:\n\n${s1}\n${s2}\n${s3}`;
+
+                // ---------- MSG 3: "{b1}, {b2}… {b3}! {b4}, {b5}, {b6}" ----------
+                const m3b1 = ['tua parte é 2000', 'sua parte é de 2000', 'tua parte no trampo é de 2000', 'sua parte é de R$ 2000'];
+                const m3b2 = ['assim que cair me avisa', 'quando cair me chama aqui', 'me avisa na hora que cair', 'me dá um toque quando cair'];
+                const m3b3 = ['pra eu te passar como vai mandar minha parte', 'pra te explicar como mandar minha parte', 'pra te passar o jeito de mandar minha parte'];
+                const m3b4 = ['faz direitinho', 'certo pelo certo', 'sem gracinha', 'vai certinho'];
+                const m3b5 = ['se travar manda um PRINT', 'qualquer erro me manda PRINT', 'deu problema, manda PRINT', 'se der algo, manda PRINT'];
+                const m3b6 = ['vai na calma', 'faz com calma', 'vai clicando certinho', 'sem pressa'];
+
+                const msg3 = `${pick(m3b1)}, ${pick(m3b2)}… ${pick(m3b3)}! ${pick(m3b4)}, ${pick(m3b5)}, ${pick(m3b6)}`;
+
+                // disparamos as 3 mensagens com dedupe/retomada
+                try {
+                    if (!estado.saqueMsg1Enviada) {
+                        estado.saqueMsg1Enviada = true;
+                        await sendMessage(contato, msg1);
+                        estado.historico.push({ role: 'assistant', content: msg1 });
+                        await atualizarContato(contato, 'Sim', 'saque', msg1);
+                        await delay(6000 + Math.floor(Math.random() * 3000));
+                    }
+
+                    if (!estado.saqueMsg2Enviada) {
+                        estado.saqueMsg2Enviada = true;
+                        // IMPORTANTE: usar sendMessage (uma única mensagem com \n)
+                        await sendMessage(contato, msg2);
+                        estado.historico.push({ role: 'assistant', content: msg2 });
+                        await atualizarContato(contato, 'Sim', 'saque', msg2);
+                        await delay(7000 + Math.floor(Math.random() * 4000));
+                    }
+
+                    if (!estado.saqueMsg3Enviada) {
+                        estado.saqueMsg3Enviada = true;
+                        await sendMessage(contato, msg3);
+                        estado.historico.push({ role: 'assistant', content: msg3 });
+                        await atualizarContato(contato, 'Sim', 'saque', msg3);
+                    }
+
+                    estado.saqueInstrucoesEnviadas = true; // pacote concluído
+                } catch (e) {
+                    console.error("[" + contato + "] Erro ao enviar mensagens de saque: " + e.message);
                 }
-                estado.saqueInstrucoesEnviadas = true;
-                return;
+
+                return; // só classifica mensagens do lead nas próximas iterações
             }
 
+            // 6.2) Após o pacote, processa mensagens do usuário e encaminha para 'validacao' (mídia ou relevante)
             const mensagensPacote = Array.isArray(estado.mensagensPendentes)
                 ? estado.mensagensPendentes.splice(0)
                 : [];
@@ -1978,7 +2029,6 @@ async function processarMensagensPendentes(contato) {
             const mensagensTextoSaque = mensagensDoLead.map(msg => msg.texto).join('\n');
             const temMidiaReal = mensagensPacote.some(msg => msg.temMidia);
 
-            // Classificação de relevância (já existente no projeto)
             const tipoRelevancia = await gerarResposta(
                 [{ role: 'system', content: promptClassificaRelevancia(mensagensTextoSaque, temMidiaReal) }],
                 ["RELEVANTE", "IRRELEVANTE"]
@@ -1986,7 +2036,6 @@ async function processarMensagensPendentes(contato) {
             const relevanciaNormalizada = String(tipoRelevancia).trim().toLowerCase();
             console.log("[" + contato + "] Saque → relevância: " + relevanciaNormalizada + " | temMidiaReal=" + temMidiaReal);
 
-            // Encaminha para 'validacao' e devolve as mensagens para serem processadas lá
             if (temMidiaReal || relevanciaNormalizada === 'relevante') {
                 estado.etapa = 'validacao';
                 // devolve o pacote para ser reprocessado na 'validacao'
@@ -1995,7 +2044,6 @@ async function processarMensagensPendentes(contato) {
                 return;
             }
 
-            // irrelevante → apenas descarta silenciosamente
             console.log("[" + contato + "] Saque → mensagem irrelevante, ignorando.");
             estado.mensagensPendentes = [];
             return;
@@ -2004,7 +2052,6 @@ async function processarMensagensPendentes(contato) {
         else if (estado.etapa === 'validacao') {
             console.log("[" + contato + "] Etapa 7: validacao");
 
-            // Se estiver em timeout, ignorar (mantém seu comportamento atual)
             if (estado.acompanhamentoTimeout) {
                 console.log("[" + contato + "] Ignorando mensagens durante acompanhamentoTimeout");
                 const mensagensPacoteTimeout = Array.isArray(estado.mensagensPendentes)
