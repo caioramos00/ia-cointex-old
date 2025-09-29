@@ -1737,7 +1737,8 @@ async function processarMensagensPendentes(contato) {
         'segue o link',
         'entra no link',
         'clica no link',
-        'aperta no link'
+        'aperta no link',
+        'só clicar no link'
       ];
       const bloco2C = [
         'entra na conta mas nao mexe em nada ainda',
