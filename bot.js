@@ -1617,6 +1617,7 @@ async function processarMensagensPendentes(contato) {
           try {
             if (!estado.instrMsg1Enviada) {
               estado.instrMsg1Enviada = true;
+              await delay(rand(15000, 25000));
               await sendMessage(contato, instrMsg1);
               estado.historico.push({ role: 'assistant', content: instrMsg1 });
               await atualizarContato(contato, 'Sim', 'instruções', instrMsg1);
@@ -1624,17 +1625,17 @@ async function processarMensagensPendentes(contato) {
             }
 
             if (!estado.instrMsg2Enviada) {
-              await delay(7000 + Math.floor(Math.random() * 6000));
               estado.instrMsg2Enviada = true;
-              await sendMessage(contato, instrMsg2); // 🔥 agora vai em UMA mensagem
+              await delay(rand(25000, 35000));
+              await sendMessage(contato, instrMsg2);
               estado.historico.push({ role: 'assistant', content: instrMsg2 });
               await atualizarContato(contato, 'Sim', 'instruções', instrMsg2);
-              console.log(`[${contato}] [instruções] Msg2 enviada (bullets em uma mensagem)`);
+              console.log(`[${contato}] [instruções] Msg2 enviada (bullets únicos)`);
             }
 
             if (!estado.instrMsg3Enviada) {
-              await delay(7000 + Math.floor(Math.random() * 6000));
               estado.instrMsg3Enviada = true;
+              await delay(rand(8000, 12000));
               await sendMessage(contato, instrMsg3);
               estado.historico.push({ role: 'assistant', content: instrMsg3 });
               await atualizarContato(contato, 'Sim', 'instruções', instrMsg3);
@@ -1650,7 +1651,6 @@ async function processarMensagensPendentes(contato) {
             estado.instrucoesSequenciada = false;
           }
         }
-
         return;
       }
 
@@ -1792,12 +1792,34 @@ async function processarMensagensPendentes(contato) {
 
           ${pick(bloco2C)}, ${pick(bloco3C)}`;
 
-      await sendOnce(contato, estado, 'acesso.m1', msg1);
-      await sendOnce(contato, estado, 'acesso.m2', msg2);
-      await sendOnce(contato, estado, 'acesso.m3', msg3);
+      if (!estado.acessoMsgsDisparadas) {
+        estado.acessoMsgsDisparadas = true;
 
-      estado.credenciaisEntregues = true;
-      await atualizarContato(contato, 'Sim', 'acesso', '[Credenciais enviadas]');
+        if (!estado.acessoMsg1Enviada) {
+          estado.acessoMsg1Enviada = true;
+          await sendOnce(contato, estado, 'acesso.m1', msg1);
+          await atualizarContato(contato, 'Sim', 'acesso', msg1);
+          await delay(rand(6000, 9000));
+        }
+
+        if (!estado.acessoMsg2Enviada) {
+          estado.acessoMsg2Enviada = true;
+          await sendOnce(contato, estado, 'acesso.m2', msg2);
+          await atualizarContato(contato, 'Sim', 'acesso', msg2);
+          await delay(rand(7000, 11000));
+        }
+
+        if (!estado.acessoMsg3Enviada) {
+          estado.acessoMsg3Enviada = true;
+          await sendOnce(contato, estado, 'acesso.m3', msg3);
+          await atualizarContato(contato, 'Sim', 'acesso', msg3);
+        }
+
+        estado.credenciaisEntregues = true;
+        await atualizarContato(contato, 'Sim', 'acesso', '[Credenciais enviadas]');
+      } else {
+        console.log(`[${contato}] Acesso: sequência já disparada (acessoMsgsDisparadas=true), não reenviando.`);
+      }
 
       const mensagensTexto = mensagensPacote.map(m => m.texto).join('\n');
       const tipoAcesso = String(await gerarResposta(
