@@ -1812,7 +1812,8 @@ async function processarMensagensPendentes(contato) {
                     await atualizarContato(contato, 'Sim', 'acesso', msg3);
                 }
 
-                estado.credenciaisEntregues = true;
+                estado.acessoDesdeTs = Date.now();
+
                 await atualizarContato(contato, 'Sim', 'acesso', '[Credenciais enviadas]');
                 estado.mensagensPendentes = [];
                 return;
@@ -1820,7 +1821,15 @@ async function processarMensagensPendentes(contato) {
                 console.log(`[${contato}] Acesso: sequência já disparada (acessoMsgsDisparadas=true), não reenviando.`);
             }
 
-            const mensagensTexto = mensagensPacote.map(m => m.texto).join('\n');
+            const recentes = mensagensPacote.filter(m => {
+                const ts = m.ts || m.recebidaEm || m.time || 0;
+                return !estado.acessoDesdeTs || ts >= estado.acessoDesdeTs;
+            });
+            if (!recentes.length) {
+                console.log(`[${contato}] Acesso: nada novo após credenciais — não vou classificar.`);
+                return;
+            }
+            const mensagensTexto = recentes.map(m => m.texto).join('\n');
             if (!mensagensTexto.trim()) return;
             if (!estado.credenciaisEntregues) {
                 console.log(`[${contato}] Acesso: aguardando finalizar envio (credenciaisEntregues=false). Não vou classificar ainda.`);
@@ -1832,7 +1841,7 @@ async function processarMensagensPendentes(contato) {
                 ["CONFIRMADO", "NAO_CONFIRMADO", "DUVIDA", "NEUTRO"]
             );
             const tipoAcesso = String(tipoAcessoRaw).toUpperCase();
-            console.log(`[${contato}] acesso> LLM="${tipoAcesso}" texto="${mensagensTexto.slice(0, 120)}..."`);
+            console.log(`[${contato}] acesso> LLM="${tipoAcesso}" novas=${recentes.length} texto="${mensagensTexto.slice(0, 120)}..."`);
 
             if (tipoAcesso === 'CONFIRMADO') {
                 estado.etapa = 'confirmacao';
