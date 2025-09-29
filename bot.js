@@ -1813,7 +1813,7 @@ async function processarMensagensPendentes(contato) {
                 }
 
                 estado.acessoDesdeTs = Date.now();
-
+                estado.credenciaisEntregues = true;
                 await atualizarContato(contato, 'Sim', 'acesso', '[Credenciais enviadas]');
                 estado.mensagensPendentes = [];
                 return;
@@ -1822,8 +1822,8 @@ async function processarMensagensPendentes(contato) {
             }
 
             const recentes = mensagensPacote.filter(m => {
-                const ts = m.ts || m.recebidaEm || m.time || 0;
-                return !estado.acessoDesdeTs || ts >= estado.acessoDesdeTs;
+                const ts = Number(m.ts ?? m.recebidaEm ?? m.time);
+                return !estado.acessoDesdeTs || !ts || ts >= estado.acessoDesdeTs;
             });
             if (!recentes.length) {
                 console.log(`[${contato}] Acesso: nada novo após credenciais — não vou classificar.`);
