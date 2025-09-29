@@ -737,14 +737,11 @@ async function processarMensagensPendentes(contato) {
         }
         estado.enviandoMensagens = true;
 
-        const estadoSemTimeout = Object.assign({}, estado, { acompanhamentoTimeout: estado && estado.acompanhamentoTimeout ? '[Timeout]' : null });
-        console.log("[" + contato + "] Estado atual: " + JSON.stringify(estadoSemTimeout, null, 2));
+        console.log(`[${contato}] etapa=${estado.etapa} acessoMsgsDisparadas=${estado.acessoMsgsDisparadas} credEnt=${estado.credenciaisEntregues} confirmIni=${estado.confirmacaoMsgInicialEnviada}`);
 
         const mensagensPacote = Array.isArray(estado.mensagensPendentes)
             ? estado.mensagensPendentes.splice(0)
             : [];
-        const mensagensTexto = mensagensPacote.map(msg => msg.texto).join('\n');
-        const temMidia = mensagensPacote.some(msg => msg.temMidia);
 
         const { rows: dncRows } = await pool.query(
             'SELECT do_not_contact FROM contatos WHERE id = $1 LIMIT 1',
@@ -1667,8 +1664,8 @@ async function processarMensagensPendentes(contato) {
                     estado.tentativasAcesso = 0;
                     estado.mensagensDesdeSolicitacao = [];
                     await atualizarContato(contato, 'Sim', 'acesso', '[ACEITE após instruções]');
+                    return;
                 }
-
                 console.log(`[${contato}] Stand-by em 'instruções' (aguardando ACEITE).`);
                 return;
             }
@@ -1817,20 +1814,25 @@ async function processarMensagensPendentes(contato) {
 
                 estado.credenciaisEntregues = true;
                 await atualizarContato(contato, 'Sim', 'acesso', '[Credenciais enviadas]');
+                estado.mensagensPendentes = [];
                 return;
             } else {
                 console.log(`[${contato}] Acesso: sequência já disparada (acessoMsgsDisparadas=true), não reenviando.`);
             }
 
-            // Só classifica quando chegam novas mensagens do usuário
             const mensagensTexto = mensagensPacote.map(m => m.texto).join('\n');
             if (!mensagensTexto.trim()) return;
-            const tipoAcesso = String(await gerarResposta(
-                [{ role: 'system', content: promptClassificaAcesso(mensagensTexto) }],
+            if (!estado.credenciaisEntregues) {
+                console.log(`[${contato}] Acesso: aguardando finalizar envio (credenciaisEntregues=false). Não vou classificar ainda.`);
+                return;
+            }
+            const classifyInput = promptClassificaAcesso(mensagensTexto);
+            const tipoAcessoRaw = await gerarResposta(
+                [{ role: 'system', content: classifyInput }],
                 ["CONFIRMADO", "NAO_CONFIRMADO", "DUVIDA", "NEUTRO"]
-            )).toUpperCase();
-
-            console.log("[" + contato + "] Classificação em acesso: " + tipoAcesso);
+            );
+            const tipoAcesso = String(tipoAcessoRaw).toUpperCase();
+            console.log(`[${contato}] acesso> LLM="${tipoAcesso}" texto="${mensagensTexto.slice(0, 120)}..."`);
 
             if (tipoAcesso === 'CONFIRMADO') {
                 estado.etapa = 'confirmacao';
@@ -1937,6 +1939,7 @@ async function processarMensagensPendentes(contato) {
                 estado.etapa = 'saque';
                 estado.saqueInstrucoesEnviadas = false;
                 estado.mensagensDesdeSolicitacao = [];
+                estado.mensagensPendentes = [];
                 await atualizarContato(contato, 'Sim', 'saque', '[Confirmado — avançando]');
                 return;
             }
