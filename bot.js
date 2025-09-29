@@ -1197,13 +1197,14 @@ async function processarMensagensPendentes(contato) {
           'tlgd?',
         ];
 
-        estado.interesseEnviado = true;
-        _ensureSentMap(estado);
-        if (!estado.sentKeys['interesse.msg']) estado.sentKeys['interesse.msg'] = Date.now();
-
         const msgInteresse = `${pick(g1)}, ${pick(g2)}... ${pick(g3)}, ${pick(g4)}, ${pick(g5)}`;
-        await sendOnce(contato, estado, 'interesse.msg', msgInteresse);
-        await atualizarContato(contato, 'Sim', 'interesse', msgInteresse);
+        const sent = await sendOnce(contato, estado, 'interesse.msg', msgInteresse);
+        if (sent) {
+          estado.interesseEnviado = true;
+          await atualizarContato(contato, 'Sim', 'interesse', msgInteresse);
+        } else if (wasSent(estado, 'interesse.msg')) {
+          estado.interesseEnviado = true;
+        }
 
         estado.mensagensPendentes = [];
         estado.mensagensDesdeSolicitacao = [];
@@ -1555,9 +1556,9 @@ async function processarMensagensPendentes(contato) {
         ];
 
         const instrMsg2 =
-          `• ${pick(pontos1Grupo1)}, ${pick(pontos1Grupo2)}, ${pick(pontos1Grupo3)}\n` +
-          `• ${pick(pontos2Grupo1)}, ${pick(pontos2Grupo2)}, ${pick(pontos2Grupo3)}\n` +
-          `• ${pick(pontos3Grupo1)}, ${pick(pontos3Grupo2)}, ${pick(pontos3Grupo3)}\n` +
+          `• ${pick(pontos1Grupo1)}, ${pick(pontos1Grupo2)}, ${pick(pontos1Grupo3)}\n\n` +
+          `• ${pick(pontos2Grupo1)}, ${pick(pontos2Grupo2)}, ${pick(pontos2Grupo3)}\n\n` +
+          `• ${pick(pontos3Grupo1)}, ${pick(pontos3Grupo2)}, ${pick(pontos3Grupo3)}\n\n` +
           `• ${pick(pontos4Grupo1)}, ${pick(pontos4Grupo2)}, ${pick(pontos4Grupo3)}`;
 
         const msg3Grupo1 = [
@@ -1773,23 +1774,24 @@ async function processarMensagensPendentes(contato) {
         'assim q logar na conta me manda um "ENTREI"',
       ];
 
-      const msg1 =
-        `${pick(bloco1A)}, ${pick(bloco2A)}:
+      const msg1 = [
+        `${pick(bloco1A)}, ${pick(bloco2A)}:`,
+        '',
+        `${pick(bloco3A)}:`,
+        email,
+        '',
+        'Senha:'
+      ].join('\n');
 
-          ${pick(bloco3A)}:
-          ${email}
+      const msg2 = String(senha);
 
-          Senha:`;
-
-      const msg2 = `${senha}`;
-
-      const msg3 =
-        `
-          ${pick(bloco1C)}:
-
-          ${link}
-
-          ${pick(bloco2C)}, ${pick(bloco3C)}`;
+      const msg3 = [
+        `${pick(bloco1C)}:`,
+        '',
+        link,
+        '',
+        `${pick(bloco2C)}, ${pick(bloco3C)}`
+      ].join('\n');
 
       if (!estado.acessoMsgsDisparadas) {
         estado.acessoMsgsDisparadas = true;
