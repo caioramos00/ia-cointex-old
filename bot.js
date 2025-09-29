@@ -640,6 +640,7 @@ function inicializarEstado(contato, tid = '', click_type = 'Orgânico') {
     saldo_informado: null,
     mensagemDelayEnviada: false,
     enviandoMensagens: false,
+    confirmacaoMsgInicialEnviada: false,
     instrucoesCompletas: false,
     aguardandoPrint: false,
     tid: tid,
@@ -1783,7 +1784,6 @@ async function processarMensagensPendentes(contato) {
 
           ${pick(bloco2C)}, ${pick(bloco3C)}`;
 
-      // 3) Disparo anti-duplicata (usa chaves fixas)
       await sendOnce(contato, estado, 'acesso.m1', msg1);
       await sendOnce(contato, estado, 'acesso.m2', msg2);
       await sendOnce(contato, estado, 'acesso.m3', msg3);
@@ -1791,7 +1791,6 @@ async function processarMensagensPendentes(contato) {
       estado.credenciaisEntregues = true;
       await atualizarContato(contato, 'Sim', 'acesso', '[Credenciais enviadas]');
 
-      // 4) Após enviar as 3, aguardamos CONFIRMADO (standby total nos demais)
       const mensagensTexto = mensagensPacote.map(m => m.texto).join('\n');
       const tipoAcesso = String(await gerarResposta(
         [{ role: 'system', content: promptClassificaAcesso(mensagensTexto) }],
@@ -1801,19 +1800,15 @@ async function processarMensagensPendentes(contato) {
       console.log("[" + contato + "] Classificação em acesso: " + tipoAcesso);
 
       if (tipoAcesso.includes('CONFIRMADO')) {
-        // Avança para confirmação
-        const follow =
-          'agora manda um PRINT (ou uma foto) do saldo disponível, ou manda o valor disponível em escrito, EXATAMENTE NESSE FORMATO: "5000", por exemplo';
-        await enviarLinhaPorLinha(contato, follow);
-        estado.historico.push({ role: 'assistant', content: follow });
-        await atualizarContato(contato, 'Sim', 'confirmacao', follow);
-
         estado.etapa = 'confirmacao';
         estado.mensagensDesdeSolicitacao = [];
         estado.tentativasAcesso = 0;
+        estado.confirmacaoMsgInicialEnviada = false;
+
+        await atualizarContato(contato, 'Sim', 'confirmacao', '[Login confirmado — avançando]');
         console.log("[" + contato + "] Etapa 5: confirmação — avançou após CONFIRMADO");
+        return;
       } else {
-        // Standby absoluto: não responder até chegar CONFIRMADO
         console.log("[" + contato + "] Acesso em standby (aguardando CONFIRMADO).");
         estado.mensagensPendentes = [];
       }
