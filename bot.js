@@ -1092,6 +1092,7 @@ async function processarMensagensPendentes(contato) {
         estado.primeiraRespostaPendente = false;
         await atualizarContato(contato, 'Sim', 'interesse', '[Avanço automático após abertura]');
         console.log(`[${contato}] Avanço automático para 'interesse'`);
+        return;
       }
     }
 
@@ -1197,10 +1198,16 @@ async function processarMensagensPendentes(contato) {
           'tlgd?',
         ];
 
+        estado.interesseEnviado = true;
+        _ensureSentMap(estado);
+        if (!estado.sentKeys['interesse.msg']) estado.sentKeys['interesse.msg'] = Date.now();
+
         const msgInteresse = `${pick(g1)}, ${pick(g2)}... ${pick(g3)}, ${pick(g4)}, ${pick(g5)}`;
         await sendOnce(contato, estado, 'interesse.msg', msgInteresse);
         await atualizarContato(contato, 'Sim', 'interesse', msgInteresse);
-        estado.interesseEnviado = true;
+
+        estado.mensagensPendentes = [];
+        estado.mensagensDesdeSolicitacao = [];
         return;
       }
 
