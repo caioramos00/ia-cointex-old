@@ -1817,7 +1817,7 @@ async function processarMensagensPendentes(contato) {
 
                 estado.credenciaisEntregues = true;
                 await atualizarContato(contato, 'Sim', 'acesso', '[Credenciais enviadas]');
-                return; // ⬅️ encerra o ciclo; classificação só no próximo pacote do usuário
+                return;
             } else {
                 console.log(`[${contato}] Acesso: sequência já disparada (acessoMsgsDisparadas=true), não reenviando.`);
             }
