@@ -1092,7 +1092,6 @@ async function processarMensagensPendentes(contato) {
         estado.primeiraRespostaPendente = false;
         await atualizarContato(contato, 'Sim', 'interesse', '[Avanço automático após abertura]');
         console.log(`[${contato}] Avanço automático para 'interesse'`);
-        return;
       }
     }
 
