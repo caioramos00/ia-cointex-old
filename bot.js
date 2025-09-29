@@ -630,6 +630,10 @@ function inicializarEstado(contato, tid = '', click_type = 'Orgânico') {
         aguardandoAceiteInstrucoes: false,
         mensagensPendentes: [],
         mensagensDesdeSolicitacao: [],
+        saqueInstrucoesEnviadas: false,
+        validacaoMsgInicialEnviada: false,
+        validacaoRecebeuMidia: false,
+        aguardandoPrint: false,
         negativasAbertura: 0,
         aberturaConcluida: false,
         instrucoesEnviadas: false,
@@ -1854,19 +1858,52 @@ async function processarMensagensPendentes(contato) {
                 const pick = arr => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
 
                 const bloco1 = [
-                    'abre a parte de FINANCEIRO da conta',
-                    'entra na tela de FINANCEIRO da conta',
-                    'acessa a área de FINANCEIRO'
+                    'boa',
+                    'boaa',
+                    'boaaa',
+                    'beleza',
+                    'belezaa',
+                    'belezaaa',
+                    'tranquilo',
+                    'isso aí',
                 ];
                 const bloco2 = [
-                    'me escreve aqui o valor que aparece (ex.: 5000)',
-                    'digita aqui o valor que estiver aparecendo (ex.: 5000)',
-                    'manda aqui o valor que estiver na tela (ex.: 5000)'
+                    'agora manda um PRINT mostrando o saldo disponível',
+                    'agora manda um PRINT mostrando o saldo disponível aí',
+                    'agora manda um PRINT mostrando o saldo disponível nessa conta',
+                    'agora manda um PRINT mostrando o saldo disponível',
+                    'agora me manda um PRINT mostrando o saldo disponível',
+                    'agora me manda um PRINT mostrando o saldo disponível aí',
+                    'agora me manda um PRINT mostrando o saldo disponível nessa conta',
+                    'agora me manda um PRINT mostrando o saldo disponível',
+                    'agr manda um PRINT mostrando o saldo disponível',
+                    'agr manda um PRINT mostrando o saldo disponível aí',
+                    'agr manda um PRINT mostrando o saldo disponível nessa conta',
+                    'agr manda um PRINT mostrando o saldo disponível',
+                    'agr me manda um PRINT mostrando o saldo disponível',
+                    'agr me manda um PRINT mostrando o saldo disponível aí',
+                    'agr me manda um PRINT mostrando o saldo disponível nessa conta',
+                    'agr me manda um PRINT mostrando o saldo disponível',
+                    'agora manda um PRINT mostrando o saldo',
+                    'agora manda um PRINT mostrando o saldo aí',
+                    'agora manda um PRINT mostrando o saldo nessa conta',
+                    'agora manda um PRINT mostrando o saldo',
+                    'agora me manda um PRINT mostrando o saldo',
+                    'agora me manda um PRINT mostrando o saldo aí',
+                    'agora me manda um PRINT mostrando o saldo nessa conta',
+                    'agora me manda um PRINT mostrando o saldo',
                 ];
                 const bloco3 = [
-                    'ou então me manda um PRINT da tela',
-                    'ou pode mandar um PRINT/foto da tela',
-                    'ou manda um screenshot da tela'
+                    'ou manda em escrito quanto que tem nela',
+                    'ou escreve quanto que tem nela',
+                    'ou escreve aí quanto que tem nela',
+                    'ou escreve aí o valor',
+                    'ou me escreve o valor',
+                    'ou manda o valor em escrito',
+                    'ou me fala aqui qual o valor que tem',
+                    'ou escreve aqui quanto que tem disponível',
+                    'ou me fala o valor disponível',
+                    'ou me manda aqui o valor que tem disponível'
                 ];
 
                 const msgConfirmacao = `${pick(bloco1)}, ${pick(bloco2)}, ${pick(bloco3)}`;
@@ -1908,85 +1945,26 @@ async function processarMensagensPendentes(contato) {
         else if (estado.etapa === 'saque') {
             console.log("[" + contato + "] Etapa 6: saque - Início do processamento");
 
-            // 6.1) Dispara o pacote de instruções de saque UMA ÚNICA VEZ
             if (!estado.saqueInstrucoesEnviadas) {
-                const pick = arr => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
-
-                const saqueVariacoes = [
-                    'beleza, saca R$ 5155 (descontando a taxa de 3%, vai cair R$ 5000 certinho) dessa conta',
-                    'beleza, pode sacar R$ 5155 (descontando a taxa de 3%, vai cair R$ 5000 certinho) dessa conta',
-                    'beleza, saca R$ 5155 (descontando a taxa de 3%, vai cair R$ 5000 certinho)',
-                    'certo, pode sacar R$ 5155 (descontando a taxa de 3%, vai cair R$ 5000 certinho)',
-                    'certo, saca R$ 5155 (descontando a taxa de 3%, vai cair R$ 5000 certinho)',
-                    'pode sacar R$ 5155 (descontando a taxa de 3%, vai cair R$ 5000 certinho)',
-                    'pode sacar R$ 5155 (descontando a taxa de 3%, vai cair R$ 5000 certinho)'
-                ];
-                const senhaIntroVariacao = [
-                    'vai pedir uma senha de saque, vai ser uma dessas:',
-                    'vou te passar uma senha de saque, vai ser uma dessas:',
-                    'vai pedir uma senha, vai ser uma dessas:',
-                    'vai pedir a senha de saque, vai ser uma dessas:'
-                ];
-                const parteVariacao = [
-                    'tua parte no trampo é de 2000',
-                    'tua parte é de 2000',
-                    'não esquece, sua parte é de 2000',
-                    'tua parte no trampo é de R$ 2000',
-                    'tua parte é de R$ 2000',
-                    'não esquece, sua parte é de R$ 2000'
-                ];
-                const avisaVariacao = [
-                    'assim que cai me avisa',
-                    'assim que cair me manda uma mensagem',
-                    'me avisa assim que cai',
-                    'me manda quando cair'
-                ];
-                const pixVariacao = [
-                    'pra eu te passar como você vai mandar minha parte',
-                    'pra eu poder te passar como vc vai mandar minha parte',
-                    'pra eu te falar como vc vai me mandar meu dinheiro',
-                    'pra eu te explicar como vc vai mandar minha parte',
-                    'pra eu te mostrar como vc vai mandar minha parte'
-                ];
-                const avisoVariacao = [
-                    'sem gracinha',
-                    'certo pelo certo',
-                    'não pisa na bola',
-                    'faz direitinho',
-                    'manda certinho',
-                    'manda tudo certo'
-                ];
-                const confiancaVariacao = [
-                    'tô confiando em vc, se fazer certinho tem mais trampo. se tiver qualquer problema pra sacar me manda um PRINT (ou uma foto da tela)',
-                    'tô na fé em vc, faz certo que te passo mais trampo. se tiver qualquer problema pra sacar me manda um PRINT (ou uma foto da tela)',
-                    'tô na confiança, faz certo que vai ter mais. se tiver qualquer problema pra sacar me manda um PRINT (ou uma foto da tela)'
-                ];
-
-                const senha1 = gerarSenhaAleatoria();
-                const senha2 = '8293';
-
                 const pacote = [
-                    pick(saqueVariacoes),
-                    pick(senhaIntroVariacao),
-                    senha1,
-                    senha2,
-                    pick(parteVariacao),
-                    `${pick(avisaVariacao)} ${pick(pixVariacao)}`,
-                    pick(avisoVariacao),
-                    pick(confiancaVariacao)
+                    "<SAQUE_INSTRUCAO_1>",
+                    "<SAQUE_INSTRUCAO_2>",
+                    "<SAQUE_INSTRUCAO_3>",
+                    "<SAQUE_INSTRUCAO_4>",
+                    "<SAQUE_INSTRUCAO_5>",
+                    "<SAQUE_INSTRUCAO_6>",
+                    "<SAQUE_INSTRUCAO_7>",
+                    "<SAQUE_INSTRUCAO_8>"
                 ];
-
                 for (const linha of pacote) {
                     await enviarLinhaPorLinha(contato, linha);
                     estado.historico.push({ role: 'assistant', content: linha });
                     await atualizarContato(contato, 'Sim', 'saque', linha);
                 }
                 estado.saqueInstrucoesEnviadas = true;
-                // depois de enviar o pacote, apenas retorna; próximos handling seguem abaixo no mesmo bloco
                 return;
             }
 
-            // 6.2) ———— Seu fluxo já existente de "saque" (relevância/print/validação) permanece igual ————
             const mensagensPacote = Array.isArray(estado.mensagensPendentes)
                 ? estado.mensagensPendentes.splice(0)
                 : [];
@@ -1995,88 +1973,266 @@ async function processarMensagensPendentes(contato) {
             const mensagensDoLead = mensagensPacote.filter(
                 msg => !msg.texto.startsWith('USUÁRIO:') &&
                     !msg.texto.startsWith('SENHA:') &&
-                    !msg.texto.includes('saca') &&
-                    !msg.texto.includes('senha')
+                    !/saca|senha/i.test(msg.texto || '')
             );
             const mensagensTextoSaque = mensagensDoLead.map(msg => msg.texto).join('\n');
             const temMidiaReal = mensagensPacote.some(msg => msg.temMidia);
 
+            // Classificação de relevância (já existente no projeto)
             const tipoRelevancia = await gerarResposta(
                 [{ role: 'system', content: promptClassificaRelevancia(mensagensTextoSaque, temMidiaReal) }],
                 ["RELEVANTE", "IRRELEVANTE"]
             );
-            console.log("[" + contato + "] Mensagens processadas (apenas lead): " + mensagensTextoSaque + ", temMidiaReal: " + temMidiaReal + ", Resposta bruta OpenAI: \"" + tipoRelevancia + "\"");
+            const relevanciaNormalizada = String(tipoRelevancia).trim().toLowerCase();
+            console.log("[" + contato + "] Saque → relevância: " + relevanciaNormalizada + " | temMidiaReal=" + temMidiaReal);
 
-            const relevanciaNormalizada = tipoRelevancia.trim().toLowerCase();
-
-            if (temMidiaReal) {
-                estado.aguardandoPrint = false;
+            // Encaminha para 'validacao' e devolve as mensagens para serem processadas lá
+            if (temMidiaReal || relevanciaNormalizada === 'relevante') {
                 estado.etapa = 'validacao';
-                const respostas = [
-                    ['calma ai', 'calma ai', 'calma aí', 'perai', 'perai'][Math.floor(Math.random() * 5)],
-                    ['pediu validação', 'pediu pra validar a conta', 'pediu validação bancária', 'caiu na validação', 'pediu verificação'][Math.floor(Math.random() * 5)],
-                    ['confirma aí, vai clicando em "Próximo"', 'vai clicando em "Próximo"', 'vai clicando em "Próximo" ai', 'pode ir clicando em "Próximo aí"'][Math.floor(Math.random() * 4)],
-                    ['vou falar com a menina aqui', 'vou falar com a menina que trabalha lá', 'vou falar com a menina do esquema aqui', 'vou falar com a menina que trampa lá'][Math.floor(Math.random() * 4)],
-                    ['aguarda 5m', 'espera 5m aí', 'aguarda 5m aí', '5m já resolvo', 'espera 5m'][Math.floor(Math.random() * 5)]
-                ];
-                for (const msg of respostas) {
-                    await enviarLinhaPorLinha(contato, msg);
-                    estado.historico.push({ role: 'assistant', content: msg });
-                    await atualizarContato(contato, 'Sim', 'validacao', msg);
-                }
-                console.log("[" + contato + "] Etapa 7: validação - avançou devido a mídia");
-                // o restante do seu código de timeouts permanece igual
+                // devolve o pacote para ser reprocessado na 'validacao'
+                estado.mensagensPendentes = mensagensPacote.concat(estado.mensagensPendentes);
+                console.log("[" + contato + "] Saque → encaminhado para 'validacao'.");
                 return;
-            } else if (relevanciaNormalizada === 'relevante') {
-                if (!estado.aguardandoPrint) {
-                    estado.aguardandoPrint = true;
-                    const respostas = [
-                        ['o que deu aí?', 'o que apareceu aí?', 'o que apareceu aí?', 'o que aconteceu?'][Math.floor(Math.random() * 4)],
-                        ['manda PRINT', 'me manda um PRINT', 'manda um PRINT aí', 'me manda um PRINT aí'][Math.floor(Math.random() * 4)]
-                    ];
-                    for (const msg of respostas) {
-                        await enviarLinhaPorLinha(contato, msg);
-                        estado.historico.push({ role: 'assistant', content: msg });
-                        await atualizarContato(contato, 'Sim', 'saque', msg);
-                    }
-                    console.log("[" + contato + "] Etapa 6: saque - pedindo print após mensagem relevante");
-                } else {
-                    console.log("[" + contato + "] Já pediu print, aguardando mídia");
-                    estado.mensagensPendentes = [];
-                }
-            } else {
-                console.log("[" + contato + "] Entrando no bloco irrelevante");
-                console.log("[" + contato + "] Mensagem irrelevante ignorada: " + mensagensTextoSaque);
-                estado.mensagensPendentes = [];
             }
 
-            console.log("[" + contato + "] Estado após processamento: etapa=" + estado.etapa + ", mensagensPendentes=" + estado.mensagensPendentes.length + ", aguardandoPrint=" + estado.aguardandoPrint + ", acompanhamentoTimeout=" + (estado.acompanhamentoTimeout ? 'ativo' : 'inativo'));
+            // irrelevante → apenas descarta silenciosamente
+            console.log("[" + contato + "] Saque → mensagem irrelevante, ignorando.");
+            estado.mensagensPendentes = [];
             return;
         }
-        else if (estado.etapa === 'validacao') {
-            console.log("[" + contato + "] Etapa 7: validação");
-            const mensagensDoLead = mensagensPacote.filter(
-                msg => !msg.texto.startsWith('USUÁRIO:') &&
-                    !msg.texto.startsWith('SENHA:') &&
-                    !msg.texto.includes('saca') &&
-                    !msg.texto.includes('senha')
-            );
-            const mensagensTextoValidacao = mensagensDoLead.map(msg => msg.texto).join('\n');
-            const temMidia = mensagensPacote.some(msg => msg.temMidia);
-            console.log("[" + contato + "] Mensagens processadas (apenas lead): " + mensagensTextoValidacao + ", temMidia: " + temMidia);
 
+        else if (estado.etapa === 'validacao') {
+            console.log("[" + contato + "] Etapa 7: validacao");
+
+            // Se estiver em timeout, ignorar (mantém seu comportamento atual)
             if (estado.acompanhamentoTimeout) {
-                console.log("[" + contato + "] Ignorando mensagens durante timeout de 3,5 minutos");
-                estado.mensagensPendentes = [];
-                await atualizarContato(contato, 'Sim', 'validacao', mensagensTextoValidacao, temMidia);
+                console.log("[" + contato + "] Ignorando mensagens durante acompanhamentoTimeout");
+                const mensagensPacoteTimeout = Array.isArray(estado.mensagensPendentes)
+                    ? estado.mensagensPendentes.splice(0)
+                    : [];
+                const txt = mensagensPacoteTimeout.map(m => m.texto).join('\n');
+                const mid = mensagensPacoteTimeout.some(m => m.temMidia);
+                await atualizarContato(contato, 'Sim', 'validacao', txt, mid);
                 return;
             }
 
-            console.log("[" + contato + "] Timeout concluído, mas aguardando envio das mensagens de validação");
+            const mensagensPacote = Array.isArray(estado.mensagensPendentes)
+                ? estado.mensagensPendentes.splice(0)
+                : [];
+            if (!mensagensPacote.length) {
+                console.log("[" + contato + "] Validacao → sem mensagens novas");
+                return;
+            }
+
+            const mensagensTexto = mensagensPacote.map(m => m.texto).join('\n');
+            const temMidia = mensagensPacote.some(m => m.temMidia);
+            console.log("[" + contato + "] Validacao → recebeu pacote. temMidia=" + temMidia);
+
+            // 7.1) Caso tenha chegado com MÍDIA: dispara o pacote inicial de validação UMA vez
+            if (temMidia && !estado.validacaoRecebeuMidia) {
+                estado.validacaoRecebeuMidia = true;
+                estado.aguardandoPrint = false;
+
+                const msgsValidacaoInicial = [
+                    "<VALIDACAO_INICIAL_1>",
+                    "<VALIDACAO_INICIAL_2>",
+                    "<VALIDACAO_INICIAL_3>",
+                    "<VALIDACAO_INICIAL_4>",
+                    "<VALIDACAO_INICIAL_5>"
+                ];
+                for (const m of msgsValidacaoInicial) {
+                    await enviarLinhaPorLinha(contato, m);
+                    estado.historico.push({ role: 'assistant', content: m });
+                    await atualizarContato(contato, 'Sim', 'validacao', m);
+                }
+
+                // 7.1.a) Agenda os acompanhamentos (timeouts) — mesmas janelas que você já usava
+                estado.acompanhamentoTimeout = setTimeout(async () => {
+                    try {
+                        const followups = [
+                            "<VALIDACAO_FOLLOWUP_A_1>",
+                            "<VALIDACAO_FOLLOWUP_A_2>",
+                            "<VALIDACAO_FOLLOWUP_A_3>",
+                            "<VALIDACAO_FOLLOWUP_A_4>",
+                            "<VALIDACAO_FOLLOWUP_A_5>",
+                            "<VALIDACAO_FOLLOWUP_A_6>",
+                            "<VALIDACAO_FOLLOWUP_A_7>",
+                            "<VALIDACAO_FOLLOWUP_A_8>",
+                            "<VALIDACAO_FOLLOWUP_A_9>",
+                            "<VALIDACAO_FOLLOWUP_A_10>",
+                            "<VALIDACAO_FOLLOWUP_A_11>",
+                            "<VALIDACAO_FOLLOWUP_A_12>",
+                            "<VALIDACAO_FOLLOWUP_A_13>",
+                            "<VALIDACAO_FOLLOWUP_A_14>",
+                            "<VALIDACAO_FOLLOWUP_A_15>",
+                            "<VALIDACAO_FOLLOWUP_A_16>"
+                        ];
+                        for (let i = 0; i < followups.length; i++) {
+                            const fx = followups[i];
+                            await enviarLinhaPorLinha(contato, fx);
+                            estado.historico.push({ role: 'assistant', content: fx });
+                            await atualizarContato(contato, 'Sim', 'validacao', fx);
+
+                            // após mensagem “marcadora”, agenda os outros timers (10m / 30m)
+                            if (fx.includes("<VALIDACAO_MARCADOR_10M>")) {
+                                try {
+                                    if (estado.merrecaTimeout) clearTimeout(estado.merrecaTimeout);
+                                    estado.merrecaTimeout = setTimeout(async () => {
+                                        try {
+                                            const bloco10m = [
+                                                "<VALIDACAO_10M_1>",
+                                                "<VALIDACAO_10M_2>",
+                                                "<VALIDACAO_10M_3>",
+                                                "<VALIDACAO_10M_4>",
+                                                "<VALIDACAO_10M_5>",
+                                                "<VALIDACAO_10M_6>",
+                                                "<VALIDACAO_10M_7>",
+                                                "<VALIDACAO_10M_8>",
+                                                "<VALIDACAO_10M_9>",
+                                                "<VALIDACAO_10M_10>",
+                                                "<VALIDACAO_10M_11>"
+                                            ];
+                                            for (const z of bloco10m) {
+                                                await enviarLinhaPorLinha(contato, z);
+                                                estado.historico.push({ role: 'assistant', content: z });
+                                                await atualizarContato(contato, 'Sim', 'validacao', z);
+                                                await delay(1000);
+                                            }
+
+                                            // agenda o de 30m
+                                            try {
+                                                if (estado.posMerrecaTimeout) clearTimeout(estado.posMerrecaTimeout);
+                                                estado.posMerrecaTimeout = setTimeout(async () => {
+                                                    try {
+                                                        const bloco30m = [
+                                                            "<VALIDACAO_30M_1>",
+                                                            "<VALIDACAO_30M_2>",
+                                                            "<VALIDACAO_30M_3>",
+                                                            "<VALIDACAO_30M_4>",
+                                                            "<VALIDACAO_30M_5>",
+                                                            "<VALIDACAO_30M_6>",
+                                                            "<VALIDACAO_30M_7>",
+                                                            "<VALIDACAO_30M_8>",
+                                                            "<VALIDACAO_30M_9>"
+                                                        ];
+                                                        for (let j = 0; j < bloco30m.length; j++) {
+                                                            const q = bloco30m[j];
+                                                            await enviarLinhaPorLinha(contato, q);
+                                                            estado.historico.push({ role: 'assistant', content: q });
+                                                            await atualizarContato(contato, 'Sim', 'validacao', q);
+                                                            // delay especial entre as 2 primeiras, se quiser manter
+                                                            if (j === 0) await delay(3 * 60 * 1000);
+                                                            else await delay(1000);
+                                                        }
+                                                    } catch (e) {
+                                                        console.error("[" + contato + "] Erro bloco 30m: " + e.message);
+                                                    } finally {
+                                                        estado.posMerrecaTimeout = null;
+                                                        console.log("[" + contato + "] (posMerrecaTimeout) finalizado");
+                                                    }
+                                                }, 30 * 60 * 1000);
+                                                console.log("[" + contato + "] posMerrecaTimeout (30min) agendado");
+                                            } catch (e) {
+                                                console.error("[" + contato + "] Falha ao agendar posMerrecaTimeout: " + e.message);
+                                            }
+                                        } catch (e) {
+                                            console.error("[" + contato + "] Erro bloco 10m: " + e.message);
+                                        } finally {
+                                            estado.merrecaTimeout = null;
+                                            console.log("[" + contato + "] (merrecaTimeout) finalizado");
+                                        }
+                                    }, 10 * 60 * 1000);
+                                    console.log("[" + contato + "] merrecaTimeout (10min) agendado");
+                                } catch (e) {
+                                    console.error("[" + contato + "] Falha ao agendar merrecaTimeout: " + e.message);
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.error("[" + contato + "] Erro acompanhamentoTimeout: " + e.message);
+                    } finally {
+                        estado.acompanhamentoTimeout = null;
+                        console.log("[" + contato + "] acompanhamentoTimeout concluído");
+                    }
+                }, 3.5 * 60 * 1000);
+
+                return;
+            }
+
+            // 7.2) Se NÃO veio mídia ainda:
+            //     - classifica relevância para decidir se pede PRINT (apenas uma vez)
+            const tipoRelevanciaValid = await gerarResposta(
+                [{ role: 'system', content: promptClassificaRelevancia(mensagensTexto, temMidia) }],
+                ["RELEVANTE", "IRRELEVANTE"]
+            );
+            const relev = String(tipoRelevanciaValid).trim().toLowerCase();
+            console.log("[" + contato + "] Validacao → relevância=" + relev);
+
+            if (!temMidia && relev === 'relevante' && !estado.validacaoMsgInicialEnviada) {
+                // pede PRINT uma única vez dentro da etapa validacao
+                const pedirPrint = [
+                    "<VALIDACAO_PEDIR_PRINT_1>",
+                    "<VALIDACAO_PEDIR_PRINT_2>"
+                ];
+                for (const p of pedirPrint) {
+                    await enviarLinhaPorLinha(contato, p);
+                    estado.historico.push({ role: 'assistant', content: p });
+                    await atualizarContato(contato, 'Sim', 'validacao', p);
+                }
+                estado.validacaoMsgInicialEnviada = true;
+                estado.aguardandoPrint = true;
+                return;
+            }
+
+            // 7.3) Se já pediu print e AGORA chegou mídia, dispare o pacote inicial da 7.1
+            if (temMidia && !estado.validacaoRecebeuMidia) {
+                // reusa exatamente a lógica de mídia da 7.1, sem helper:
+                estado.validacaoRecebeuMidia = true;
+                estado.aguardandoPrint = false;
+
+                const msgsValidacaoInicial = [
+                    "<VALIDACAO_INICIAL_1>",
+                    "<VALIDACAO_INICIAL_2>",
+                    "<VALIDACAO_INICIAL_3>",
+                    "<VALIDACAO_INICIAL_4>",
+                    "<VALIDACAO_INICIAL_5>"
+                ];
+                for (const m of msgsValidacaoInicial) {
+                    await enviarLinhaPorLinha(contato, m);
+                    estado.historico.push({ role: 'assistant', content: m });
+                    await atualizarContato(contato, 'Sim', 'validacao', m);
+                }
+
+                estado.acompanhamentoTimeout = setTimeout(async () => {
+                    try {
+                        const followups = [
+                            "<VALIDACAO_FOLLOWUP_A_1>",
+                            "<VALIDACAO_FOLLOWUP_A_2>",
+                            "<VALIDACAO_FOLLOWUP_A_3>",
+                            "<VALIDACAO_FOLLOWUP_A_4>"
+                        ];
+                        for (const fx of followups) {
+                            await enviarLinhaPorLinha(contato, fx);
+                            estado.historico.push({ role: 'assistant', content: fx });
+                            await atualizarContato(contato, 'Sim', 'validacao', fx);
+                        }
+                    } catch (e) {
+                        console.error("[" + contato + "] Erro acompanhamentoTimeout (2): " + e.message);
+                    } finally {
+                        estado.acompanhamentoTimeout = null;
+                    }
+                }, 3.5 * 60 * 1000);
+
+                return;
+            }
+
+            // 7.4) Caso contrário: ignorar/standby
+            console.log("[" + contato + "] Validacao → aguardando mídia/relevância útil. Mensagens foram: " + mensagensTexto);
             estado.mensagensPendentes = [];
-            await atualizarContato(contato, 'Sim', 'validacao', mensagensTextoValidacao, temMidia);
+            await atualizarContato(contato, 'Sim', 'validacao', mensagensTexto, temMidia);
             return;
-        } else if (estado.etapa === 'encerrado') {
+        }
+        else if (estado.etapa === 'encerrado') {
             console.log("[" + contato + "] Etapa encerrada");
             const grupo1 = ['salve', 'e aí', 'eae'];
             const grupo2 = ['tô precisando de um lara pra agora', 'preciso de um lara pra agora', 'preciso de lara agora', 'tô precisando de lara agora'];
