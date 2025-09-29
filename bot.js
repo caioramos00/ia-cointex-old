@@ -428,7 +428,6 @@ async function enviarLinhaPorLinha(to, texto) {
     }
 
     // Envio linha a linha com memória de progresso (seqLines/seqIdx)
-    estado.enviandoMensagens = true;
     console.log(`[${to}] Iniciando envio de mensagem: "${texto}"`);
 
     await delay(10000); // pacing inicial
@@ -481,7 +480,6 @@ async function enviarLinhaPorLinha(to, texto) {
     }
 
     // sequência concluída — limpar snapshot
-    estado.enviandoMensagens = false;
     delete estado.seqLines;
     delete estado.seqIdx;
     estado.paused = false;
@@ -1819,11 +1817,14 @@ async function processarMensagensPendentes(contato) {
 
                 estado.credenciaisEntregues = true;
                 await atualizarContato(contato, 'Sim', 'acesso', '[Credenciais enviadas]');
+                return; // ⬅️ encerra o ciclo; classificação só no próximo pacote do usuário
             } else {
                 console.log(`[${contato}] Acesso: sequência já disparada (acessoMsgsDisparadas=true), não reenviando.`);
             }
 
+            // Só classifica quando chegam novas mensagens do usuário
             const mensagensTexto = mensagensPacote.map(m => m.texto).join('\n');
+            if (!mensagensTexto.trim()) return;
             const tipoAcesso = String(await gerarResposta(
                 [{ role: 'system', content: promptClassificaAcesso(mensagensTexto) }],
                 ["CONFIRMADO", "NAO_CONFIRMADO", "DUVIDA", "NEUTRO"]
@@ -1831,7 +1832,7 @@ async function processarMensagensPendentes(contato) {
 
             console.log("[" + contato + "] Classificação em acesso: " + tipoAcesso);
 
-            if (tipoAcesso.trim() === 'CONFIRMADO') {
+            if (tipoAcesso === 'CONFIRMADO') {
                 estado.etapa = 'confirmacao';
                 estado.mensagensDesdeSolicitacao = [];
                 estado.tentativasAcesso = 0;
@@ -1921,14 +1922,18 @@ async function processarMensagensPendentes(contato) {
             );
 
             const temMidia = mensagensPacote.some(m => m.temMidia);
-            const textoAgregado = estado.mensagensDesdeSolicitacao.join('\n'); // já contém o pacote atual
-            const mNumero = textoAgregado.match(/(\d{1,3}(?:\.\d{3})*|\d+)(?:,\d{2})?/);
-            const numeroExtraido = mNumero ? mNumero[0] : null;
+            const textoAgregado = [
+                ...estado.mensagensDesdeSolicitacao,
+                ...mensagensPacote.map(m => m.texto || '')
+            ].join('\n');
 
-            if (temMidia || numeroExtraido) {
-                if (numeroExtraido) {
-                    estado.saldo_informado = numeroExtraido.replace(/\./g, '').replace(',', '.');
-                }
+            // IA decide: print/valor escrito válido?
+            const okConf = String(await gerarResposta(
+                [{ role: 'system', content: promptClassificaConfirmacao(textoAgregado, temMidia) }],
+                ['OK', 'NAO_OK', 'DUVIDA', 'NEUTRO']
+            )).toUpperCase();
+
+            if (temMidia || okConf === 'OK') {
                 estado.etapa = 'saque';
                 estado.saqueInstrucoesEnviadas = false;
                 estado.mensagensDesdeSolicitacao = [];
