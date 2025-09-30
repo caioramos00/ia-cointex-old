@@ -1098,113 +1098,123 @@ async function processarMensagensPendentes(contato) {
         if (estado.etapa === 'interesse') {
             console.log("[" + contato + "] Etapa 'interesse'");
 
-            if (!estado.interesseEnviado) {
-                const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
-                await delay(7000 + Math.floor(Math.random() * 6000));
-                const g1 = [
-                    'to bem corrido aqui',
-                    'tô na correria aqui',
-                    'tô na correria agora',
-                    'tô bem corrido agora',
-                    'to sem muito tempo aqui',
-                    'tô sem muito tempo aqui',
-                    'tô sem muito tempo agora',
-                    'to sem tempo aqui',
-                    'tô sem tempo aqui',
-                    'tô sem tempo agora',
-                    'to na maior correria aqui',
-                    'tô na maior correria aqui',
-                    'tô na maior correria agora',
-                    'to na maior correria agora',
-                    'to meio sem tempo aqui',
-                    'tô meio sem tempo aqui',
-                    'tô meio sem tempo agora',
-                    'to meio corrido aqui'
-                ];
-                const g2 = [
-                    'fazendo vários ao mesmo tempo',
-                    'fazendo vários trampos ao mesmo tempo',
-                    'fazendo vários trampo ao mesmo tempo',
-                    'fazendo vários trampos juntos',
-                    'fazendo vários trampo juntos',
-                    'fazendo vários trampos',
-                    'fazendo vários trampo',
-                    'fazendo muitos trampos ao mesmo tempo',
-                    'fazendo muitos trampo ao mesmo tempo',
-                    'fazendo muitos trampos juntos',
-                    'fazendo muitos trampo juntos',
-                    'fazendo muitos trampos',
-                    'fazendo muitos trampo',
-                    'fazendo muito trampo',
-                    'fazendo muito trampo ao mesmo tempo',
-                    'fazendo muito trampo juntos',
-                    'fazendo muito trampo agora'
-                ];
-                const g3 = [
-                    'vou te mandando tudo o que você tem que fazer',
-                    'vou te mandando tudo que você tem que fazer',
-                    'vou te mandando tudo o que precisa fazer',
-                    'vou te mandando tudo que precisa fazer',
-                    'vou te mandando o que você tem que fazer',
-                    'vou te mandando o que precisa fazer',
-                    'vou te mandando o que você precisa fazer',
-                    'vou te mandando o que você tem que fazer',
-                    'vou ir te mandando tudo o que você tem que fazer',
-                    'vou ir te mandando tudo que você tem que fazer',
-                    'vou ir te mandando tudo o que precisa fazer',
-                    'vou ir te mandando tudo que precisa fazer',
-                    'vou ir te mandando o que você tem que fazer',
-                    'vou ir te mandando o que precisa fazer',
-                    'vou ir te mandando o que você precisa fazer',
-                    'vou ir te mandando o que você tem que fazer',
-                    'vou te falar tudo o que você tem que fazer',
-                    'vou te falar tudo que você tem que fazer',
-                    'vou te falar tudo o que precisa fazer',
-                    'vou te falar tudo que precisa fazer',
-                    'vou te falar o que você tem que fazer',
-                ];
-                const g4 = [
-                    'e você só responde o que eu te perguntar',
-                    'e você só responde o que eu perguntar',
-                    'e você só responde o que eu te pedir',
-                    'e você só responde o que eu pedir',
-                    'e você só responde o que eu for perguntar',
-                    'e você só responde o que eu for pedir',
-                    'e você só responde o que eu te perguntar',
-                    'e você responde só o que eu te perguntar',
-                    'e você responde só o que eu perguntar',
-                    'e você responde só o que eu te pedir',
-                    'e você responde só o que eu pedir',
-                    'e você responde só o que eu for perguntar',
-                    'e você responde só o que eu for pedir',
-                    'e você só fala o que eu te perguntar',
-                    'e você só me fala o que eu perguntar',
-                    'e você só fala o que eu te pedir',
-                    'e você só me fala o que eu pedir',
-                    'e você só fala o que eu for perguntar',
-                    'e você só me fala o que eu for perguntar',
-                    'e você só fala o que eu for pedir',
-                    'e você só me fala o que eu for pedir',
-                ];
-                const g5 = [
-                    'beleza?',
-                    'blz?',
-                    'tranquilo?',
-                    'demoro?',
-                    'dmr?',
-                    'certo?',
-                    'pode ser?',
-                    'entendeu?',
-                    'tlgd?',
-                ];
-
-                estado.interesseEnviado = true;
-                const msgInteresse = `${pick(g1)}, ${pick(g2)}... ${pick(g3)}, ${pick(g4)}, ${pick(g5)}`;
-                const sent = await sendOnce(contato, estado, 'interesse.msg', msgInteresse);
-                if (sent) await atualizarContato(contato, 'Sim', 'interesse', msgInteresse);
-                estado.mensagensPendentes = [];
-                estado.mensagensDesdeSolicitacao = [];
+            if (estado.interesseSequenciada) {
+                console.log(`[${contato}] Interesse: já enviando, pulando.`);
                 return;
+            }
+
+            if (!estado.interesseEnviado) {
+                estado.interesseSequenciada = true;
+                try {
+                    const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
+                    await delay(7000 + Math.floor(Math.random() * 6000));
+                    const g1 = [
+                        'to bem corrido aqui',
+                        'tô na correria aqui',
+                        'tô na correria agora',
+                        'tô bem corrido agora',
+                        'to sem muito tempo aqui',
+                        'tô sem muito tempo aqui',
+                        'tô sem muito tempo agora',
+                        'to sem tempo aqui',
+                        'tô sem tempo aqui',
+                        'tô sem tempo agora',
+                        'to na maior correria aqui',
+                        'tô na maior correria aqui',
+                        'tô na maior correria agora',
+                        'to na maior correria agora',
+                        'to meio sem tempo aqui',
+                        'tô meio sem tempo aqui',
+                        'tô meio sem tempo agora',
+                        'to meio corrido aqui'
+                    ];
+                    const g2 = [
+                        'fazendo vários ao mesmo tempo',
+                        'fazendo vários trampos ao mesmo tempo',
+                        'fazendo vários trampo ao mesmo tempo',
+                        'fazendo vários trampos juntos',
+                        'fazendo vários trampo juntos',
+                        'fazendo vários trampos',
+                        'fazendo vários trampo',
+                        'fazendo muitos trampos ao mesmo tempo',
+                        'fazendo muitos trampo ao mesmo tempo',
+                        'fazendo muitos trampos juntos',
+                        'fazendo muitos trampo juntos',
+                        'fazendo muitos trampos',
+                        'fazendo muitos trampo',
+                        'fazendo muito trampo',
+                        'fazendo muito trampo ao mesmo tempo',
+                        'fazendo muito trampo juntos',
+                        'fazendo muito trampo agora'
+                    ];
+                    const g3 = [
+                        'vou te mandando tudo o que você tem que fazer',
+                        'vou te mandando tudo que você tem que fazer',
+                        'vou te mandando tudo o que precisa fazer',
+                        'vou te mandando tudo que precisa fazer',
+                        'vou te mandando o que você tem que fazer',
+                        'vou te mandando o que precisa fazer',
+                        'vou te mandando o que você precisa fazer',
+                        'vou te mandando o que você tem que fazer',
+                        'vou ir te mandando tudo o que você tem que fazer',
+                        'vou ir te mandando tudo que você tem que fazer',
+                        'vou ir te mandando tudo o que precisa fazer',
+                        'vou ir te mandando tudo que precisa fazer',
+                        'vou ir te mandando o que você tem que fazer',
+                        'vou ir te mandando o que precisa fazer',
+                        'vou ir te mandando o que você precisa fazer',
+                        'vou ir te mandando o que você tem que fazer',
+                        'vou te falar tudo o que você tem que fazer',
+                        'vou te falar tudo que você tem que fazer',
+                        'vou te falar tudo o que precisa fazer',
+                        'vou te falar tudo que precisa fazer',
+                        'vou te falar o que você tem que fazer',
+                    ];
+                    const g4 = [
+                        'e você só responde o que eu te perguntar',
+                        'e você só responde o que eu perguntar',
+                        'e você só responde o que eu te pedir',
+                        'e você só responde o que eu pedir',
+                        'e você só responde o que eu for perguntar',
+                        'e você só responde o que eu for pedir',
+                        'e você só responde o que eu te perguntar',
+                        'e você responde só o que eu te perguntar',
+                        'e você responde só o que eu perguntar',
+                        'e você responde só o que eu te pedir',
+                        'e você responde só o que eu pedir',
+                        'e você responde só o que eu for perguntar',
+                        'e você responde só o que eu for pedir',
+                        'e você só fala o que eu te perguntar',
+                        'e você só me fala o que eu perguntar',
+                        'e você só fala o que eu te pedir',
+                        'e você só me fala o que eu pedir',
+                        'e você só fala o que eu for perguntar',
+                        'e você só me fala o que eu for perguntar',
+                        'e você só fala o que eu for pedir',
+                        'e você só me fala o que eu for pedir',
+                    ];
+                    const g5 = [
+                        'beleza?',
+                        'blz?',
+                        'tranquilo?',
+                        'demoro?',
+                        'dmr?',
+                        'certo?',
+                        'pode ser?',
+                        'entendeu?',
+                        'tlgd?',
+                    ];
+
+                    estado.interesseEnviado = true;
+                    const msgInteresse = `${pick(g1)}, ${pick(g2)}... ${pick(g3)}, ${pick(g4)}, ${pick(g5)}`;
+                    const sent = await sendOnce(contato, estado, 'interesse.msg', msgInteresse);
+                    if (sent) await atualizarContato(contato, 'Sim', 'interesse', msgInteresse);
+                    estado.mensagensPendentes = [];
+                    estado.mensagensDesdeSolicitacao = [];
+                    return;
+                } finally {
+                    estado.interesseSequenciada = false;
+                }
             }
 
             if (mensagensPacote.length > 0) {
@@ -1220,12 +1230,12 @@ async function processarMensagensPendentes(contato) {
                     estado.etapa = 'instruções';
                     estado.primeiraRespostaPendente = false;
                     estado.instrucoesEnviadas = false;
-                    estado.instrucoesCompletas = true; // (opcional; não é lida no bloco de instruções)
+                    estado.instrucoesCompletas = true;
                     await atualizarContato(contato, 'Sim', 'instruções', '[Avanço automático após ACEITE]');
-                    // importante: NÃO dar return aqui → deixa “cair” no bloco de instruções ainda neste ciclo
+                    return;
                 } else {
                     console.log(`[${contato}] Stand-by em 'interesse' (aguardando ACEITE).`);
-                    return; // standby só quando NÃO for ACEITE
+                    return;
                 }
             }
         }
@@ -1823,14 +1833,31 @@ async function processarMensagensPendentes(contato) {
 
             const recentes = mensagensPacote.filter(m => {
                 const ts = Number(m.ts ?? m.recebidaEm ?? m.time);
-                return !estado.acessoDesdeTs || !ts || ts >= estado.acessoDesdeTs;
-            });
+                if (estado.acessoDesdeTs && ts) return ts >= estado.acessoDesdeTs;
+                return true;
+            }).slice(-8);
             if (!recentes.length) {
                 console.log(`[${contato}] Acesso: nada novo após credenciais — não vou classificar.`);
                 return;
             }
             const mensagensTexto = recentes.map(m => m.texto).join('\n');
             if (!mensagensTexto.trim()) return;
+
+            const t = mensagensTexto.toLowerCase();
+            const confirmou =
+                /\b(entrei|loguei|acessei|já entrei|ja entrei|entrei sim)\b/.test(t) &&
+                !/\b(n[aã]o\s+(entrei|loguei|acessei))\b/.test(t);
+
+            if (confirmou) {
+                estado.etapa = 'confirmacao';
+                estado.mensagensDesdeSolicitacao = [];
+                estado.tentativasAcesso = 0;
+                estado.confirmacaoMsgInicialEnviada = false;
+                await atualizarContato(contato, 'Sim', 'confirmacao', '[Login confirmado — atalho]');
+                console.log("[" + contato + "] Etapa 5: confirmação — avançou pelo atalho");
+                return;
+            }
+
             if (!estado.credenciaisEntregues) {
                 console.log(`[${contato}] Acesso: aguardando finalizar envio (credenciaisEntregues=false). Não vou classificar ainda.`);
                 return;
@@ -1863,64 +1890,74 @@ async function processarMensagensPendentes(contato) {
             console.log("[" + contato + "] Etapa 5: confirmação");
 
             if (!estado.confirmacaoMsgInicialEnviada) {
-                const pick = arr => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
-
-                const bloco1 = [
-                    'boa',
-                    'boaa',
-                    'boaaa',
-                    'beleza',
-                    'belezaa',
-                    'belezaaa',
-                    'tranquilo',
-                    'isso aí',
-                ];
-                const bloco2 = [
-                    'agora manda um PRINT mostrando o saldo disponível',
-                    'agora manda um PRINT mostrando o saldo disponível aí',
-                    'agora manda um PRINT mostrando o saldo disponível nessa conta',
-                    'agora manda um PRINT mostrando o saldo disponível',
-                    'agora me manda um PRINT mostrando o saldo disponível',
-                    'agora me manda um PRINT mostrando o saldo disponível aí',
-                    'agora me manda um PRINT mostrando o saldo disponível nessa conta',
-                    'agora me manda um PRINT mostrando o saldo disponível',
-                    'agr manda um PRINT mostrando o saldo disponível',
-                    'agr manda um PRINT mostrando o saldo disponível aí',
-                    'agr manda um PRINT mostrando o saldo disponível nessa conta',
-                    'agr manda um PRINT mostrando o saldo disponível',
-                    'agr me manda um PRINT mostrando o saldo disponível',
-                    'agr me manda um PRINT mostrando o saldo disponível aí',
-                    'agr me manda um PRINT mostrando o saldo disponível nessa conta',
-                    'agr me manda um PRINT mostrando o saldo disponível',
-                    'agora manda um PRINT mostrando o saldo',
-                    'agora manda um PRINT mostrando o saldo aí',
-                    'agora manda um PRINT mostrando o saldo nessa conta',
-                    'agora manda um PRINT mostrando o saldo',
-                    'agora me manda um PRINT mostrando o saldo',
-                    'agora me manda um PRINT mostrando o saldo aí',
-                    'agora me manda um PRINT mostrando o saldo nessa conta',
-                    'agora me manda um PRINT mostrando o saldo',
-                ];
-                const bloco3 = [
-                    'ou manda em escrito quanto que tem nela',
-                    'ou escreve quanto que tem nela',
-                    'ou escreve aí quanto que tem nela',
-                    'ou escreve aí o valor',
-                    'ou me escreve o valor',
-                    'ou manda o valor em escrito',
-                    'ou me fala aqui qual o valor que tem',
-                    'ou escreve aqui quanto que tem disponível',
-                    'ou me fala o valor disponível',
-                    'ou me manda aqui o valor que tem disponível'
-                ];
-
-                const msgConfirmacao = `${pick(bloco1)}, ${pick(bloco2)}, ${pick(bloco3)}`;
-                const sent = await sendOnce(contato, estado, 'confirmacao.m1', msgConfirmacao);
-                if (sent) {
-                    estado.confirmacaoMsgInicialEnviada = true;
-                    await atualizarContato(contato, 'Sim', 'confirmacao', msgConfirmacao);
+                if (estado.confirmacaoSequenciada) {
+                    console.log(`[${contato}] Confirmação: já enviando, pulando.`);
+                    return;
                 }
-                return;
+                estado.confirmacaoSequenciada = true;
+
+                try {
+                    const pick = arr => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
+
+                    const bloco1 = [
+                        'boa',
+                        'boaa',
+                        'boaaa',
+                        'beleza',
+                        'belezaa',
+                        'belezaaa',
+                        'tranquilo',
+                        'isso aí',
+                    ];
+                    const bloco2 = [
+                        'agora manda um PRINT mostrando o saldo disponível',
+                        'agora manda um PRINT mostrando o saldo disponível aí',
+                        'agora manda um PRINT mostrando o saldo disponível nessa conta',
+                        'agora manda um PRINT mostrando o saldo disponível',
+                        'agora me manda um PRINT mostrando o saldo disponível',
+                        'agora me manda um PRINT mostrando o saldo disponível aí',
+                        'agora me manda um PRINT mostrando o saldo disponível nessa conta',
+                        'agora me manda um PRINT mostrando o saldo disponível',
+                        'agr manda um PRINT mostrando o saldo disponível',
+                        'agr manda um PRINT mostrando o saldo disponível aí',
+                        'agr manda um PRINT mostrando o saldo disponível nessa conta',
+                        'agr manda um PRINT mostrando o saldo disponível',
+                        'agr me manda um PRINT mostrando o saldo disponível',
+                        'agr me manda um PRINT mostrando o saldo disponível aí',
+                        'agr me manda um PRINT mostrando o saldo disponível nessa conta',
+                        'agr me manda um PRINT mostrando o saldo disponível',
+                        'agora manda um PRINT mostrando o saldo',
+                        'agora manda um PRINT mostrando o saldo aí',
+                        'agora manda um PRINT mostrando o saldo nessa conta',
+                        'agora manda um PRINT mostrando o saldo',
+                        'agora me manda um PRINT mostrando o saldo',
+                        'agora me manda um PRINT mostrando o saldo aí',
+                        'agora me manda um PRINT mostrando o saldo nessa conta',
+                        'agora me manda um PRINT mostrando o saldo',
+                    ];
+                    const bloco3 = [
+                        'ou manda em escrito quanto que tem nela',
+                        'ou escreve quanto que tem nela',
+                        'ou escreve aí quanto que tem nela',
+                        'ou escreve aí o valor',
+                        'ou me escreve o valor',
+                        'ou manda o valor em escrito',
+                        'ou me fala aqui qual o valor que tem',
+                        'ou escreve aqui quanto que tem disponível',
+                        'ou me fala o valor disponível',
+                        'ou me manda aqui o valor que tem disponível'
+                    ];
+
+                    const msgConfirmacao = `${pick(bloco1)}, ${pick(bloco2)}, ${pick(bloco3)}`;
+                    const sent = await sendOnce(contato, estado, 'confirmacao.m1', msgConfirmacao);
+                    if (sent) {
+                        estado.confirmacaoMsgInicialEnviada = true;
+                        await atualizarContato(contato, 'Sim', 'confirmacao', msgConfirmacao);
+                    }
+                    return;
+                } finally {
+                    estado.confirmacaoSequenciada = false;
+                }
             }
 
             const mensagensPacote = Array.isArray(estado.mensagensPendentes)
