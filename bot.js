@@ -127,22 +127,23 @@ function hashText(s) {
   return String(h);
 }
 
-function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+function pick(arr) { return Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : ''; }
 
 function composeAberturaMsg1() {
   const c = loadAbertura();
-  const g1 = pick(c.msg1.grupo1);
-  const g2 = pick(c.msg1.grupo2);
-  const g3 = pick(c.msg1.grupo3);
-  return `${g1}, ${g2}, ${g3}`;
+  const g1 = pick(c?.msg1?.grupo1);
+  const g2 = pick(c?.msg1?.grupo2);
+  const g3 = pick(c?.msg1?.grupo3);
+  return [g1, g2, g3].filter(Boolean).join(', ');
 }
 
 function composeAberturaMsg2() {
   const c = loadAbertura();
-  const g1 = pick(c.msg2.grupo1);
-  const g2 = pick(c.msg2.grupo2);
-  const g3 = pick(c.msg2.grupo3);
-  return `${g1} ${g2}, ${g3}`;
+  const g1 = pick(c?.msg2?.grupo1);
+  const g2 = pick(c?.msg2?.grupo2);
+  const g3 = pick(c?.msg2?.grupo3);
+  const head = [g1, g2].filter(Boolean).join(' ');
+  return [head, g3].filter(Boolean).join(', ');
 }
 
 function chooseUnique(generator, st) {
@@ -187,8 +188,12 @@ async function processarMensagensPendentes(contato) {
   st.enviandoMensagens = true;
   try {
     if (st.etapa === 'none') {
-      const m1 = chooseUnique(composeAberturaMsg1, st);
-      const m2 = chooseUnique(composeAberturaMsg2, st);
+      let m1 = chooseUnique(composeAberturaMsg1, st);
+      let m2 = chooseUnique(composeAberturaMsg2, st);
+
+      if (!m1) m1 = composeAberturaMsg1(); // fallback
+      if (!m2) m2 = composeAberturaMsg2(); // fallback
+
       if (m1) await sendMessage(st.contato, m1);
       if (m2) { await delay(900); await sendMessage(st.contato, m2); }
       st.etapa = 'abertura:done';
