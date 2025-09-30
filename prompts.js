@@ -1,14 +1,37 @@
 const promptClassificaAceite = (contexto) => `
-Analise TODAS as respostas do lead após ser convidado pra fazer o trampo:
+Você é um classificador de intenções. Analise TODAS as respostas do lead após ser convidado para fazer o trampo:
 "${contexto}"
 
-Responda com só UMA destas opções:
-- "aceite" (se ele falou qualquer coisa que indique concordância ou entusiasmo, como "sim", "bora", "to on", "vambora", "vamos", "fechado", "claro", "quero sim", "bora pra cima", "beleza", "ok", "certo", etc)
-- "recusa" (se ele falou algo que indique recusa, como "não", "tô fora", "não quero", "não posso", "depois", "agora não", "não rola")
-- "duvida" (se ele perguntou algo ou demonstrou dúvida, como "como funciona", "é seguro", "que trampo é esse", "demora", "qual valor", etc)
+REGRAS GERAIS (aplique todas):
+1) Ignore caixa, acentos, emojis, pontuação e alongamentos de letras (ex.: "boraaa", "siiim", "okeeey" ≈ "bora", "sim", "ok").
+2) Classifique como ACEITE se a frase CONTÉM alguma expressão de aceite, mesmo acompanhada de outras palavras (ex.: "bora irmão", "pode ser sim", "fechou então").
+3) Se houver negação explícita (não/nao/n) até 3 palavras de distância de um termo de aceite (antes ou depois), classifique como RECUSA (ex.: "agora não", "não bora", "bora não").
+4) Se houver aceite + pergunta/dúvida na mesma fala, priorize ACEITE.
+5) Considere gírias/abreviações comuns do PT-BR.
 
-Considere o contexto e variações coloquiais comuns em português brasileiro. Nunca explique nada. Só escreva uma dessas palavras.
-  `;
+VOCABULÁRIO ORIENTATIVO (não exaustivo):
+• ACEITE (qualquer variação/elongação):
+  "sim", "s", "claro", "quero sim",
+  "bora", "boraaa", "vamo", "vamos", "vambora", "partiu",
+  "pra cima", "bora pra cima", "agora",
+  "to dentro", "tô dentro", "to on",
+  "fechado", "fechou",
+  "ok", "okay", "okey", "oki", "okok", "certo", "beleza", "bele", "blz", "suave", "show",
+  "firmeza", "fmz",
+  "pode ser", "pode pa", "pdp",
+  "demoro", "demorou",
+  "cuida"
+• RECUSA (exemplos):
+  "não", "nao", "n", "tô fora", "to fora", "não quero", "não posso",
+  "depois", "mais tarde", "agora não", "não rola", "sem chance"
+• DÚVIDA (exemplos):
+  "como funciona", "é seguro", "que trampo é esse", "qual valor", "onde", "quando", "link", "ajuda?"
+
+Responda com só UMA palavra, exatamente uma destas:
+- "aceite"
+- "recusa"
+- "duvida"
+`;
 
 const promptClassificaAcesso = (contexto) => `
 Analise TODAS as respostas do lead após pedir para ele entrar na conta e responder com "ENTREI":
@@ -17,7 +40,7 @@ Analise TODAS as respostas do lead após pedir para ele entrar na conta e respon
 Responda com só UMA destas opções:
 - "confirmado" (se ele indicou que conseguiu entrar na conta, como "ENTREI", "entrei", "tô dentro", "já tô dentro", "acessei", "já acessei", "entrei sim", "entrei agora", "entrei mano", "entrei irmão", "foi", "deu bom", "acabei de entrar", "loguei", "tô logado", "consegui entrar", "sim eu acessei", ou qualquer variação coloquial que indique sucesso no login)
 - "nao_confirmado" (se ele indicou que não conseguiu entrar, como "não entrou", "deu erro", "não consegui", "não deu", "tô fora", "não posso", "não quero", "deu ruim", ou qualquer variação que indique falha no login)
-- "duvida" (se ele fez uma pergunta sobre o processo, como "onde coloco o usuário?", "o link não abre", "qual senha?", "qual é o link?", "como entro?", ou qualquer dúvida relacionada ao login)
+- "duvida" (se ele fez uma pergunta sobre o processo, como "onde coloco o usuário?", "o link não abre", "qual é o link?", "como entro?", ou qualquer dúvida relacionada ao login)
 - "neutro" (se ele falou algo afirmativo ou irrelevante que não indica sucesso, falha ou dúvida, como "beleza", "tá bom", "certo", "fechou", "ok", "entendi", "vou fazer", "slk", "blza", "boa", ou qualquer resposta genérica sem relação direta com o login)
 
 Considere o contexto e variações coloquiais comuns em português brasileiro. Nunca explique nada. Só escreva uma dessas palavras.

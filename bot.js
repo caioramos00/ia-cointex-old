@@ -1972,15 +1972,151 @@ async function processarMensagensPendentes(contato) {
         if (estado.etapa === 'confirmacao') {
             console.log("[" + contato + "] Etapa 5: confirmação");
 
-            // URL de mídia (ManyChat S3, WhatsApp CDN, imagens)
-            const looksLikeMediaUrl = (s) => {
+            // ========= Helpers de MÍDIA & VALOR (robustos + logs) =========
+
+            // URL típica de mídia (ManyChat S3, WhatsApp CDN, formatos de imagem)
+            const looksLikeMediaUrl = (s = '') => {
                 const n = String(s || '');
                 return /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(n)
                     || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
             };
 
-            const isMidia = (m) => !!(m && (m.temMidia === true || m.hasMedia === true || looksLikeMediaUrl(m.texto)));
+            // Extrai possíveis URLs de mídia de diferentes campos
+            const extractPossibleMediaUrls = (m = {}) => {
+                const urls = new Set();
+                const tryPush = v => { if (v && typeof v === 'string') urls.add(v); };
 
+                tryPush(m.url);
+                tryPush(m.mediaUrl);
+                tryPush(m.image_url);
+                tryPush(m.file_url);
+                tryPush(m?.payload?.url);
+                tryPush(m?.attachment?.payload?.url);
+
+                // Arrays comuns em conectores
+                (Array.isArray(m.urls) ? m.urls : []).forEach(tryPush);
+                (Array.isArray(m.attachments) ? m.attachments : []).forEach(a => tryPush(a?.payload?.url));
+                (Array.isArray(m.midias) ? m.midias : []).forEach(tryPush);
+
+                // Texto pode conter link
+                if (m.texto && typeof m.texto === 'string') {
+                    const rx = /(https?:\/\/\S+)/gi;
+                    let mt;
+                    while ((mt = rx.exec(m.texto)) !== null) tryPush(mt[1]);
+                }
+
+                return Array.from(urls);
+            };
+
+            // Detector unificado de mídia (usado em confirmação e saque)
+            const isMediaMessage = (m = {}, contatoForLog = '-') => {
+                const flagCampo = (m.temMidia === true || m.hasMedia === true);
+                const urls = extractPossibleMediaUrls(m);
+                const urlPareceMidia = urls.some(looksLikeMediaUrl);
+                const typeMidia = /image|photo|picture|video|document|audio/i.test(String(m.type || ''));
+
+                const temMidia = !!(flagCampo || urlPareceMidia || typeMidia);
+
+                console.log(`[${contatoForLog}] mediaCheck> temMidiaCampo=${!!flagCampo} type=${m.type || '-'} urls=${urls.length} urlPareceMidia=${urlPareceMidia} => temMidia=${temMidia}`);
+
+                if (!temMidia && (m.texto || urls.length)) {
+                    // log mais detalhado de diagnóstico
+                    console.log(`[${contatoForLog}] mediaCheck> texto="${String(m.texto || '').slice(0, 120)}" urls=${JSON.stringify(urls)}`);
+                }
+
+                return temMidia;
+            };
+
+            // Normaliza string p/ análise de valor
+            const normalizeMoneyStr = (s = '') => s
+                .toLowerCase()
+                .replace(/\s+/g, ' ')
+                .trim();
+
+            // Converte token "numérico" em Number considerando pt-BR/en-US + mil/k
+            const toNumberToken = (raw = '') => {
+                let s = normalizeMoneyStr(raw);
+
+                // 1) "2k", "2.5k"
+                const k = s.match(/^(\d+(?:[.,]\d+)?)\s*k\b/);
+                if (k) return parseFloat(k[1].replace(',', '.')) * 1000;
+
+                // 2) "2 mil", "2,5 mil"
+                const mil = s.match(/^(\d+(?:[.,]\d+)?)\s*mil\b/);
+                if (mil) return parseFloat(mil[1].replace(',', '.')) * 1000;
+
+                // 3) Formatos com R$ opcional e separadores
+                s = s.replace(/^r\$\s*/i, '');
+
+                // Heurística:
+                // - Se tem vírgula e não tem ponto => vírgula = decimal (pt-BR).
+                // - Se tem ponto e não tem vírgula:
+                //     * Se último bloco após ponto tem 3 dígitos => ponto = milhar (remove pontos).
+                //     * Senão => ponto = decimal.
+                // - Se tem ambos => ponto = milhar, vírgula = decimal.
+                if (/,/.test(s) && !/\./.test(s)) {
+                    // "1.234,56" (sem ponto aqui) => "1234,56"
+                    s = s.replace(/\./g, ''); // (só por segurança)
+                    s = s.replace(',', '.');
+                    return Number(s);
+                } else if (/\./.test(s) && !/,/.test(s)) {
+                    const last = s.split('.').pop() || '';
+                    if (last.length === 3) {
+                        // "1.234" => milhar
+                        s = s.replace(/\./g, '');
+                        return Number(s);
+                    } else {
+                        // "1234.56" => decimal
+                        return Number(s);
+                    }
+                } else if (/\./.test(s) && /,/.test(s)) {
+                    // "1.234,56" => pt-BR
+                    s = s.replace(/\./g, '').replace(',', '.');
+                    return Number(s);
+                } else {
+                    // "2000" puro
+                    return Number(s);
+                }
+            };
+
+            // Extrai o PRIMEIRO valor plausível > 0 do texto
+            const extractValorFromText = (texto = '', contatoForLog = '-') => {
+                const t = normalizeMoneyStr(texto);
+                if (!t) return null;
+
+                // Lista de candidatos:
+                const tokens = [];
+
+                // R$ …, números com separadores, k/mil
+                const rxMoney = /\b(?:r\$\s*)?(\d{1,3}(?:[.\s]\d{3})+|\d+(?:[.,]\d{1,2})?)(?=\b)/gi;
+                let m;
+                while ((m = rxMoney.exec(t)) !== null) tokens.push(m[0]);
+
+                // "2k", "2,5k"
+                const rxK = /\b\d+(?:[.,]\d+)?\s*k\b/gi;
+                let k;
+                while ((k = rxK.exec(t)) !== null) tokens.push(k[0]);
+
+                // "2 mil", "2,5 mil"
+                const rxMil = /\b\d+(?:[.,]\d+)?\s*mil\b/gi;
+                let mi;
+                while ((mi = rxMil.exec(t)) !== null) tokens.push(mi[0]);
+
+                // Converte candidatos
+                const converted = tokens
+                    .map(tok => ({ tok, num: toNumberToken(tok) }))
+                    .filter(x => Number.isFinite(x.num) && x.num > 0);
+
+                console.log(`[${contatoForLog}] valorCheck> texto="${t.slice(0, 120)}" tokens=${JSON.stringify(tokens)} parsed=${JSON.stringify(converted)}`);
+
+                if (!converted.length) return null;
+
+                // Heurística simples: pega o MAIOR valor (normalmente é o saldo)
+                const maior = converted.reduce((a, b) => (b.num > a.num ? b : a));
+                return maior.num;
+            };
+
+            // === 5.0) Disparo da mensagem inicial de confirmação ===
             if (!estado.confirmacaoMsgInicialEnviada) {
                 if (estado.confirmacaoSequenciada) {
                     console.log(`[${contato}] Confirmação: já enviando, pulando.`);
@@ -2014,16 +2150,19 @@ async function processarMensagensPendentes(contato) {
                         estado.mensagensDesdeSolicitacao = [];
                     }
                     return;
+                } catch (e) {
+                    console.error(`[${contato}] ERRO ao enviar msg inicial de confirmação: ${e?.message || e}`);
                 } finally {
                     estado.confirmacaoSequenciada = false;
                 }
             }
 
-            // Pega o pacote desde o pedido
+            // === 5.1) Coleta o pacote desde o pedido ===
             let mensagensPacote = Array.isArray(estado.mensagensPendentes)
                 ? estado.mensagensPendentes.splice(0)
                 : [];
 
+            // filtra por timestamp da solicitação de confirmação (se houver)
             if (estado.confirmacaoDesdeTs) {
                 const anyTsX = mensagensPacote.some(m => tsEmMs(m) !== null);
                 if (anyTsX) {
@@ -2035,23 +2174,28 @@ async function processarMensagensPendentes(contato) {
             }
             if (!mensagensPacote.length) return;
 
-            // Guarda histórico legível
+            // histórico legível
             estado.mensagensDesdeSolicitacao.push(
-                ...mensagensPacote.map(m => (isMidia(m) ? '[mídia]' : (m.texto || '')))
+                ...mensagensPacote.map(m => (isMediaMessage(m, contato) ? '[mídia]' : (m.texto || '')))
             );
 
             console.log(`[${contato}] confirmacao> pacote`, mensagensPacote.map(m => ({
-                temMidia: m?.temMidia, hasMedia: m?.hasMedia, type: m?.type,
-                texto: (m?.texto || '').slice(0, 120)
+                temMidia: !!(m?.temMidia || m?.hasMedia),
+                type: m?.type || '-',
+                texto: (m?.texto || '').slice(0, 120),
+                urlCount: extractPossibleMediaUrls(m).length
             })));
 
-            // --- Regra determinística: mídia OU valor numérico ---
-            const temMidia = mensagensPacote.some(isMidia);
+            // === 5.2) Regra determinística: MÍDIA OU VALOR numérico ===
+            const temMidia = mensagensPacote.some(m => isMediaMessage(m, contato));
+            let valorInformado = null;
 
-            const valorInformado =
-                mensagensPacote
-                    .map(m => extractValorFromText(m?.texto))
-                    .find(v => Number.isFinite(v) && v > 0) ?? null;
+            for (const m of mensagensPacote) {
+                const v = extractValorFromText(m?.texto || '', contato);
+                if (Number.isFinite(v) && v > 0) { valorInformado = v; break; }
+            }
+
+            console.log(`[${contato}] confirmacao> resumoDeterministico temMidia=${temMidia} valorInformado=${valorInformado}`);
 
             if (temMidia || valorInformado != null) {
                 if (valorInformado != null) estado.saldo_informado = valorInformado;
@@ -2070,7 +2214,7 @@ async function processarMensagensPendentes(contato) {
                 return;
             }
 
-            // --- Fallback LLM (se quiser manter) ---
+            // === 5.3) Fallback LLM (opcional) ===
             const textoAgregado = [
                 ...estado.mensagensDesdeSolicitacao,
                 ...mensagensPacote.map(m => m.texto || '')
@@ -2081,17 +2225,23 @@ async function processarMensagensPendentes(contato) {
                 ['OK', 'NAO_OK', 'DUVIDA', 'NEUTRO']
             )).toUpperCase();
 
+            console.log(`[${contato}] confirmacao> fallbackLLM resposta=${okConf}`);
+
             if (temMidia || okConf === 'OK') {
                 estado.etapa = 'saque';
                 estado.saqueInstrucoesEnviadas = false;
                 estado.mensagensDesdeSolicitacao = [];
                 estado.mensagensPendentes = [];
                 await atualizarContato(contato, 'Sim', 'saque', '[Confirmado — avançando]');
+                console.log(`[${contato}] Confirmação OK via LLM -> SAQUE`);
                 return;
             }
 
+            // LOG de diagnóstico final (por que NÃO avançou)
+            console.log(`[${contato}] confirmacao> NÃO avançou: temMidia=${temMidia} valorInformado=${valorInformado} fallback=${okConf}`);
             return;
         }
+
 
         else if (estado.etapa === 'saque') {
             console.log("[" + contato + "] Etapa 6: saque - Início do processamento");
@@ -2186,7 +2336,7 @@ async function processarMensagensPendentes(contato) {
                     !/saca|senha/i.test(msg.texto || '')
             );
             const mensagensTextoSaque = mensagensDoLead.map(msg => msg.texto).join('\n');
-            const temMidiaReal = mensagensPacote.some(isMediaMessage);
+            const temMidiaReal = mensagensPacote.some(m => isMediaMessage(m, contato));
 
             const tipoRelevancia = await gerarResposta(
                 [{ role: 'system', content: promptClassificaRelevancia(mensagensTextoSaque, temMidiaReal) }],
