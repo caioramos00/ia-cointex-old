@@ -1962,28 +1962,32 @@ async function processarMensagensPendentes(contato) {
                 .normalize('NFD').replace(/\p{Diacritic}/gu, '')
                 .toLowerCase().trim();
 
+            // URL de mídia (ManyChat S3, WhatsApp CDN, imagens)
+            const looksLikeMediaUrl = (s) => {
+                const n = String(s || '');
+                return /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(n)
+                    || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
+            };
+
+            const isMidia = (m) => !!(m && (m.temMidia === true || m.hasMedia === true || looksLikeMediaUrl(m.texto)));
+
             const extractValor = (s) => {
                 const n = norm(s).replace(/\s/g, '');
-                // 1) 2k / 2.5k
-                const k = n.match(/(\d+(?:[.,]\d+)?)k\b/);
+                const k = n.match(/(\d+(?:[.,]\d+)?)k\b/);                      // 2k / 2.5k
                 if (k) return Math.round(parseFloat(k[1].replace(',', '.')) * 1000);
 
-                // 2) R$ e formatos brasileiros
-                const br = n.match(/(?:r?\$)?\s*([\d.]{1,3}(?:\.\d{3})*(?:,\d{2})|\d+(?:,\d{2})?)/i);
+                const br = n.match(/(?:r?\$)?\s*([\d.]{1,3}(?:\.\d{3})*(?:,\d{2})|\d+(?:,\d{2})?)/i); // R$ 5.000,00
                 if (br) {
                     const raw = br[1].replace(/\./g, '').replace(',', '.');
                     const val = parseFloat(raw);
                     if (!Number.isNaN(val)) return Math.round(val);
                 }
 
-                // 3) número puro
-                const pu = n.match(/\b\d{1,7}\b/);
+                const pu = n.match(/\b\d{1,7}\b/);                             // número puro
                 if (pu) return parseInt(pu[0], 10);
 
                 return null;
             };
-
-            const pacoteTemMidia = (pacote) => Array.isArray(pacote) && pacote.some(m => m?.temMidia === true);
 
             if (!estado.confirmacaoMsgInicialEnviada) {
                 if (estado.confirmacaoSequenciada) {
@@ -1995,32 +1999,18 @@ async function processarMensagensPendentes(contato) {
                 try {
                     const pick = arr => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
 
-                    const bloco1 = [
-                        'boa', 'boaa', 'boaaa', 'beleza', 'belezaa', 'belezaaa', 'tranquilo', 'isso aí',
-                    ];
+                    const bloco1 = ['boa', 'boaa', 'boaaa', 'beleza', 'belezaa', 'belezaaa', 'tranquilo', 'isso aí'];
                     const bloco2 = [
                         'agora manda um PRINT mostrando o saldo disponível',
                         'agora manda um PRINT mostrando o saldo disponível aí',
-                        'agora manda um PRINT mostrando o saldo disponível nessa conta',
-                        'agora me manda um PRINT mostrando o saldo disponível',
-                        'agora me manda um PRINT mostrando o saldo disponível aí',
                         'agora me manda um PRINT mostrando o saldo disponível nessa conta',
-                        'agr manda um PRINT mostrando o saldo disponível',
-                        'agr me manda um PRINT mostrando o saldo disponível',
-                        'agora manda um PRINT mostrando o saldo',
                         'agora me manda um PRINT mostrando o saldo',
                     ];
                     const bloco3 = [
-                        'ou manda em escrito quanto que tem nela',
-                        'ou escreve quanto que tem nela',
-                        'ou escreve aí quanto que tem nela',
-                        'ou escreve aí o valor',
+                        'ou escreve aqui quanto que tem disponível',
                         'ou me escreve o valor',
                         'ou manda o valor em escrito',
-                        'ou me fala aqui qual o valor que tem',
-                        'ou escreve aqui quanto que tem disponível',
                         'ou me fala o valor disponível',
-                        'ou me manda aqui o valor que tem disponível'
                     ];
 
                     const msgConfirmacao = `${pick(bloco1)}, ${pick(bloco2)}, ${pick(bloco3)}`;
@@ -2037,12 +2027,14 @@ async function processarMensagensPendentes(contato) {
                 }
             }
 
+            // Pega o pacote desde o pedido
             let mensagensPacote = Array.isArray(estado.mensagensPendentes)
                 ? estado.mensagensPendentes.splice(0)
                 : [];
+
             if (estado.confirmacaoDesdeTs) {
                 const anyTsX = mensagensPacote.some(m => tsEmMs(m) !== null);
-                if (estado.confirmacaoDesdeTs && anyTsX) {
+                if (anyTsX) {
                     mensagensPacote = mensagensPacote.filter(m => {
                         const ts = tsEmMs(m);
                         return ts === null || ts >= estado.confirmacaoDesdeTs;
@@ -2051,33 +2043,37 @@ async function processarMensagensPendentes(contato) {
             }
             if (!mensagensPacote.length) return;
 
+            // Guarda histórico legível
             estado.mensagensDesdeSolicitacao.push(
-                ...mensagensPacote.map(m => (m.temMidia ? '[mídia]' : (m.texto || '')))
+                ...mensagensPacote.map(m => (isMidia(m) ? '[mídia]' : (m.texto || '')))
             );
 
-            const temMidia = pacoteTemMidia(mensagensPacote);
+            // --- Regra determinística: mídia OU valor numérico ---
+            const temMidia = mensagensPacote.some(isMidia);
 
-            // checa valor numérico já no pacote (determinístico)
-            const valoresDoPacote = mensagensPacote
-                .map(m => extractValor(m.texto || ''))
-                .filter(v => Number.isFinite(v) && v > 0);
+            const valorInformado =
+                mensagensPacote
+                    .map(m => extractValor(m.texto || ''))
+                    .find(v => Number.isFinite(v) && v > 0) ?? null;
 
-            const valorInformado = valoresDoPacote.length ? valoresDoPacote[0] : null;
-
-            // Se tiver mídia OU valor -> avança direto para 'saque'
-            if (temMidia || (valorInformado != null)) {
+            if (temMidia || valorInformado != null) {
                 if (valorInformado != null) estado.saldo_informado = valorInformado;
 
                 estado.etapa = 'saque';
                 estado.saqueInstrucoesEnviadas = false;
                 estado.mensagensDesdeSolicitacao = [];
                 estado.mensagensPendentes = [];
-                await atualizarContato(contato, 'Sim', 'saque', temMidia ? '[Confirmado por print]' : `[Confirmado por valor=${valorInformado}]`);
+                await atualizarContato(
+                    contato,
+                    'Sim',
+                    'saque',
+                    temMidia ? '[Confirmado por print]' : `[Confirmado por valor=${valorInformado}]`
+                );
                 console.log(`[${contato}] Confirmação OK (midia=${temMidia}, valor=${valorInformado}). Avançando para SAQUE.`);
                 return;
             }
 
-            // fallback LLM (mantido)
+            // --- Fallback LLM (se quiser manter) ---
             const textoAgregado = [
                 ...estado.mensagensDesdeSolicitacao,
                 ...mensagensPacote.map(m => m.texto || '')
