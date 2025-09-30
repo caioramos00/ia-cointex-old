@@ -6,7 +6,6 @@ const estadoContatos = require('./state.js');
 let log = console;
 
 function safeStr(v) { return (v === null || v === undefined) ? '' : String(v); }
-function previewText(text, max = 120) { const t = safeStr(text).replace(/\s+/g, ' ').trim(); return t ? (t.length > max ? t.slice(0, max - 1) + '…' : t) : ''; }
 function normalizeContato(raw) { return safeStr(raw).replace(/\D/g, ''); }
 const delay = (ms) => new Promise(r => setTimeout(r, ms));
 
@@ -71,9 +70,8 @@ async function handleIncomingNormalizedMessage(normalized) {
   const hasMedia = !!temMidia;
   if (!hasText && !hasMedia) return;
   const estado = ensureEstado(contato);
-  const pvw = hasText ? `"${previewText(texto)}"` : '';
-  const midiaFlag = hasMedia ? ' [MÍDIA]' : '';
-  log.info(`[${estado.contato}] etapa=${estado.etapa} in=${pvw}${midiaFlag}`);
+  const msg = hasText ? safeStr(texto).trim() : '[mídia]';
+  log.info(`[${estado.contato}] "${msg}"`);
   estado.lastIncomingTs = ts;
 }
 
@@ -101,5 +99,5 @@ module.exports = {
   delay,
   sendMessage,
   retomarEnvio,
-  _utils: { ensureEstado, previewText, normalizeContato },
+  _utils: { ensureEstado, normalizeContato },
 };
