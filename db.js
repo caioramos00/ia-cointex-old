@@ -162,6 +162,7 @@ async function salvarContato(contatoId, grupoId = null, mensagem = null, tid = '
           click_type
         ]);
         console.log(`[Contato] Novo contato salvo: ${contatoId}, TID: ${tid}, click_type: ${click_type}`);
+        console.log(`[DB] Contato ${contatoId} salvo`);
       } else {
         let grupos = contatoExistente.grupos || [];
         if (grupoId && !grupos.some(g => g.id === grupoId)) {
@@ -186,7 +187,6 @@ async function salvarContato(contatoId, grupoId = null, mensagem = null, tid = '
     } finally {
       client.release();
     }
-    console.log(`[DB] Contato ${contatoId} salvo`);
   } catch (error) {
     console.error(`[Erro] Falha ao salvar contato ${contatoId}: ${error.message}`);
   }
