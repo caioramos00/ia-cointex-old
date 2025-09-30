@@ -11,7 +11,7 @@ REGRAS GERAIS (aplique todas):
 
 VOCABULÁRIO ORIENTATIVO (não exaustivo):
 • ACEITE (qualquer variação/elongação):
-  "sim", "s", "claro", "quero sim",
+  "sim", "s", "claro", "quero sim", "certo", "ss",
   "bora", "boraaa", "vamo", "vamos", "vambora", "partiu",
   "pra cima", "bora pra cima", "agora",
   "to dentro", "tô dentro", "to on",

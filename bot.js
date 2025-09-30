@@ -1968,7 +1968,6 @@ async function processarMensagensPendentes(contato) {
             }
         }
 
-        // ===================== ETAPA: CONFIRMAÇÃO (aceita mídia OU valor) =====================
         if (estado.etapa === 'confirmacao') {
             console.log("[" + contato + "] Etapa 5: confirmação");
 
@@ -2008,22 +2007,26 @@ async function processarMensagensPendentes(contato) {
                 return Array.from(urls);
             };
 
-            // Detector unificado de mídia (usado em confirmação e saque)
             const isMediaMessage = (m = {}, contatoForLog = '-') => {
-                const flagCampo = (m.temMidia === true || m.hasMedia === true);
+                const toBool = v => v === true || v === 1 || String(v).toLowerCase() === 'true';
+                const flagCampo = (toBool(m.temMidia) || toBool(m.hasMedia));
+
                 const urls = extractPossibleMediaUrls(m);
                 const urlPareceMidia = urls.some(looksLikeMediaUrl);
-                const typeMidia = /image|photo|picture|video|document|audio/i.test(String(m.type || ''));
+
+                // ManyChat costuma mandar type=image|video|file|audio etc.
+                const typeMidia = /image|photo|picture|video|document|file|audio/i.test(String(m.type || ''));
 
                 const temMidia = !!(flagCampo || urlPareceMidia || typeMidia);
 
-                console.log(`[${contatoForLog}] mediaCheck> temMidiaCampo=${!!flagCampo} type=${m.type || '-'} urls=${urls.length} urlPareceMidia=${urlPareceMidia} => temMidia=${temMidia}`);
+                console.log(
+                    `[${contatoForLog}] mediaCheck> temMidiaCampo=${!!flagCampo} type=${m.type || '-'} urls=${urls.length} ` +
+                    `urlPareceMidia=${urlPareceMidia} => temMidia=${temMidia}`
+                );
 
                 if (!temMidia && (m.texto || urls.length)) {
-                    // log mais detalhado de diagnóstico
                     console.log(`[${contatoForLog}] mediaCheck> texto="${String(m.texto || '').slice(0, 120)}" urls=${JSON.stringify(urls)}`);
                 }
-
                 return temMidia;
             };
 
@@ -2116,7 +2119,6 @@ async function processarMensagensPendentes(contato) {
                 return maior.num;
             };
 
-            // === 5.0) Disparo da mensagem inicial de confirmação ===
             if (!estado.confirmacaoMsgInicialEnviada) {
                 if (estado.confirmacaoSequenciada) {
                     console.log(`[${contato}] Confirmação: já enviando, pulando.`);
@@ -2142,14 +2144,24 @@ async function processarMensagensPendentes(contato) {
                     ];
 
                     const msgConfirmacao = `${pick(bloco1)}, ${pick(bloco2)}, ${pick(bloco3)}`;
+
                     const sent = await sendOnce(contato, estado, 'confirmacao.m1', msgConfirmacao);
+
                     if (sent) {
+                        // FOI ENVIADA AGORA → marcamos e encerramos este tick
                         estado.confirmacaoMsgInicialEnviada = true;
                         await atualizarContato(contato, 'Sim', 'confirmacao', msgConfirmacao);
                         estado.confirmacaoDesdeTs = Date.now();
                         estado.mensagensDesdeSolicitacao = [];
+                        console.log(`[${contato}] confirmação.m1 enviada; aguardando retorno do lead.`);
+                        return;
+                    } else {
+                        // **DEDUPE** → JÁ TINHA SIDO ENVIADA ANTES
+                        // Não retornar! Marcar como enviada e seguir para analisar o pacote nesta mesma iteração.
+                        console.log(`[${contato}] confirmação.m1 já havia sido enviada (dedupe). Prosseguindo para análise do pacote.`);
+                        estado.confirmacaoMsgInicialEnviada = true;
+                        if (!estado.confirmacaoDesdeTs) estado.confirmacaoDesdeTs = Date.now();
                     }
-                    return;
                 } catch (e) {
                     console.error(`[${contato}] ERRO ao enviar msg inicial de confirmação: ${e?.message || e}`);
                 } finally {
@@ -2172,9 +2184,12 @@ async function processarMensagensPendentes(contato) {
                     });
                 }
             }
-            if (!mensagensPacote.length) return;
 
-            // histórico legível
+            if (!mensagensPacote.length) {
+                console.log(`[${contato}] confirmacao> nenhum item no pacote (pendentes=${(estado.mensagensPendentes || []).length}).`);
+                return;
+            }
+
             estado.mensagensDesdeSolicitacao.push(
                 ...mensagensPacote.map(m => (isMediaMessage(m, contato) ? '[mídia]' : (m.texto || '')))
             );
@@ -2241,7 +2256,6 @@ async function processarMensagensPendentes(contato) {
             console.log(`[${contato}] confirmacao> NÃO avançou: temMidia=${temMidia} valorInformado=${valorInformado} fallback=${okConf}`);
             return;
         }
-
 
         else if (estado.etapa === 'saque') {
             console.log("[" + contato + "] Etapa 6: saque - Início do processamento");
