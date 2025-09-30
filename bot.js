@@ -4,6 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const estadoContatos = require('./state.js');
+const { getActiveTransport } = require('./lib/transport');
+const { getContatoByPhone } = require('./db');
 
 let log = console;
 
@@ -187,17 +189,25 @@ async function processarMensagensPendentes(contato) {
   if (st.enviandoMensagens) return { ok: true, skipped: 'busy' };
   st.enviandoMensagens = true;
   try {
+    console.log(`[${st.contato}] etapa=${st.etapa} pendentes=${st.mensagensPendentes.length}`);
+
     if (st.etapa === 'none') {
       let m1 = chooseUnique(composeAberturaMsg1, st);
       let m2 = chooseUnique(composeAberturaMsg2, st);
 
-      if (!m1) m1 = composeAberturaMsg1(); // fallback
-      if (!m2) m2 = composeAberturaMsg2(); // fallback
+      if (!m1) { m1 = composeAberturaMsg1(); console.warn(`[${st.contato}] m1 via fallback`); }
+      if (!m2) { m2 = composeAberturaMsg2(); console.warn(`[${st.contato}] m2 via fallback`); }
+
+      console.log(`[${st.contato}] abertura m1="${m1}"`);
+      console.log(`[${st.contato}] abertura m2="${m2}"`);
 
       if (m1) await sendMessage(st.contato, m1);
       if (m2) { await delay(900); await sendMessage(st.contato, m2); }
+
       st.etapa = 'abertura:done';
+      console.log(`[${st.contato}] etapa->${st.etapa}`);
     }
+
     st.mensagensPendentes = [];
     return { ok: true };
   } finally {
@@ -205,7 +215,41 @@ async function processarMensagensPendentes(contato) {
   }
 }
 
-async function sendMessage(contato, texto) { console.log(`[${contato}] OUT: "${safeStr(texto)}"`); return { ok: true }; }
+async function sendMessage(contato, texto) {
+  const msg = safeStr(texto);
+  console.log(`[${contato}] OUT: "${msg}"`);
+
+  try {
+    const { mod, settings } = await getActiveTransport();
+    const provider = mod?.name || 'unknown';
+
+    if (provider === 'manychat') {
+      const c = await getContatoByPhone(contato).catch(() => null);
+      const subscriberId = c?.manychat_subscriber_id || c?.subscriber_id;
+
+      if (!subscriberId) {
+        console.warn(`[${contato}] ManyChat: subscriber_id ausente — não foi possível enviar.`);
+        return { ok: false, reason: 'no-subscriber-id' };
+      }
+
+      await mod.sendText({ subscriberId, text: msg }, settings);
+      console.log(`[${contato}] ManyChat: enviado subscriber_id=${subscriberId}`);
+      return { ok: true, provider };
+    }
+
+    if (provider === 'meta') {
+      console.warn(`[${contato}] Meta: envio não implementado neste bot.js`);
+      return { ok: false, reason: 'meta-not-implemented' };
+    }
+
+    console.warn(`[${contato}] Provider desconhecido: ${provider}`);
+    return { ok: false, reason: 'unknown-provider' };
+  } catch (e) {
+    console.error(`[${contato}] sendMessage erro: ${e.message}`);
+    return { ok: false, error: e.message };
+  }
+}
+
 async function retomarEnvio(contato) { console.log(`[${contato}] retomarEnvio()`); return { ok: true }; }
 
 module.exports = {
