@@ -1718,7 +1718,6 @@ async function processarMensagensPendentes(contato) {
             return;
         }
 
-        // ===================== ETAPA: ACESSO (reformulada + variações) =====================
         if (estado.etapa === 'acesso') {
             console.log("[" + contato + "] Etapa 4: acesso (reformulada)");
 
@@ -1737,9 +1736,34 @@ async function processarMensagensPendentes(contato) {
                     'qual a senha', 'qual a senha?', 'q a senha', 'q a senha?'
                 ];
                 if (hits.some(x => n.includes(x))) return true;
-
                 // fallback regex curta
                 return /\b(entrei|loguei|acessei|consegui|pronto|foi|entrou|to dentro|t[oó] dentro|ok)\b/.test(n);
+            };
+
+            // helper p/ disparar imediatamente a primeira DM de confirmação (evita pedir "entrei" 2x)
+            const dispararConfirmacaoInicial = async () => {
+                const pick = arr => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
+                const bloco1 = ['boa', 'boaa', 'boaaa', 'beleza', 'belezaa', 'belezaaa', 'tranquilo', 'isso aí'];
+                const bloco2 = [
+                    'agora manda um PRINT mostrando o saldo disponível',
+                    'agora manda um PRINT mostrando o saldo disponível aí',
+                    'agora me manda um PRINT mostrando o saldo disponível nessa conta',
+                    'agora me manda um PRINT mostrando o saldo',
+                ];
+                const bloco3 = [
+                    'ou escreve aqui quanto que tem disponível',
+                    'ou me escreve o valor',
+                    'ou manda o valor em escrito',
+                    'ou me fala o valor disponível',
+                ];
+                const msgConfirmacao = `${pick(bloco1)}, ${pick(bloco2)}, ${pick(bloco3)}`;
+                const sent = await sendOnce(contato, estado, 'confirmacao.m1', msgConfirmacao);
+                if (sent) {
+                    estado.confirmacaoMsgInicialEnviada = true;
+                    await atualizarContato(contato, 'Sim', 'confirmacao', msgConfirmacao);
+                    estado.confirmacaoDesdeTs = Date.now();
+                    estado.mensagensDesdeSolicitacao = [];
+                }
             };
 
             // 1) Garantir credenciais
@@ -1894,6 +1918,9 @@ async function processarMensagensPendentes(contato) {
                 estado.confirmacaoMsgInicialEnviada = false;
                 await atualizarContato(contato, 'Sim', 'confirmacao', '[Login confirmado — atalho]');
                 console.log(`[${contato}] Etapa 5: confirmação — avançou pelo atalho`);
+
+                // >>> Disparar IMEDIATAMENTE a primeira DM de confirmação <<<
+                await dispararConfirmacaoInicial();
                 return;
             }
 
@@ -1921,6 +1948,9 @@ async function processarMensagensPendentes(contato) {
 
                 await atualizarContato(contato, 'Sim', 'confirmacao', '[Login confirmado — avançando]');
                 console.log("[" + contato + "] Etapa 5: confirmação — avançou após CONFIRMADO");
+
+                // >>> Disparar IMEDIATAMENTE a primeira DM de confirmação <<<
+                await dispararConfirmacaoInicial();
                 return;
             } else {
                 console.log(`[${contato}] Acesso aguardando CONFIRMADO. Retorno: ${tipoAcesso}`);
@@ -1929,15 +1959,9 @@ async function processarMensagensPendentes(contato) {
             }
         }
 
-
         // ===================== ETAPA: CONFIRMAÇÃO (aceita mídia OU valor) =====================
         if (estado.etapa === 'confirmacao') {
             console.log("[" + contato + "] Etapa 5: confirmação");
-
-            // Helpers locais
-            const norm = (str) => String(str || '')
-                .normalize('NFD').replace(/\p{Diacritic}/gu, '')
-                .toLowerCase().trim();
 
             // URL de mídia (ManyChat S3, WhatsApp CDN, imagens)
             const looksLikeMediaUrl = (s) => {
@@ -1946,26 +1970,10 @@ async function processarMensagensPendentes(contato) {
                     || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
             };
 
+            // usa flags do conector + heurística de URL
             const isMidia = (m) => !!(m && (m.temMidia === true || m.hasMedia === true || looksLikeMediaUrl(m.texto)));
 
-            const extractValor = (s) => {
-                const n = norm(s).replace(/\s/g, '');
-                const k = n.match(/(\d+(?:[.,]\d+)?)k\b/);                      // 2k / 2.5k
-                if (k) return Math.round(parseFloat(k[1].replace(',', '.')) * 1000);
-
-                const br = n.match(/(?:r?\$)?\s*([\d.]{1,3}(?:\.\d{3})*(?:,\d{2})|\d+(?:,\d{2})?)/i); // R$ 5.000,00
-                if (br) {
-                    const raw = br[1].replace(/\./g, '').replace(',', '.');
-                    const val = parseFloat(raw);
-                    if (!Number.isNaN(val)) return Math.round(val);
-                }
-
-                const pu = n.match(/\b\d{1,7}\b/);                             // número puro
-                if (pu) return parseInt(pu[0], 10);
-
-                return null;
-            };
-
+            // se ainda não mandou a primeira mensagem desta etapa, manda agora e retorna
             if (!estado.confirmacaoMsgInicialEnviada) {
                 if (estado.confirmacaoSequenciada) {
                     console.log(`[${contato}] Confirmação: já enviando, pulando.`);
@@ -2055,7 +2063,7 @@ async function processarMensagensPendentes(contato) {
                 return;
             }
 
-            // --- Fallback LLM (se quiser manter) ---
+            // --- Fallback LLM (opcional, mantém como reforço) ---
             const textoAgregado = [
                 ...estado.mensagensDesdeSolicitacao,
                 ...mensagensPacote.map(m => m.texto || '')
