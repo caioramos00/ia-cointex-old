@@ -182,7 +182,6 @@ async function salvarContato(contatoId, grupoId = null, mensagem = null, tid = '
             click_type = $6 
           WHERE id = $7
         `, [JSON.stringify(grupos), agora, 'ativo', JSON.stringify(historico), tid, click_type, contatoId]);
-        console.log(`[Contato] Contato atualizado: ${contatoId}, TID: ${tid}, click_type: ${click_type}`);
       }
     } finally {
       client.release();
@@ -217,7 +216,6 @@ async function atualizarContato(contato, conversou, etapa_atual, mensagem = null
           historico_interacoes = $3
         WHERE id = $4
       `, [conversou, etapa_atual, JSON.stringify(historicoInteracoes), contato]);
-      console.log(`[${contato}] Contato atualizado: ${conversou}, ${etapa_atual}`);
     } finally {
       client.release();
     }
