@@ -1,1331 +1,465 @@
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="2f7fd18e-ad39-43df" responseTimeMS=6072 responseBytes=444 userAgent="ManyChat"
-[ManyChat] mc-mg5trnaf-akf0j hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.150.147',
+[ManyChat] mc-mg5wanll-4a4da Origem consolidada { tid: '', clickType: 'Orgânico' }
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[5511949079161] etapa=interesse acessoMsgsDisparadas=false credEnt=false confirmIni=false
+     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="42b4677c-ce31-498d" responseTimeMS=4728 responseBytes=440 userAgent="ManyChat"
+[ManyChat] mc-mg5wanll-4a4da Mensagem enfileirada { idContato: '5511949079161', queueSize: 1, hasMedia: false }
+[ManyChat] mc-mg5warqn-tx5u2 hit POST /webhook/manychat {
+  ip: '3.74.158.122, 172.71.151.11',
   ua: 'ManyChat',
   contentType: 'application/json'
 }
-[ManyChat] mc-mg5trnaf-akf0j Extracted fields {
-  subscriberId: '1230543432',
+[ManyChat] mc-mg5warqn-tx5u2 Extracted fields {
+  subscriberId: '1569442567',
   phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'eae',
-  hasMedia: false
-}
-[ManyChat] mc-mg5trnaf-akf0j Origem consolidada { tid: '', clickType: 'Orgânico' }
-[5511952079605] Estado inicializado e contato atualizado: Sim, abertura. TID: , click_type: Orgânico
-[5511952079605] Contato não encontrado no DB
-[Contato] Novo contato salvo: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[5511952079605] Enviando para API Cointex (tentativa 1/3): {"tid":"","click_type":"Orgânico","phone_number":"+5511952079605"}
-[5511952079605] Cointex HTTP 200 {
-  status: 'success',
-  message: 'Usuário criado com sucesso',
-  users: [
-    {
-      email: 'danielcoelho3802@gmail.com',
-      password: '@Daniel3802',
-      login_url: 'https://www.cointex.cash/accounts/entrar/'
-    }
-  ]
-}
-[5511952079605] Usuário criado: danielcoelho3802@gmail.com
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[ManyChat] mc-mg5trnaf-akf0j Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-[ManyChat] mc-mg5trt1e-b91m5 hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.70.247.141',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5trt1e-b91m5 Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'salve',
-  hasMedia: false
-}
-[ManyChat] mc-mg5trt1e-b91m5 Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[ManyChat] mc-mg5trt1e-b91m5 Mensagem enfileirada { idContato: '5511952079605', queueSize: 2, hasMedia: false }
-[ManyChat] mc-mg5try6k-yiolj hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.151.223',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5try6k-yiolj Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'sou lara',
-  hasMedia: false
-}
-[ManyChat] mc-mg5try6k-yiolj Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="3b43f93e-382b-439f" responseTimeMS=6045 responseBytes=440 userAgent="ManyChat"
-[5511952079605] etapa=abertura acessoMsgsDisparadas=false credEnt=false confirmIni=false
-[ManyChat] mc-mg5try6k-yiolj Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="0d4515e9-de6b-40c8" responseTimeMS=5404 responseBytes=438 userAgent="ManyChat"
-[ManyChat] mc-mg5ts39e-8aqk4 hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.150.215',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5ts39e-8aqk4 Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'bira pró trampo',
-  hasMedia: false
-}
-[ManyChat] mc-mg5ts39e-8aqk4 Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Processando etapa abertura
-[5511952079605] Bloqueado: estado=true, enviandoMensagens=true
-[ManyChat] mc-mg5ts39e-8aqk4 Mensagem enfileirada { idContato: '5511952079605', queueSize: 2, hasMedia: false }
-[ManyChat] mc-mg5ts6t9-pwlll hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.146.35',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5ts6t9-pwlll Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'bora pro trampo',
-  hasMedia: false
-}
-[ManyChat] mc-mg5ts6t9-pwlll Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[ManyChat] mc-mg5ts6t9-pwlll Mensagem enfileirada { idContato: '5511952079605', queueSize: 3, hasMedia: false }
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="7c88b63f-572b-4a0d" responseTimeMS=4009 responseBytes=444 userAgent="ManyChat"
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="7cf8845f-eea7-4144" responseTimeMS=22 responseBytes=442 userAgent="ManyChat"
-[5511952079605] etapa=abertura acessoMsgsDisparadas=false credEnt=false confirmIni=false
-[5511952079605] Bloqueado: estado=true, enviandoMensagens=true
-[5511952079605] etapa=abertura acessoMsgsDisparadas=false credEnt=false confirmIni=false
-[5511952079605] Nenhuma mensagem nova para processar
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Processando etapa abertura
-[ManyChat][sendContent/fb] POST https://api.manychat.com/fb/sending/sendContent
-[ManyChat][sendContent/fb] Payload: {"subscriber_id":1230543432,"data":{"version":"v2","content":{"type":"whatsapp","messages":[{"type":"text","text":"boa, to com vaga pra um trampo, consegue? 🍊🍊"}]}}}
-[ManyChat][sendContent/fb] HTTP 200 Body: {"status":"success"}
-[5511952079605] Contato atualizado: Sim, abertura
-[5511952079605] Mensagem inicial enviada: boa, to com vaga pra um trampo, consegue? 🍊🍊
-[ManyChat] mc-mg5ttfl1-w1zkh hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.151.40',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5ttfl1-w1zkh Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'sim',
-  hasMedia: false
-}
-[ManyChat] mc-mg5ttfl1-w1zkh Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[ManyChat][sendContent/fb] POST https://api.manychat.com/fb/sending/sendContent
-[ManyChat][sendContent/fb] Payload: {"subscriber_id":1230543432,"data":{"version":"v2","content":{"type":"whatsapp","messages":[{"type":"text","text":"não liga pro nome desse whatsapp, beleza? número business que usamos pra um trampo, salva com o nome Ryan"}]}}}
-[ManyChat][sendContent/fb] HTTP 200 Body: {"status":"success"}
-[5511952079605] Contato atualizado: Sim, abertura
-[5511952079605] Segunda mensagem enviada: não liga pro nome desse whatsapp, beleza? número business que usamos pra um trampo, salva com o nome Ryan
-[ManyChat] mc-mg5ttfl1-w1zkh Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-[ManyChat] mc-mg5ttl4d-sc7lw hit POST /webhook/manychat {
-  ip: '3.74.158.122, 104.23.239.96',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5ttl4d-sc7lw Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'to on',
-  hasMedia: false
-}
-[ManyChat] mc-mg5ttl4d-sc7lw Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="7c0c50aa-93cc-4dc5" responseTimeMS=6177 responseBytes=438 userAgent="ManyChat"
-[ManyChat] mc-mg5ttl4d-sc7lw Mensagem enfileirada { idContato: '5511952079605', queueSize: 2, hasMedia: false }
-[ManyChat] mc-mg5ttp9b-6ucum hit POST /webhook/manychat {
-  ip: '3.74.158.122, 104.23.239.96',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5ttp9b-6ucum Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'bira',
-  hasMedia: false
-}
-[ManyChat] mc-mg5ttp9b-6ucum Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="69bb4451-969c-499a" responseTimeMS=4718 responseBytes=438 userAgent="ManyChat"
-[5511952079605] etapa=abertura acessoMsgsDisparadas=false credEnt=false confirmIni=false
-[ManyChat] mc-mg5ttp9b-6ucum Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="4ed55e3a-f2f2-48b0" responseTimeMS=4747 responseBytes=442 userAgent="ManyChat"
-[ManyChat] mc-mg5tttet-ja6yo hit POST /webhook/manychat {
-  ip: '3.74.158.122, 104.23.239.96',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5tttet-ja6yo Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
+  phoneMask: '55*********61',
   hasText: true,
   textPreview: 'bora',
   hasMedia: false
 }
-[ManyChat] mc-mg5tttet-ja6yo Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[ManyChat] mc-mg5tttet-ja6yo Mensagem enfileirada { idContato: '5511952079605', queueSize: 2, hasMedia: false }
-[ManyChat] mc-mg5tttvb-63lwa hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.151.50',
+[ManyChat] mc-mg5warqn-tx5u2 Origem consolidada { tid: '', clickType: 'Orgânico' }
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="cf1192b3-f449-44a8" responseTimeMS=11 responseBytes=438 userAgent="ManyChat"
+[DB] Contato 5511949079161 salvo
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[ManyChat] mc-mg5warqn-tx5u2 Mensagem enfileirada { idContato: '5511949079161', queueSize: 2, hasMedia: false }
+[5511949079161] Bloqueado: estado=true, enviandoMensagens=true
+     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="8a035936-5abc-4eb3" responseTimeMS=12 responseBytes=438 userAgent="ManyChat"
+[ManyChat] mc-mg5was88-nsogv hit POST /webhook/manychat {
+  ip: '3.74.158.122, 172.68.194.217',
   ua: 'ManyChat',
   contentType: 'application/json'
 }
-[ManyChat] mc-mg5tttvb-63lwa Extracted fields {
-  subscriberId: '1230543432',
+[ManyChat] mc-mg5was88-nsogv Extracted fields {
+  subscriberId: '1569442567',
   phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'sim',
-  hasMedia: false
-}
-[ManyChat] mc-mg5tttvb-63lwa Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="9b35b9f0-2781-4085" responseTimeMS=13 responseBytes=440 userAgent="ManyChat"
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Processando etapa abertura
-[5511952079605] Contato atualizado: Sim, interesse
-[5511952079605] Avanço automático para 'interesse'
-[5511952079605] Etapa 'interesse'
-[ManyChat] mc-mg5tttvb-63lwa Mensagem enfileirada { idContato: '5511952079605', queueSize: 3, hasMedia: false }
-[ManyChat] mc-mg5ttxtn-f5l45 hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.151.40',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5ttxtn-f5l45 Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'certo',
-  hasMedia: false
-}
-[ManyChat] mc-mg5ttxtn-f5l45 Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="3386bf9c-b1d1-4a54" responseTimeMS=4540 responseBytes=438 userAgent="ManyChat"
-[5511952079605] Bloqueado: estado=true, enviandoMensagens=true
-[ManyChat] mc-mg5ttxtn-f5l45 Mensagem enfileirada { idContato: '5511952079605', queueSize: 4, hasMedia: false }
-[ManyChat] mc-mg5tu1rk-fzs06 hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.151.202',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5tu1rk-fzs06 Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'beleza',
-  hasMedia: false
-}
-[ManyChat] mc-mg5tu1rk-fzs06 Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="9cfd9179-7b3c-4475" responseTimeMS=4527 responseBytes=442 userAgent="ManyChat"
-[5511952079605] etapa=interesse acessoMsgsDisparadas=false credEnt=false confirmIni=false
-[5511952079605] Bloqueado: estado=true, enviandoMensagens=true
-[ManyChat] mc-mg5tu1rk-fzs06 Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="29959c90-d18c-45b7" responseTimeMS=4715 responseBytes=442 userAgent="ManyChat"
-[ManyChat] mc-mg5tu5w1-484bm hit POST /webhook/manychat {
-  ip: '3.74.158.122, 104.23.239.96',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5tu5w1-484bm Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'ok',
-  hasMedia: false
-}
-[ManyChat] mc-mg5tu5w1-484bm Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[5511952079605] etapa=interesse acessoMsgsDisparadas=false credEnt=false confirmIni=false
-[ManyChat][sendContent/fb] POST https://api.manychat.com/fb/sending/sendContent
-[ManyChat][sendContent/fb] Payload: {"subscriber_id":1230543432,"data":{"version":"v2","content":{"type":"whatsapp","messages":[{"type":"text","text":"tô sem tempo agora, fazendo vários trampo... vou ir te mandando o que precisa fazer, e você só fala o que eu for perguntar, certo?"}]}}}
-[ManyChat][sendContent/fb] HTTP 200 Body: {"status":"success"}
-[5511952079605] Contato atualizado: Sim, interesse
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Etapa 'interesse'
-[5511952079605] etapa=interesse acessoMsgsDisparadas=false credEnt=false confirmIni=false
-[5511952079605] Nenhuma mensagem nova para processar
-[ManyChat] mc-mg5tu5w1-484bm Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="e230628a-d873-43fc" responseTimeMS=5625 responseBytes=440 userAgent="ManyChat"
-[5511952079605] Resposta em interesse: ACEITE
-[5511952079605] Contato atualizado: Sim, instruções
-[ManyChat] mc-mg5tuaq1-dnnjg hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.151.108',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5tuaq1-dnnjg Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'salvo',
-  hasMedia: false
-}
-[ManyChat] mc-mg5tuaq1-dnnjg Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Etapa 3: instruções
-[ManyChat] mc-mg5tuaq1-dnnjg Mensagem enfileirada { idContato: '5511952079605', queueSize: 2, hasMedia: false }
-[ManyChat] mc-mg5tueud-sd8w2 hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.150.21',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5tueud-sd8w2 Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'bora',
-  hasMedia: false
-}
-[ManyChat] mc-mg5tueud-sd8w2 Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[ManyChat] mc-mg5tueud-sd8w2 Mensagem enfileirada { idContato: '5511952079605', queueSize: 3, hasMedia: false }
-[ManyChat] mc-mg5tufb5-52yvl hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.151.144',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5tufb5-52yvl Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'certo',
-  hasMedia: false
-}
-[ManyChat] mc-mg5tufb5-52yvl Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="31935d5b-9fe2-493c" responseTimeMS=4703 responseBytes=440 userAgent="ManyChat"
-[5511952079605] etapa=instruções acessoMsgsDisparadas=false credEnt=false confirmIni=false
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="c932f870-8abe-4975" responseTimeMS=26 responseBytes=442 userAgent="ManyChat"
-[ManyChat] mc-mg5tufb5-52yvl Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-[5511952079605] Bloqueado: estado=true, enviandoMensagens=true
-[ManyChat] mc-mg5tujzo-utljt hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.150.22',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5tujzo-utljt Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
+  phoneMask: '55*********61',
   hasText: true,
   textPreview: 'vamos',
   hasMedia: false
 }
-[ManyChat] mc-mg5tujzo-utljt Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[ManyChat] mc-mg5tujzo-utljt Mensagem enfileirada { idContato: '5511952079605', queueSize: 2, hasMedia: false }
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="4ae30aee-ba43-44b5" responseTimeMS=5427 responseBytes=438 userAgent="ManyChat"
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="3890b3a5-051f-4fcb" responseTimeMS=14 responseBytes=440 userAgent="ManyChat"
-[ManyChat] mc-mg5tukh7-8iysf hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.151.134',
+[ManyChat] mc-mg5was88-nsogv Origem consolidada { tid: '', clickType: 'Orgânico' }
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[ManyChat] mc-mg5was88-nsogv Mensagem enfileirada { idContato: '5511949079161', queueSize: 3, hasMedia: false }
+[ManyChat] mc-mg5wasp1-luvvy hit POST /webhook/manychat {
+  ip: '3.74.158.122, 172.71.150.102',
   ua: 'ManyChat',
   contentType: 'application/json'
 }
-[ManyChat] mc-mg5tukh7-8iysf Extracted fields {
-  subscriberId: '1230543432',
+[ManyChat] mc-mg5wasp1-luvvy Extracted fields {
+  subscriberId: '1569442567',
   phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
+  phoneMask: '55*********61',
   hasText: true,
-  textPreview: 'tranquilo',
+  textPreview: 'ok',
   hasMedia: false
 }
-[ManyChat] mc-mg5tukh7-8iysf Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Etapa 3: instruções
-[5511952079605] etapa=instruções acessoMsgsDisparadas=false credEnt=false confirmIni=false
-[5511952079605] Bloqueado: estado=true, enviandoMensagens=true
-[ManyChat] mc-mg5tukh7-8iysf Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="9c028e60-dbd6-4cce" responseTimeMS=4895 responseBytes=438 userAgent="ManyChat"
-[ManyChat] mc-mg5tuoqx-8m6fp hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.150.76',
+[ManyChat] mc-mg5wasp1-luvvy Origem consolidada { tid: '', clickType: 'Orgânico' }
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[5511949079161] etapa=interesse acessoMsgsDisparadas=false credEnt=false confirmIni=false
+[5511949079161] Sem opt-out nas mensagens analisadas.
+[5511949079161] Etapa 'interesse'
+[5511949079161] Resposta em interesse: ACEITE
+[5511949079161] Contato atualizado: Sim, instruções
+[5511949079161] Sem opt-out nas mensagens analisadas.
+     [POST]499ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="f6ff20a6-f57d-488c" responseTimeMS=9968 responseBytes=29 userAgent="ManyChat"
+[5511949079161] Etapa 3: instruções
+[5511949079161] etapa=instruções acessoMsgsDisparadas=false credEnt=false confirmIni=false
+[5511949079161] Nenhuma mensagem nova para processar
+[5511949079161] etapa=instruções acessoMsgsDisparadas=false credEnt=false confirmIni=false
+[5511949079161] Nenhuma mensagem nova para processar
+[5511949079161] etapa=instruções acessoMsgsDisparadas=false credEnt=false confirmIni=false
+[5511949079161] Nenhuma mensagem nova para processar
+[ManyChat][sendContent/fb] POST https://api.manychat.com/fb/sending/sendContent
+[ManyChat][sendContent/fb] Payload: {"subscriber_id":1569442567,"data":{"version":"v2","content":{"type":"whatsapp","messages":[{"type":"text","text":"já salvou o número? salva aí que se aparecer outro trampo eu te chamo também… vou mandar agora o passo a passo do que precisa pra fazer direitinho"}]}}}
+[ManyChat][sendContent/fb] HTTP 200 Body: {"status":"success"}
+[5511949079161] Contato atualizado: Sim, instruções
+[5511949079161] [instruções] Msg1 enviada: já salvou o número? salva aí que se aparecer outro trampo eu te chamo também… vou mandar agora o passo a passo do que precisa pra fazer direitinho
+[ManyChat] mc-mg5wasp1-luvvy Mensagem enfileirada { idContato: '5511949079161', queueSize: 1, hasMedia: false }
+[ManyChat][sendContent/fb] POST https://api.manychat.com/fb/sending/sendContent
+[ManyChat][sendContent/fb] Payload: {"subscriber_id":1569442567,"data":{"version":"v2","content":{"type":"whatsapp","messages":[{"type":"text","text":"• você vai precisar de uma conta com pix pra receber, qualquer banco serve, só não dá se for o SICOOB\n\n• se vc tiver dados moveis, tira do wifi, mas se não tiver deixa no wifi\n\n• vou te passar o email e a senha de uma conta pra vc acessar, vai ter uma grana disponivel lá, você só precisa transferir pra sua conta bancária, e já era\n\n• sua parte vai ser 2000, o resto você manda pra minha conta logo que cair, a chave pix eu te passo depois"}]}}}
+[ManyChat][sendContent/fb] HTTP 200 Body: {"status":"success"}
+[5511949079161] Contato atualizado: Sim, instruções
+[5511949079161] [instruções] Msg2 enviada (bullets únicos)
+[5511949079161] etapa=instruções acessoMsgsDisparadas=false credEnt=false confirmIni=false
+[5511949079161] Sem opt-out nas mensagens analisadas.
+[5511949079161] Etapa 3: instruções
+[ManyChat][sendContent/fb] POST https://api.manychat.com/fb/sending/sendContent
+[ManyChat][sendContent/fb] Payload: {"subscriber_id":1569442567,"data":{"version":"v2","content":{"type":"whatsapp","messages":[{"type":"text","text":"é só isso msm… a gente faz parte por parte pra não ter erro beleza?"}]}}}
+[ManyChat][sendContent/fb] HTTP 200 Body: {"status":"success"}
+[5511949079161] Contato atualizado: Sim, instruções
+[5511949079161] [instruções] Msg3 enviada: é só isso msm… a gente faz parte por parte pra não ter erro beleza?
+[ManyChat] mc-mg5wed3h-laeeu hit POST /webhook/manychat {
+  ip: '3.74.158.122, 172.71.150.123',
   ua: 'ManyChat',
   contentType: 'application/json'
 }
-[ManyChat] mc-mg5tuoqx-8m6fp Extracted fields {
-  subscriberId: '1230543432',
+[ManyChat] mc-mg5wed3h-laeeu Extracted fields {
+  subscriberId: '1569442567',
   phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
+  phoneMask: '55*********61',
   hasText: true,
   textPreview: 'beleza',
   hasMedia: false
 }
-[ManyChat] mc-mg5tuoqx-8m6fp Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Etapa 3: instruções
-[ManyChat][sendContent/fb] POST https://api.manychat.com/fb/sending/sendContent
-[ManyChat][sendContent/fb] Payload: {"subscriber_id":1230543432,"data":{"version":"v2","content":{"type":"whatsapp","messages":[{"type":"text","text":"salvou meu contato? deixa salvo pq se aparecer outro trampo eu te chamo também… vou te mandar o passo a passo do que você precisa fazer certinho"}]}}}
-[ManyChat] mc-mg5tuoqx-8m6fp Mensagem enfileirada { idContato: '5511952079605', queueSize: 2, hasMedia: false }
-[5511952079605] etapa=instruções acessoMsgsDisparadas=false credEnt=false confirmIni=false
-[ManyChat][sendContent/fb] HTTP 200 Body: {"status":"success"}
-[5511952079605] Contato atualizado: Sim, instruções
-[5511952079605] [instruções] Msg1 enviada: salvou meu contato? deixa salvo pq se aparecer outro trampo eu te chamo também… vou te mandar o passo a passo do que você precisa fazer certinho
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="4edc9f47-1028-4708" responseTimeMS=4521 responseBytes=440 userAgent="ManyChat"
-[ManyChat] mc-mg5tuspr-1vmcr hit POST /webhook/manychat {
-  ip: '3.74.158.122, 104.23.239.96',
+[ManyChat] mc-mg5wed3h-laeeu Origem consolidada { tid: '', clickType: 'Orgânico' }
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="6131cd11-be2d-45d7" responseTimeMS=5029 responseBytes=440 userAgent="ManyChat"
+[ManyChat] mc-mg5wed3h-laeeu Mensagem enfileirada { idContato: '5511949079161', queueSize: 1, hasMedia: false }
+[ManyChat] mc-mg5wehpg-lqa4u hit POST /webhook/manychat {
+  ip: '3.74.158.122, 104.23.239.74',
   ua: 'ManyChat',
   contentType: 'application/json'
 }
-[ManyChat] mc-mg5tuspr-1vmcr Extracted fields {
-  subscriberId: '1230543432',
+[ManyChat] mc-mg5wehpg-lqa4u Extracted fields {
+  subscriberId: '1569442567',
   phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
+  phoneMask: '55*********61',
+  hasText: true,
+  textPreview: 'pode ser',
+  hasMedia: false
+}
+[ManyChat] mc-mg5wehpg-lqa4u Origem consolidada { tid: '', clickType: 'Orgânico' }
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="66399800-befa-4de3" responseTimeMS=5537 responseBytes=438 userAgent="ManyChat"
+[ManyChat] mc-mg5wehpg-lqa4u Mensagem enfileirada { idContato: '5511949079161', queueSize: 2, hasMedia: false }
+     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="02cd49ed-2dc6-49e3" responseTimeMS=9 responseBytes=442 userAgent="ManyChat"
+[ManyChat] mc-mg5wemi6-3mpku hit POST /webhook/manychat {
+  ip: '3.74.158.122, 104.23.239.74',
+  ua: 'ManyChat',
+  contentType: 'application/json'
+}
+[ManyChat] mc-mg5wemi6-3mpku Extracted fields {
+  subscriberId: '1569442567',
+  phoneSrc: 'payload.user.phone',
+  phoneMask: '55*********61',
+  hasText: true,
+  textPreview: 'vamos',
+  hasMedia: false
+}
+[ManyChat] mc-mg5wemi6-3mpku Origem consolidada { tid: '', clickType: 'Orgânico' }
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[ManyChat] mc-mg5wemi6-3mpku Mensagem enfileirada { idContato: '5511949079161', queueSize: 3, hasMedia: false }
+[ManyChat] mc-mg5wemzu-m1l55 hit POST /webhook/manychat {
+  ip: '3.74.158.122, 104.23.239.74',
+  ua: 'ManyChat',
+  contentType: 'application/json'
+}
+[ManyChat] mc-mg5wemzu-m1l55 Extracted fields {
+  subscriberId: '1569442567',
+  phoneSrc: 'payload.user.phone',
+  phoneMask: '55*********61',
+  hasText: true,
+  textPreview: 'bor',
+  hasMedia: false
+}
+[ManyChat] mc-mg5wemzu-m1l55 Origem consolidada { tid: '', clickType: 'Orgânico' }
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[5511949079161] etapa=instruções acessoMsgsDisparadas=false credEnt=false confirmIni=false
+     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="3957d47a-49aa-4bd2" responseTimeMS=7575 responseBytes=438 userAgent="ManyChat"
+[ManyChat] mc-mg5wemzu-m1l55 Mensagem enfileirada { idContato: '5511949079161', queueSize: 1, hasMedia: false }
+     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="322b12ff-c5d0-4168" responseTimeMS=9 responseBytes=438 userAgent="ManyChat"
+[ManyChat] mc-mg5wetdi-00j6h hit POST /webhook/manychat {
+  ip: '3.74.158.122, 104.23.239.74',
+  ua: 'ManyChat',
+  contentType: 'application/json'
+}
+[ManyChat] mc-mg5wetdi-00j6h Extracted fields {
+  subscriberId: '1569442567',
+  phoneSrc: 'payload.user.phone',
+  phoneMask: '55*********61',
+  hasText: true,
+  textPreview: 'bora',
+  hasMedia: false
+}
+[ManyChat] mc-mg5wetdi-00j6h Origem consolidada { tid: '', clickType: 'Orgânico' }
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[ManyChat] mc-mg5wetdi-00j6h Mensagem enfileirada { idContato: '5511949079161', queueSize: 2, hasMedia: false }
+[ManyChat] mc-mg5wetuj-9wcbu hit POST /webhook/manychat {
+  ip: '3.74.158.122, 104.23.239.74',
+  ua: 'ManyChat',
+  contentType: 'application/json'
+}
+[ManyChat] mc-mg5wetuj-9wcbu Extracted fields {
+  subscriberId: '1569442567',
+  phoneSrc: 'payload.user.phone',
+  phoneMask: '55*********61',
   hasText: true,
   textPreview: 'certo',
   hasMedia: false
 }
-[ManyChat] mc-mg5tuspr-1vmcr Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[5511952079605] Bloqueado: estado=true, enviandoMensagens=true
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Etapa 3: instruções
-[ManyChat] mc-mg5tuspr-1vmcr Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-[ManyChat] mc-mg5tuwpi-rv1t9 hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.151.228',
+[ManyChat] mc-mg5wetuj-9wcbu Origem consolidada { tid: '', clickType: 'Orgânico' }
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[5511949079161] Bloqueado: estado=true, enviandoMensagens=true
+[5511949079161] etapa=instruções acessoMsgsDisparadas=false credEnt=false confirmIni=false
+[5511949079161] Sem opt-out nas mensagens analisadas.
+[5511949079161] Etapa 3: instruções
+     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="378f2e21-b1c2-4fd4" responseTimeMS=4984 responseBytes=438 userAgent="ManyChat"
+[ManyChat] mc-mg5wetuj-9wcbu Mensagem enfileirada { idContato: '5511949079161', queueSize: 1, hasMedia: false }
+[ManyChat] mc-mg5weyfz-18qy9 hit POST /webhook/manychat {
+  ip: '3.74.158.122, 104.23.239.74',
   ua: 'ManyChat',
   contentType: 'application/json'
 }
-[ManyChat] mc-mg5tuwpi-rv1t9 Extracted fields {
-  subscriberId: '1230543432',
+[ManyChat] mc-mg5weyfz-18qy9 Extracted fields {
+  subscriberId: '1569442567',
   phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'tranquilo',
-  hasMedia: false
-}
-[ManyChat] mc-mg5tuwpi-rv1t9 Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="c981b5cc-ccff-4bc4" responseTimeMS=4477 responseBytes=440 userAgent="ManyChat"
-[5511952079605] etapa=instruções acessoMsgsDisparadas=false credEnt=false confirmIni=false
-[ManyChat] mc-mg5tuwpi-rv1t9 Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Etapa 3: instruções
-[ManyChat] mc-mg5tv19a-k4c31 hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.151.227',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5tv19a-k4c31 Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'bora',
-  hasMedia: false
-}
-[ManyChat] mc-mg5tv19a-k4c31 Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[ManyChat] mc-mg5tv19a-k4c31 Mensagem enfileirada { idContato: '5511952079605', queueSize: 2, hasMedia: false }
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="ad5d4130-09a4-4a83" responseTimeMS=5277 responseBytes=440 userAgent="ManyChat"
-[5511952079605] etapa=instruções acessoMsgsDisparadas=false credEnt=false confirmIni=false
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="2b91d6f4-82d9-4d0f" responseTimeMS=10 responseBytes=440 userAgent="ManyChat"
-[ManyChat] mc-mg5tv21x-u323o hit POST /webhook/manychat {
-  ip: '3.74.158.122, 162.158.95.82',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5tv21x-u323o Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
+  phoneMask: '55*********61',
   hasText: true,
   textPreview: 'pode ser',
   hasMedia: false
 }
-[ManyChat] mc-mg5tv21x-u323o Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Etapa 3: instruções
-[ManyChat] mc-mg5tv21x-u323o Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-[ManyChat] mc-mg5tv5s4-7t2yh hit POST /webhook/manychat {
-  ip: '3.74.158.122, 162.158.95.82',
+[ManyChat] mc-mg5weyfz-18qy9 Origem consolidada { tid: '', clickType: 'Orgânico' }
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[5511949079161] Classificação pós-instruções: ACEITE
+[5511949079161] Contato atualizado: Sim, acesso
+[5511949079161] Sem opt-out nas mensagens analisadas.
+[5511949079161] Etapa 4: acesso (reformulada)
+     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="40653f56-2396-4fc2" responseTimeMS=4922 responseBytes=442 userAgent="ManyChat"
+[ManyChat] mc-mg5weyfz-18qy9 Mensagem enfileirada { idContato: '5511949079161', queueSize: 2, hasMedia: false }
+[ManyChat] mc-mg5wf2r5-5gaaf hit POST /webhook/manychat {
+  ip: '3.74.158.122, 104.23.239.74',
   ua: 'ManyChat',
   contentType: 'application/json'
 }
-[ManyChat] mc-mg5tv5s4-7t2yh Extracted fields {
-  subscriberId: '1230543432',
+[ManyChat] mc-mg5wf2r5-5gaaf Extracted fields {
+  subscriberId: '1569442567',
   phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'sim',
-  hasMedia: false
-}
-[ManyChat] mc-mg5tv5s4-7t2yh Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[5511952079605] etapa=instruções acessoMsgsDisparadas=false credEnt=false confirmIni=false
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="1a0b2f01-983c-4b6b" responseTimeMS=4236 responseBytes=438 userAgent="ManyChat"
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Etapa 3: instruções
-[5511952079605] etapa=instruções acessoMsgsDisparadas=false credEnt=false confirmIni=false
-[5511952079605] Nenhuma mensagem nova para processar
-[5511952079605] etapa=instruções acessoMsgsDisparadas=false credEnt=false confirmIni=false
-[5511952079605] Nenhuma mensagem nova para processar
-[ManyChat] mc-mg5tv5s4-7t2yh Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-[ManyChat] mc-mg5tvcja-xdhx1 hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.151.50',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5tvcja-xdhx1 Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'salvei',
-  hasMedia: false
-}
-[ManyChat] mc-mg5tvcja-xdhx1 Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="f2b94ef3-f924-4494" responseTimeMS=8135 responseBytes=440 userAgent="ManyChat"
-[5511952079605] etapa=instruções acessoMsgsDisparadas=false credEnt=false confirmIni=false
-[ManyChat] mc-mg5tvcja-xdhx1 Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Etapa 3: instruções
-[ManyChat] mc-mg5tvgq7-80twl hit POST /webhook/manychat {
-  ip: '3.74.158.122, 162.158.95.82',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5tvgq7-80twl Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'bora',
-  hasMedia: false
-}
-[ManyChat] mc-mg5tvgq7-80twl Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[ManyChat] mc-mg5tvgq7-80twl Mensagem enfileirada { idContato: '5511952079605', queueSize: 2, hasMedia: false }
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="c98153ae-3bb0-4fd5" responseTimeMS=4851 responseBytes=442 userAgent="ManyChat"
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="d5269925-ab36-45ec" responseTimeMS=10 responseBytes=438 userAgent="ManyChat"
-[ManyChat] mc-mg5tvh7n-ce2wo hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.150.20',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5tvh7n-ce2wo Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'tá salvo',
-  hasMedia: false
-}
-[ManyChat] mc-mg5tvh7n-ce2wo Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[ManyChat][sendContent/fb] POST https://api.manychat.com/fb/sending/sendContent
-[ManyChat][sendContent/fb] Payload: {"subscriber_id":1230543432,"data":{"version":"v2","content":{"type":"whatsapp","messages":[{"type":"text","text":"• vc precisa ter uma conta bancária com pix pra receber, qlqr banco serve, só não funciona se for SICOOB\n\n• se você tiver dados, deixa desativado o wifi, mas se não tiver pode deixar no wi-fi\n\n• vou te passar o email e a senha de uma conta pra você entrar, lá vai ter um dinheiro disponivel pra saque, você só precisa transferir pra sua conta bancária, e já era\n\n• você recebe dois mil, o resto vc manda pra minha conta logo que cair, depois eu passo a chave pix"}]}}}
-[ManyChat][sendContent/fb] HTTP 200 Body: {"status":"success"}
-[5511952079605] Contato atualizado: Sim, instruções
-[5511952079605] [instruções] Msg2 enviada (bullets únicos)
-[ManyChat] mc-mg5tvh7n-ce2wo Mensagem enfileirada { idContato: '5511952079605', queueSize: 3, hasMedia: false }
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="536a37fc-efe1-4170" responseTimeMS=4464 responseBytes=442 userAgent="ManyChat"
-[ManyChat] mc-mg5tvlig-1wr6g hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.70.240.21',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5tvlig-1wr6g Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'beleza',
-  hasMedia: false
-}
-[ManyChat] mc-mg5tvlig-1wr6g Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[5511952079605] etapa=instruções acessoMsgsDisparadas=false credEnt=false confirmIni=false
-[ManyChat] mc-mg5tvlig-1wr6g Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-[5511952079605] Bloqueado: estado=true, enviandoMensagens=true
-[ManyChat] mc-mg5tvpp7-xqttf hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.70.240.21',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5tvpp7-xqttf Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'boa',
-  hasMedia: false
-}
-[ManyChat] mc-mg5tvpp7-xqttf Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[5511952079605] etapa=instruções acessoMsgsDisparadas=false credEnt=false confirmIni=false
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="b32fc4fb-0af3-4a11" responseTimeMS=4830 responseBytes=442 userAgent="ManyChat"
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Etapa 3: instruções
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Etapa 3: instruções
-[ManyChat][sendContent/fb] POST https://api.manychat.com/fb/sending/sendContent
-[ManyChat][sendContent/fb] Payload: {"subscriber_id":1230543432,"data":{"version":"v2","content":{"type":"whatsapp","messages":[{"type":"text","text":"é sem erro… a gente vai fazendo parte por parte pra nao ter erro beleza?"}]}}}
-[5511952079605] etapa=instruções acessoMsgsDisparadas=false credEnt=false confirmIni=false
-[5511952079605] Nenhuma mensagem nova para processar
-[ManyChat] mc-mg5tvpp7-xqttf Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-[ManyChat] mc-mg5tvu7o-e5ec9 hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.70.240.21',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5tvu7o-e5ec9 Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'pode ser',
-  hasMedia: false
-}
-[ManyChat] mc-mg5tvu7o-e5ec9 Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="50509513-9656-417e" responseTimeMS=5167 responseBytes=440 userAgent="ManyChat"
-[ManyChat][sendContent/fb] HTTP 200 Body: {"status":"success"}
-[5511952079605] Contato atualizado: Sim, instruções
-[5511952079605] [instruções] Msg3 enviada: é sem erro… a gente vai fazendo parte por parte pra nao ter erro beleza?
-[ManyChat] mc-mg5tvu7o-e5ec9 Mensagem enfileirada { idContato: '5511952079605', queueSize: 2, hasMedia: false }
-[ManyChat] mc-mg5tvyja-h9h80 hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.151.181',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5tvyja-h9h80 Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
+  phoneMask: '55*********61',
   hasText: true,
   textPreview: 'tranquilo',
   hasMedia: false
 }
-[ManyChat] mc-mg5tvyja-h9h80 Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="8f44a0f5-c998-4209" responseTimeMS=4995 responseBytes=440 userAgent="ManyChat"
-[5511952079605] etapa=instruções acessoMsgsDisparadas=false credEnt=false confirmIni=false
-[ManyChat] mc-mg5tvyja-h9h80 Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-[ManyChat] mc-mg5tw2vi-huk0b hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.150.147',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5tw2vi-huk0b Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'certo',
-  hasMedia: false
-}
-[ManyChat] mc-mg5tw2vi-huk0b Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="b2f868a4-738e-43c6" responseTimeMS=5011 responseBytes=438 userAgent="ManyChat"
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Etapa 3: instruções
-[5511952079605] Bloqueado: estado=true, enviandoMensagens=true
-[ManyChat] mc-mg5tw2vi-huk0b Mensagem enfileirada { idContato: '5511952079605', queueSize: 2, hasMedia: false }
-[5511952079605] Classificação pós-instruções: ACEITE
-[5511952079605] Contato atualizado: Sim, acesso
-[ManyChat] mc-mg5tw6i1-bvx0a hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.150.120',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5tw6i1-bvx0a Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'tranquilo',
-  hasMedia: false
-}
-[ManyChat] mc-mg5tw6i1-bvx0a Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="bc685046-8784-4f14" responseTimeMS=4101 responseBytes=446 userAgent="ManyChat"
-[5511952079605] etapa=acesso acessoMsgsDisparadas=false credEnt=false confirmIni=false
-[ManyChat] mc-mg5tw6i1-bvx0a Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="8e096e68-25b3-4261" responseTimeMS=4624 responseBytes=444 userAgent="ManyChat"
-[ManyChat] mc-mg5twave-z85jr hit POST /webhook/manychat {
-  ip: '3.74.158.122, 104.23.239.97',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5twave-z85jr Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'e agora?',
-  hasMedia: false
-}
-[ManyChat] mc-mg5twave-z85jr Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Etapa 4: acesso (reformulada)
-[5511952079605] Bloqueado: estado=true, enviandoMensagens=true
-[5511952079605] etapa=acesso acessoMsgsDisparadas=true credEnt=false confirmIni=false
+[ManyChat] mc-mg5wf2r5-5gaaf Origem consolidada { tid: '', clickType: 'Orgânico' }
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[5511949079161] etapa=acesso acessoMsgsDisparadas=true credEnt=false confirmIni=false
+[5511949079161] Bloqueado: estado=true, enviandoMensagens=true
 [ManyChat][sendContent/fb] POST https://api.manychat.com/fb/sending/sendContent
-[ManyChat][sendContent/fb] Payload: {"subscriber_id":1230543432,"data":{"version":"v2","content":{"type":"whatsapp","messages":[{"type":"text","text":"email e a senha da conta, copia aqui e cola lá pra não colocar errado:\n\nE-mail:\ndanielcoelho3802@gmail.com\n\nSenha:"}]}}}
+[ManyChat][sendContent/fb] Payload: {"subscriber_id":1569442567,"data":{"version":"v2","content":{"type":"whatsapp","messages":[{"type":"text","text":"email e a senha da conta, copia e cola pra não colocar errado:\n\nEmail:\nlorenarocha6086@gmail.com\n\nSenha:"}]}}}
 [ManyChat][sendContent/fb] HTTP 200 Body: {"status":"success"}
-[5511952079605] Contato atualizado: Sim, acesso
-[ManyChat] mc-mg5twave-z85jr Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="37a59164-07e5-4fc2" responseTimeMS=5277 responseBytes=444 userAgent="ManyChat"
-[ManyChat] mc-mg5twfev-v9zed hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.150.144',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5twfev-v9zed Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'bora',
-  hasMedia: false
-}
-[ManyChat] mc-mg5twfev-v9zed Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[ManyChat] mc-mg5twfev-v9zed Mensagem enfileirada { idContato: '5511952079605', queueSize: 2, hasMedia: false }
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="deea76fd-d8f2-49df" responseTimeMS=10 responseBytes=442 userAgent="ManyChat"
-[ManyChat] mc-mg5twfwb-1kjx2 hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.150.205',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5twfwb-1kjx2 Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'pode ser',
-  hasMedia: false
-}
-[ManyChat] mc-mg5twfwb-1kjx2 Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Etapa 4: acesso (reformulada)
-[5511952079605] Acesso: sequência já disparada (acessoMsgsDisparadas=true), não reenviando.
-[5511952079605] Acesso: aguardando finalizar envio (credenciaisEntregues=false). Não vou classificar ainda.
-[ManyChat] mc-mg5twfwb-1kjx2 Mensagem enfileirada { idContato: '5511952079605', queueSize: 3, hasMedia: false }
-[ManyChat] mc-mg5twjyu-jvc7u hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.150.205',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5twjyu-jvc7u Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'beleza',
-  hasMedia: false
-}
-[ManyChat] mc-mg5twjyu-jvc7u Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="e879428d-6e70-4587" responseTimeMS=4699 responseBytes=438 userAgent="ManyChat"
-[5511952079605] etapa=acesso acessoMsgsDisparadas=true credEnt=false confirmIni=false
-[5511952079605] Bloqueado: estado=true, enviandoMensagens=true
-[5511952079605] etapa=acesso acessoMsgsDisparadas=true credEnt=false confirmIni=false
-[5511952079605] Nenhuma mensagem nova para processar
+[5511949079161] Contato atualizado: Sim, acesso
+[5511949079161] etapa=acesso acessoMsgsDisparadas=true credEnt=false confirmIni=false
+[5511949079161] Nenhuma mensagem nova para processar
+[5511949079161] Sem opt-out nas mensagens analisadas.
+[5511949079161] Etapa 4: acesso (reformulada)
+[5511949079161] Acesso: sequência já disparada (acessoMsgsDisparadas=true), não reenviando.
+[5511949079161] Acesso: aguardando finalizar envio (credenciaisEntregues=false). Não vou classificar ainda.
+     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="fc68bd1c-7975-4dbe" responseTimeMS=9703 responseBytes=440 userAgent="ManyChat"
+[ManyChat] mc-mg5wf2r5-5gaaf Mensagem enfileirada { idContato: '5511949079161', queueSize: 1, hasMedia: false }
+[5511949079161] etapa=acesso acessoMsgsDisparadas=true credEnt=false confirmIni=false
 [ManyChat][sendContent/fb] POST https://api.manychat.com/fb/sending/sendContent
-[ManyChat][sendContent/fb] Payload: {"subscriber_id":1230543432,"data":{"version":"v2","content":{"type":"whatsapp","messages":[{"type":"text","text":"@Daniel3802"}]}}}
-[ManyChat] mc-mg5twjyu-jvc7u Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
+[ManyChat][sendContent/fb] Payload: {"subscriber_id":1569442567,"data":{"version":"v2","content":{"type":"whatsapp","messages":[{"type":"text","text":"@Lorena6086"}]}}}
 [ManyChat][sendContent/fb] HTTP 200 Body: {"status":"success"}
-[5511952079605] Contato atualizado: Sim, acesso
-[ManyChat] mc-mg5twolj-c15t3 hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.150.204',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5twolj-c15t3 Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'beleza',
-  hasMedia: false
-}
-[ManyChat] mc-mg5twolj-c15t3 Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="140ddbac-cee4-46b8" responseTimeMS=5467 responseBytes=442 userAgent="ManyChat"
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Etapa 4: acesso (reformulada)
-[5511952079605] Acesso: sequência já disparada (acessoMsgsDisparadas=true), não reenviando.
-[5511952079605] Acesso: aguardando finalizar envio (credenciaisEntregues=false). Não vou classificar ainda.
-[5511952079605] etapa=acesso acessoMsgsDisparadas=true credEnt=false confirmIni=false
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Etapa 4: acesso (reformulada)
-[5511952079605] Acesso: sequência já disparada (acessoMsgsDisparadas=true), não reenviando.
-[5511952079605] Acesso: aguardando finalizar envio (credenciaisEntregues=false). Não vou classificar ainda.
-[ManyChat] mc-mg5twolj-c15t3 Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-[ManyChat] mc-mg5twub9-h3q32 hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.151.48',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5twub9-h3q32 Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'tranquilo',
-  hasMedia: false
-}
-[ManyChat] mc-mg5twub9-h3q32 Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="f3df7583-b88f-4307" responseTimeMS=6860 responseBytes=440 userAgent="ManyChat"
-[5511952079605] etapa=acesso acessoMsgsDisparadas=true credEnt=false confirmIni=false
+[5511949079161] Contato atualizado: Sim, acesso
+[5511949079161] Sem opt-out nas mensagens analisadas.
+[5511949079161] Etapa 4: acesso (reformulada)
+[5511949079161] Acesso: sequência já disparada (acessoMsgsDisparadas=true), não reenviando.
+[5511949079161] Acesso: aguardando finalizar envio (credenciaisEntregues=false). Não vou classificar ainda.
+[5511949079161] etapa=acesso acessoMsgsDisparadas=true credEnt=false confirmIni=false
+[5511949079161] Nenhuma mensagem nova para processar
 [ManyChat][sendContent/fb] POST https://api.manychat.com/fb/sending/sendContent
-[ManyChat][sendContent/fb] Payload: {"subscriber_id":1230543432,"data":{"version":"v2","content":{"type":"whatsapp","messages":[{"type":"text","text":"entra nesse link:\n\nhttps://www.cointex.cash/accounts/entrar/\n\nentra aí na conta mas nao aperta em nada ainda, assim q conseguir acessar me manda um \"ENTREI\""}]}}}
-[ManyChat] mc-mg5twub9-h3q32 Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="6e8bf525-47fd-4fb4" responseTimeMS=4108 responseBytes=440 userAgent="ManyChat"
-[ManyChat] mc-mg5twy19-2zjpl hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.150.171',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5twy19-2zjpl Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'certo',
-  hasMedia: false
-}
-[ManyChat] mc-mg5twy19-2zjpl Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
+[ManyChat][sendContent/fb] Payload: {"subscriber_id":1569442567,"data":{"version":"v2","content":{"type":"whatsapp","messages":[{"type":"text","text":"entra no link:\n\nhttps://www.cointex.cash/accounts/entrar/\n\nentra aí mas nao aperta em nada ainda, assim que entrar na conta me manda um \"ENTREI\""}]}}}
 [ManyChat][sendContent/fb] HTTP 200 Body: {"status":"success"}
-[5511952079605] Contato atualizado: Sim, acesso
-[5511952079605] Contato atualizado: Sim, acesso
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Etapa 4: acesso (reformulada)
-[5511952079605] Acesso: sequência já disparada (acessoMsgsDisparadas=true), não reenviando.
-[5511952079605] acesso> LLM="CONFIRMADO" novas=1 texto="beleza..."
-[5511952079605] Contato atualizado: Sim, confirmacao
-[5511952079605] Etapa 5: confirmação — avançou após CONFIRMADO
-[ManyChat] mc-mg5twy19-2zjpl Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-[ManyChat] mc-mg5tx1zx-edgx2 hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.70.240.21',
+[5511949079161] Contato atualizado: Sim, acesso
+[5511949079161] Contato atualizado: Sim, acesso
+[ManyChat] mc-mg5wgkq4-uhczl hit POST /webhook/manychat {
+  ip: '3.74.158.122, 172.71.172.102',
   ua: 'ManyChat',
   contentType: 'application/json'
 }
-[ManyChat] mc-mg5tx1zx-edgx2 Extracted fields {
-  subscriberId: '1230543432',
+[ManyChat] mc-mg5wgkq4-uhczl Extracted fields {
+  subscriberId: '1569442567',
   phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
+  phoneMask: '55*********61',
   hasText: true,
-  textPreview: 'bora',
+  textPreview: 'entrei',
   hasMedia: false
 }
-[ManyChat] mc-mg5tx1zx-edgx2 Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[ManyChat] mc-mg5tx1zx-edgx2 Mensagem enfileirada { idContato: '5511952079605', queueSize: 2, hasMedia: false }
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="9d8615a1-909d-4206" responseTimeMS=4542 responseBytes=440 userAgent="ManyChat"
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="1c8ad666-b818-4031" responseTimeMS=10 responseBytes=442 userAgent="ManyChat"
-[ManyChat] mc-mg5tx2ir-gvh1o hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.70.240.21',
+[ManyChat] mc-mg5wgkq4-uhczl Origem consolidada { tid: '', clickType: 'Orgânico' }
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="0bfff8df-fb9f-4176" responseTimeMS=4604 responseBytes=438 userAgent="ManyChat"
+[ManyChat] mc-mg5wgkq4-uhczl Mensagem enfileirada { idContato: '5511949079161', queueSize: 1, hasMedia: false }
+[5511949079161] etapa=acesso acessoMsgsDisparadas=true credEnt=true confirmIni=false
+[5511949079161] Sem opt-out nas mensagens analisadas.
+[5511949079161] Etapa 4: acesso (reformulada)
+[5511949079161] Acesso: sequência já disparada (acessoMsgsDisparadas=true), não reenviando.
+[5511949079161] Contato atualizado: Sim, confirmacao
+[5511949079161] Etapa 5: confirmação — avançou pelo atalho
+[ManyChat] mc-mg5whpz1-5eq6u hit POST /webhook/manychat {
+  ip: '3.74.158.122, 172.71.150.21',
   ua: 'ManyChat',
   contentType: 'application/json'
 }
-[ManyChat] mc-mg5tx2ir-gvh1o Extracted fields {
-  subscriberId: '1230543432',
+[ManyChat] mc-mg5whpz1-5eq6u Extracted fields {
+  subscriberId: '1569442567',
   phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
+  phoneMask: '55*********61',
   hasText: true,
-  textPreview: 'pode ser',
+  textPreview: 'ENTREI',
   hasMedia: false
 }
-[ManyChat] mc-mg5tx2ir-gvh1o Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[5511952079605] etapa=confirmacao acessoMsgsDisparadas=true credEnt=true confirmIni=false
-     ==> Detected service running on port 10000
-     ==> Docs on specifying a port: https://render.com/docs/web-services#port-binding
-[ManyChat] mc-mg5tx2ir-gvh1o Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-[5511952079605] Bloqueado: estado=true, enviandoMensagens=true
-[ManyChat] mc-mg5tx6e0-vjzac hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.151.226',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5tx6e0-vjzac Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'boa',
-  hasMedia: false
-}
-[ManyChat] mc-mg5tx6e0-vjzac Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="2a072daf-5840-4dcb" responseTimeMS=4489 responseBytes=442 userAgent="ManyChat"
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Etapa 5: confirmação
-[ManyChat] mc-mg5tx6e0-vjzac Mensagem enfileirada { idContato: '5511952079605', queueSize: 2, hasMedia: false }
-[ManyChat] mc-mg5txak8-ff3aw hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.151.12',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5txak8-ff3aw Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'lar',
-  hasMedia: false
-}
-[ManyChat] mc-mg5txak8-ff3aw Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="9362e0b7-277a-4698" responseTimeMS=4786 responseBytes=438 userAgent="ManyChat"
-[5511952079605] etapa=confirmacao acessoMsgsDisparadas=true credEnt=true confirmIni=false
+[ManyChat] mc-mg5whpz1-5eq6u Origem consolidada { tid: '', clickType: 'Orgânico' }
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="98f2b454-a232-487d" responseTimeMS=4599 responseBytes=442 userAgent="ManyChat"
+[ManyChat] mc-mg5whpz1-5eq6u Mensagem enfileirada { idContato: '5511949079161', queueSize: 1, hasMedia: false }
+[5511949079161] etapa=confirmacao acessoMsgsDisparadas=true credEnt=true confirmIni=false
+[5511949079161] Sem opt-out nas mensagens analisadas.
+[5511949079161] Etapa 5: confirmação
 [ManyChat][sendContent/fb] POST https://api.manychat.com/fb/sending/sendContent
-[ManyChat][sendContent/fb] Payload: {"subscriber_id":1230543432,"data":{"version":"v2","content":{"type":"whatsapp","messages":[{"type":"text","text":"boa, agora manda um PRINT mostrando o saldo, ou escreve aí quanto que tem nela"}]}}}
+[ManyChat][sendContent/fb] Payload: {"subscriber_id":1569442567,"data":{"version":"v2","content":{"type":"whatsapp","messages":[{"type":"text","text":"isso aí, agora me manda um PRINT mostrando o saldo, ou me escreve o valor"}]}}}
 [ManyChat][sendContent/fb] HTTP 200 Body: {"status":"success"}
-[5511952079605] Contato atualizado: Sim, confirmacao
-[5511952079605] etapa=confirmacao acessoMsgsDisparadas=true credEnt=true confirmIni=true
-[5511952079605] Nenhuma mensagem nova para processar
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Etapa 5: confirmação
-[ManyChat] mc-mg5txak8-ff3aw Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-[ManyChat] mc-mg5txf61-hqbi5 hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.70.240.21',
+[5511949079161] Contato atualizado: Sim, confirmacao
+[ManyChat] mc-mg5wpxlp-mlo9g hit POST /webhook/manychat {
+  ip: '3.74.158.122, 172.71.151.193',
   ua: 'ManyChat',
   contentType: 'application/json'
 }
-[ManyChat] mc-mg5txf61-hqbi5 Extracted fields {
-  subscriberId: '1230543432',
+[ManyChat] mc-mg5wpxlp-mlo9g Extracted fields {
+  subscriberId: '1569442567',
   phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
+  phoneMask: '55*********61',
   hasText: true,
-  textPreview: 'lara',
-  hasMedia: false
+  textPreview: 'https://manybot-files.s3.eu-central-1.amazonaws.com/3605793/wa/2025/09/30/original_132115db539930b8b…',
+  hasMedia: true
 }
-[ManyChat] mc-mg5txf61-hqbi5 Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="39a42021-87bf-4824" responseTimeMS=5423 responseBytes=440 userAgent="ManyChat"
-[5511952079605] etapa=confirmacao acessoMsgsDisparadas=true credEnt=true confirmIni=true
-[5511952079605] Bloqueado: estado=true, enviandoMensagens=true
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Etapa 5: confirmação
-[ManyChat] mc-mg5txf61-hqbi5 Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-[ManyChat] mc-mg5txjne-xcl9t hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.150.143',
+[ManyChat] mc-mg5wpxlp-mlo9g Origem consolidada { tid: '', clickType: 'Orgânico' }
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="5e68eb7d-82fb-4866" responseTimeMS=5307 responseBytes=442 userAgent="ManyChat"
+[ManyChat] mc-mg5wpxlp-mlo9g Mensagem enfileirada { idContato: '5511949079161', queueSize: 1, hasMedia: true }
+[5511949079161] etapa=confirmacao acessoMsgsDisparadas=true credEnt=true confirmIni=true
+[5511949079161] Sem opt-out nas mensagens analisadas.
+[5511949079161] Etapa 5: confirmação
+     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="43518113-4db0-4981" responseTimeMS=5567 responseBytes=444 userAgent="ManyChat"
+[ManyChat] mc-mg5wqy3w-rh1m8 hit POST /webhook/manychat {
+  ip: '3.74.158.122, 172.71.151.219',
   ua: 'ManyChat',
   contentType: 'application/json'
 }
-[ManyChat] mc-mg5txjne-xcl9t Extracted fields {
-  subscriberId: '1230543432',
+[ManyChat] mc-mg5wqy3w-rh1m8 Extracted fields {
+  subscriberId: '1569442567',
   phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
+  phoneMask: '55*********61',
   hasText: true,
-  textPreview: 'e a senha?',
-  hasMedia: false
+  textPreview: 'https://manybot-files.s3.eu-central-1.amazonaws.com/3605793/wa/2025/09/30/original_a580c3f288765f9f7…',
+  hasMedia: true
 }
-[ManyChat] mc-mg5txjne-xcl9t Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="c4d0f68e-bf85-4c33" responseTimeMS=5208 responseBytes=438 userAgent="ManyChat"
-[ManyChat] mc-mg5txjne-xcl9t Mensagem enfileirada { idContato: '5511952079605', queueSize: 2, hasMedia: false }
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="999251fd-f324-4b73" responseTimeMS=4838 responseBytes=438 userAgent="ManyChat"
-[ManyChat] mc-mg5txo9x-vqhc9 hit POST /webhook/manychat {
-  ip: '3.74.158.122, 104.23.239.97',
+[ManyChat] mc-mg5wqy3w-rh1m8 Origem consolidada { tid: '', clickType: 'Orgânico' }
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[ManyChat] mc-mg5wqy3w-rh1m8 Mensagem enfileirada { idContato: '5511949079161', queueSize: 1, hasMedia: true }
+[5511949079161] etapa=confirmacao acessoMsgsDisparadas=true credEnt=true confirmIni=true
+[5511949079161] Sem opt-out nas mensagens analisadas.
+[5511949079161] Etapa 5: confirmação
+[ManyChat] mc-mg5wrvfx-pyp5q hit POST /webhook/manychat {
+  ip: '3.74.158.122, 172.68.195.235',
   ua: 'ManyChat',
   contentType: 'application/json'
 }
-[ManyChat] mc-mg5txo9x-vqhc9 Extracted fields {
-  subscriberId: '1230543432',
+[ManyChat] mc-mg5wrvfx-pyp5q Extracted fields {
+  subscriberId: '1569442567',
   phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
+  phoneMask: '55*********61',
   hasText: true,
-  textPreview: 'cade a senha?',
+  textPreview: '5000',
   hasMedia: false
 }
-[ManyChat] mc-mg5txo9x-vqhc9 Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[5511952079605] etapa=confirmacao acessoMsgsDisparadas=true credEnt=true confirmIni=true
-[ManyChat] mc-mg5txo9x-vqhc9 Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-[ManyChat] mc-mg5txsag-ag961 hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.150.115',
+[ManyChat] mc-mg5wrvfx-pyp5q Origem consolidada { tid: '', clickType: 'Orgânico' }
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[ManyChat] mc-mg5wrvfx-pyp5q Mensagem enfileirada { idContato: '5511949079161', queueSize: 1, hasMedia: false }
+     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="a8d1341c-bec0-4c4b" responseTimeMS=5267 responseBytes=444 userAgent="ManyChat"
+[5511949079161] etapa=confirmacao acessoMsgsDisparadas=true credEnt=true confirmIni=true
+[5511949079161] Sem opt-out nas mensagens analisadas.
+[5511949079161] Etapa 5: confirmação
+     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="43518113-4db0-4981" responseTimeMS=5567 responseBytes=444 userAgent="ManyChat"
+[ManyChat] mc-mg5wqy3w-rh1m8 hit POST /webhook/manychat {
+  ip: '3.74.158.122, 172.71.151.219',
   ua: 'ManyChat',
   contentType: 'application/json'
 }
-[ManyChat] mc-mg5txsag-ag961 Extracted fields {
-  subscriberId: '1230543432',
+[ManyChat] mc-mg5wqy3w-rh1m8 Extracted fields {
+  subscriberId: '1569442567',
   phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
+  phoneMask: '55*********61',
   hasText: true,
-  textPreview: 'beleza',
-  hasMedia: false
+  textPreview: 'https://manybot-files.s3.eu-central-1.amazonaws.com/3605793/wa/2025/09/30/original_a580c3f288765f9f7…',
+  hasMedia: true
 }
-[ManyChat] mc-mg5txsag-ag961 Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="1fc4abf3-459b-4ae6" responseTimeMS=4539 responseBytes=440 userAgent="ManyChat"
-[5511952079605] Bloqueado: estado=true, enviandoMensagens=true
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Etapa 5: confirmação
-[5511952079605] Contato atualizado: Sim, saque
-[ManyChat] mc-mg5txsag-ag961 Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="a0760a57-e19d-475a" responseTimeMS=4307 responseBytes=440 userAgent="ManyChat"
-[5511952079605] etapa=saque acessoMsgsDisparadas=true credEnt=true confirmIni=true
-[ManyChat] mc-mg5txw3o-skx7j hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.151.71',
+[ManyChat] mc-mg5wqy3w-rh1m8 Origem consolidada { tid: '', clickType: 'Orgânico' }
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[ManyChat] mc-mg5wqy3w-rh1m8 Mensagem enfileirada { idContato: '5511949079161', queueSize: 1, hasMedia: true }
+[5511949079161] etapa=confirmacao acessoMsgsDisparadas=true credEnt=true confirmIni=true
+[5511949079161] Sem opt-out nas mensagens analisadas.
+[5511949079161] Etapa 5: confirmação
+[ManyChat] mc-mg5wrvfx-pyp5q hit POST /webhook/manychat {
+  ip: '3.74.158.122, 172.68.195.235',
   ua: 'ManyChat',
   contentType: 'application/json'
 }
-[ManyChat] mc-mg5txw3o-skx7j Extracted fields {
-  subscriberId: '1230543432',
+[ManyChat] mc-mg5wrvfx-pyp5q Extracted fields {
+  subscriberId: '1569442567',
   phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
+  phoneMask: '55*********61',
   hasText: true,
-  textPreview: 'certo',
+  textPreview: '5000',
   hasMedia: false
 }
-[ManyChat] mc-mg5txw3o-skx7j Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Etapa 6: saque - Início do processamento
-[5511952079605] Bloqueado: estado=true, enviandoMensagens=true
-[ManyChat] mc-mg5txw3o-skx7j Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-[ManyChat] mc-mg5ty09p-9sngp hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.150.26',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5ty09p-9sngp Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'tranquilo',
-  hasMedia: false
-}
-[ManyChat] mc-mg5ty09p-9sngp Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[ManyChat][sendContent/fb] POST https://api.manychat.com/fb/sending/sendContent
-[ManyChat][sendContent/fb] Payload: {"subscriber_id":1230543432,"data":{"version":"v2","content":{"type":"whatsapp","messages":[{"type":"text","text":"show, pode iniciar o saque, do jeitinho que te falei, vai certinho depois… nessa mesma conta, já agora"}]}}}
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="bebd3f2f-1d43-40c4" responseTimeMS=4790 responseBytes=440 userAgent="ManyChat"
-[ManyChat][sendContent/fb] HTTP 200 Body: {"status":"success"}
-[5511952079605] Contato atualizado: Sim, saque
-[ManyChat] mc-mg5ty09p-9sngp Mensagem enfileirada { idContato: '5511952079605', queueSize: 2, hasMedia: false }
-[5511952079605] etapa=saque acessoMsgsDisparadas=true credEnt=true confirmIni=true
-[ManyChat] mc-mg5ty5kt-56roo hit POST /webhook/manychat {
-  ip: '3.74.158.122, 104.23.239.97',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5ty5kt-56roo Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'belez',
-  hasMedia: false
-}
-[ManyChat] mc-mg5ty5kt-56roo Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="235e0f7c-6751-40ae" responseTimeMS=6276 responseBytes=442 userAgent="ManyChat"
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Etapa 6: saque - Início do processamento
-[ManyChat] mc-mg5ty5kt-56roo Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-[ManyChat][sendContent/fb] POST https://api.manychat.com/fb/sending/sendContent
-[ManyChat][sendContent/fb] Payload: {"subscriber_id":1230543432,"data":{"version":"v2","content":{"type":"whatsapp","messages":[{"type":"text","text":"ele pede a senha de saque, usa uma dessas:\n\n3204\n8293\n6051"}]}}}
-[ManyChat] mc-mg5tya2o-x7pk8 hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.150.14',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5tya2o-x7pk8 Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'beleza',
-  hasMedia: false
-}
-[ManyChat] mc-mg5tya2o-x7pk8 Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[ManyChat][sendContent/fb] HTTP 200 Body: {"status":"success"}
-[5511952079605] Contato atualizado: Sim, saque
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="f8f4defa-91fa-47db" responseTimeMS=5209 responseBytes=444 userAgent="ManyChat"
-[5511952079605] Bloqueado: estado=true, enviandoMensagens=true
-[ManyChat][sendContent/fb] POST https://api.manychat.com/fb/sending/sendContent
-[ManyChat][sendContent/fb] Payload: {"subscriber_id":1230543432,"data":{"version":"v2","content":{"type":"whatsapp","messages":[{"type":"text","text":"sua parte é de 2000, quando cair me chama aqui… pra te explicar como mandar minha parte! certo pelo certo, se travar manda um PRINT, faz com calma"}]}}}
-[ManyChat][sendContent/fb] HTTP 200 Body: {"status":"success"}
-[5511952079605] Contato atualizado: Sim, saque
-[ManyChat] mc-mg5tya2o-x7pk8 Mensagem enfileirada { idContato: '5511952079605', queueSize: 2, hasMedia: false }
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="8c0590d8-326c-4c44" responseTimeMS=4461 responseBytes=442 userAgent="ManyChat"
-[ManyChat] mc-mg5tyeb3-mmktk hit POST /webhook/manychat {
-  ip: '3.74.158.122, 162.158.111.173',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5tyeb3-mmktk Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'pode ser',
-  hasMedia: false
-}
-[ManyChat] mc-mg5tyeb3-mmktk Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[5511952079605] etapa=saque acessoMsgsDisparadas=true credEnt=true confirmIni=true
-[5511952079605] etapa=saque acessoMsgsDisparadas=true credEnt=true confirmIni=true
-[5511952079605] Nenhuma mensagem nova para processar
-[ManyChat] mc-mg5tyeb3-mmktk Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-[5511952079605] etapa=saque acessoMsgsDisparadas=true credEnt=true confirmIni=true
-[5511952079605] Nenhuma mensagem nova para processar
-[ManyChat] mc-mg5tyeb3-mmktk Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-[ManyChat] mc-mg5tyi7r-3jwro hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.150.105',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5tyi7r-3jwro Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'boa',
-  hasMedia: false
-}
-[ManyChat] mc-mg5tyi7r-3jwro Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="044c30f0-5b0f-453b" responseTimeMS=4446 responseBytes=438 userAgent="ManyChat"
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Etapa 6: saque - Início do processamento
-[5511952079605] Saque → relevância: relevante | temMidiaReal=false
-[5511952079605] Saque → encaminhado para 'validacao'.
-[ManyChat] mc-mg5tyi7r-3jwro Mensagem enfileirada { idContato: '5511952079605', queueSize: 2, hasMedia: false }
-[5511952079605] etapa=validacao acessoMsgsDisparadas=true credEnt=true confirmIni=true
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="3f1b260b-0be2-4020" responseTimeMS=5143 responseBytes=442 userAgent="ManyChat"
-[ManyChat] mc-mg5tymvp-ekta5 hit POST /webhook/manychat {
-  ip: '3.74.158.122, 172.71.150.80',
-  ua: 'ManyChat',
-  contentType: 'application/json'
-}
-[ManyChat] mc-mg5tymvp-ekta5 Extracted fields {
-  subscriberId: '1230543432',
-  phoneSrc: 'payload.user.phone',
-  phoneMask: '55*********05',
-  hasText: true,
-  textPreview: 'bora',
-  hasMedia: false
-}
-[ManyChat] mc-mg5tymvp-ekta5 Origem consolidada { tid: '', clickType: 'Orgânico' }
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[Contato] Contato atualizado: 5511952079605, TID: , click_type: Orgânico
-[DB] Contato 5511952079605 salvo
-[ManyChat] mc-mg5tymvp-ekta5 Mensagem enfileirada { idContato: '5511952079605', queueSize: 1, hasMedia: false }
-     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="22ec78dd-7e44-4842" responseTimeMS=10 responseBytes=442 userAgent="ManyChat"
-[5511952079605] Bloqueado: estado=true, enviandoMensagens=true
-[5511952079605] Sem opt-out nas mensagens analisadas.
-[5511952079605] Etapa 7: validacao
-[5511952079605] Validacao → recebeu pacote. temMidia=false
-[5511952079605] Validacao → relevância=relevante
-[5511952079605] Iniciando envio de mensagem: "<VALIDACAO_PEDIR_PRINT_1>"
-[5511952079605] etapa=validacao acessoMsgsDisparadas=true credEnt=true confirmIni=true
-[5511952079605] Nenhuma mensagem nova para processar
-[5511952079605] etapa=validacao acessoMsgsDisparadas=true credEnt=true confirmIni=true
-[5511952079605] Nenhuma mensagem nova para processar
-[ManyChat][sendContent/fb] POST https://api.manychat.com/fb/sending/sendContent
-[ManyChat][sendContent/fb] Payload: {"subscriber_id":1230543432,"data":{"version":"v2","content":{"type":"whatsapp","messages":[{"type":"text","text":"<VALIDACAO_PEDIR_PRINT_1>"}]}}}
-[ManyChat][sendContent/fb] HTTP 200 Body: {"status":"success"}
-[5511952079605] Contato atualizado: Sim, validacao
-[5511952079605] Iniciando envio de mensagem: "<VALIDACAO_PEDIR_PRINT_2>"
-[ManyChat][sendContent/fb] POST https://api.manychat.com/fb/sending/sendContent
-[ManyChat][sendContent/fb] Payload: {"subscriber_id":1230543432,"data":{"version":"v2","content":{"type":"whatsapp","messages":[{"type":"text","text":"<VALIDACAO_PEDIR_PRINT_2>"}]}}}
-[ManyChat][sendContent/fb] HTTP 200 Body: {"status":"success"}
-[5511952079605] Contato atualizado: Sim, validacao
+[ManyChat] mc-mg5wrvfx-pyp5q Origem consolidada { tid: '', clickType: 'Orgânico' }
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[Contato] Contato atualizado: 5511949079161, TID: , click_type: Orgânico
+[DB] Contato 5511949079161 salvo
+[ManyChat] mc-mg5wrvfx-pyp5q Mensagem enfileirada { idContato: '5511949079161', queueSize: 1, hasMedia: false }
+     [POST]200ia-cointex-old.onrender.com/webhook/manychatclientIP="3.74.158.122" requestID="a8d1341c-bec0-4c4b" responseTimeMS=5267 responseBytes=444 userAgent="ManyChat"
+[5511949079161] etapa=confirmacao acessoMsgsDisparadas=true credEnt=true confirmIni=true
+[5511949079161] Sem opt-out nas mensagens analisadas.
+[5511949079161] Etapa 5: confirmação

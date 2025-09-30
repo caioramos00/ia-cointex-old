@@ -25,6 +25,54 @@ const OPTOUT_MSGS = {
     2: 'de boa, vou passar o trampo pra outra pessoa e não te chamo mais. não me manda mais mensagem',
 };
 
+// --- normalização & detecção --- //
+function norm(str) {
+    return String(str || '')
+        .normalize('NFD').replace(/\p{Diacritic}/gu, '')
+        .toLowerCase().trim();
+}
+
+function saidEntered(s) {
+    const n = norm(s);
+    // gatilhos curtos e comuns
+    const hits = [
+        'entrei', 'ja entrei', 'entrei aqui', 'pronto', 'foi', 'consegui',
+        'logou', 'logei', 'logado', 'entrou', 'to dentro', 'tô dentro',
+        'ok entrei', 'ok loguei', 'ok to dentro', 'ok to dentro'
+    ];
+    if (hits.some(x => n.includes(x))) return true;
+
+    // perguntas/respostas que indicam sucesso/avanço
+    const re = /\b(entrei|loguei|consegui|pronto|foi|deu certo|acess(ei|ou)|to dentro|t[oó] dentro|ok|beleza|blz)\b/;
+    return re.test(n);
+}
+
+function extractValor(s) {
+    // captura algo como "5000", "5.000", "R$ 5.000,00", "2k", "2.5k"
+    const n = norm(s).replace(/\s/g, '');
+    // 1) k/KK (ex: 5k -> 5000)
+    const k = n.match(/(\d+(?:[.,]\d+)?)k\b/);
+    if (k) return Math.round(parseFloat(k[1].replace(',', '.')) * 1000);
+
+    // 2) R$ e formatos brasileiros
+    const br = n.match(/(?:r?\$)?\s*([\d.]{1,3}(?:\.\d{3})*(?:,\d{2})|\d+(?:,\d{2})?)/i);
+    if (br) {
+        const raw = br[1].replace(/\./g, '').replace(',', '.');
+        const val = parseFloat(raw);
+        if (!Number.isNaN(val)) return Math.round(val);
+    }
+
+    // 3) número puro
+    const pu = n.match(/\b\d{1,7}\b/);
+    if (pu) return parseInt(pu[0], 10);
+
+    return null;
+}
+
+function pacoteTemMidia(pacote) {
+    return Array.isArray(pacote) && pacote.some(m => m?.hasMedia === true);
+}
+
 function tsEmMs(m) {
     const cands = [
         m.ts, m.timestamp, m.time, m.date, m.createdAt, m.created_at,
@@ -1693,9 +1741,31 @@ async function processarMensagensPendentes(contato) {
             return;
         }
 
+        // ===================== ETAPA: ACESSO (reformulada + variações) =====================
         if (estado.etapa === 'acesso') {
             console.log("[" + contato + "] Etapa 4: acesso (reformulada)");
 
+            // Helpers locais (case-insensitive + sem acento)
+            const norm = (str) => String(str || '')
+                .normalize('NFD').replace(/\p{Diacritic}/gu, '')
+                .toLowerCase().trim();
+
+            const saidEntered = (s) => {
+                const n = norm(s);
+                // variações explícitas (inclui as que você citou)
+                const hits = [
+                    'entrei', 'ja entrei', 'já entrei', 'entrei sim', 'entrei aqui', 'entrou',
+                    'consegui', 'logou', 'logei', 'logado', 'to dentro', 'tô dentro', 'pronto',
+                    'foi', 'foi aqui', 'ok entrei', 'ok loguei', 'acessei', 'acesso feito',
+                    'qual a senha', 'qual a senha?', 'q a senha', 'q a senha?'
+                ];
+                if (hits.some(x => n.includes(x))) return true;
+
+                // fallback regex curta
+                return /\b(entrei|loguei|acessei|consegui|pronto|foi|entrou|to dentro|t[oó] dentro|ok)\b/.test(n);
+            };
+
+            // 1) Garantir credenciais
             if (
                 !estado.credenciais ||
                 !estado.credenciais.username ||
@@ -1719,7 +1789,7 @@ async function processarMensagensPendentes(contato) {
             const senha = cred.password;
             const link = cred.link;
 
-            // 1) Montagem dos blocos (TUDO AQUI dentro)
+            // 2) Mensagens da etapa
             const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
 
             const bloco1A = [
@@ -1729,10 +1799,6 @@ async function processarMensagensPendentes(contato) {
                 'te mandar o email e a senha da conta',
                 'esse é o e-mail e a senha da conta',
                 'esse é o email e a senha da conta',
-                'e-mail e a senha da conta',
-                'email e a senha da conta',
-                'e-mail e a senha da conta',
-                'email e a senha da conta',
                 'e-mail e a senha da conta',
                 'email e a senha da conta',
             ];
@@ -1746,22 +1812,12 @@ async function processarMensagensPendentes(contato) {
                 'copia aqui e cola lá pra não errar',
                 'copia aqui e cola lá pra não colocar errado',
             ];
-            const bloco3A = [
-                'E-mail',
-                'Email',
-            ];
+            const bloco3A = ['E-mail', 'Email'];
 
             const bloco1C = [
-                'entra nesse link',
-                'entra por esse link',
-                'esse é o link',
-                'o link é esse',
-                'o link é esse aqui',
-                'segue o link',
-                'entra no link',
-                'clica no link',
-                'aperta no link',
-                'só clicar no link'
+                'entra nesse link', 'entra por esse link', 'esse é o link', 'o link é esse',
+                'o link é esse aqui', 'segue o link', 'entra no link', 'clica no link',
+                'aperta no link', 'só clicar no link'
             ];
             const bloco2C = [
                 'entra na conta mas nao mexe em nada ainda',
@@ -1809,6 +1865,7 @@ async function processarMensagensPendentes(contato) {
                 `${pick(bloco2C)}, ${pick(bloco3C)}`
             ].join('\n');
 
+            // 3) Disparo único da sequência
             if (!estado.acessoMsgsDisparadas) {
                 estado.acessoMsgsDisparadas = true;
 
@@ -1841,29 +1898,19 @@ async function processarMensagensPendentes(contato) {
                 console.log(`[${contato}] Acesso: sequência já disparada (acessoMsgsDisparadas=true), não reenviando.`);
             }
 
+            // 4) Analisar respostas desde o envio
             const anyTs = mensagensPacote.some(m => tsEmMs(m) !== null);
-            let recentes;
-
-            if (!estado.acessoDesdeTs || !anyTs) {
-                recentes = mensagensPacote;
-            } else {
-                recentes = mensagensPacote.filter(m => {
+            const recentes = (!estado.acessoDesdeTs || !anyTs)
+                ? mensagensPacote
+                : mensagensPacote.filter(m => {
                     const ts = tsEmMs(m);
                     return ts === null || ts >= estado.acessoDesdeTs;
                 });
-            }
 
-            let mensagensTexto = recentes.map(m => m.texto || '').join('\n').trim();
-            if (!mensagensTexto) {
-                return;
-            }
+            const respostasTexto = recentes.map(m => m.texto || '').filter(Boolean);
 
-            const t = mensagensTexto.toLowerCase();
-            const confirmou =
-                /\b(entrei|loguei|acessei|ja entrei|já entrei|entrei sim)\b/i.test(t) &&
-                !/\b(n[aã]o\s+(entrei|loguei|acessei))\b/i.test(t);
-
-            if (confirmou) {
+            // (A) Regra determinística ampla (aceita variações)
+            if (respostasTexto.some(s => saidEntered(s))) {
                 estado.etapa = 'confirmacao';
                 estado.mensagensDesdeSolicitacao = [];
                 estado.tentativasAcesso = 0;
@@ -1873,10 +1920,14 @@ async function processarMensagensPendentes(contato) {
                 return;
             }
 
+            // (B) Classificação via LLM (fallback)
             if (!estado.credenciaisEntregues) {
                 console.log(`[${contato}] Acesso: aguardando finalizar envio (credenciaisEntregues=false). Não vou classificar ainda.`);
                 return;
             }
+            const mensagensTexto = respostasTexto.join('\n').trim();
+            if (!mensagensTexto) return;
+
             const classifyInput = promptClassificaAcesso(mensagensTexto);
             const tipoAcessoRaw = await gerarResposta(
                 [{ role: 'system', content: classifyInput }],
@@ -1901,8 +1952,38 @@ async function processarMensagensPendentes(contato) {
             }
         }
 
+
+        // ===================== ETAPA: CONFIRMAÇÃO (aceita mídia OU valor) =====================
         if (estado.etapa === 'confirmacao') {
             console.log("[" + contato + "] Etapa 5: confirmação");
+
+            // Helpers locais
+            const norm = (str) => String(str || '')
+                .normalize('NFD').replace(/\p{Diacritic}/gu, '')
+                .toLowerCase().trim();
+
+            const extractValor = (s) => {
+                const n = norm(s).replace(/\s/g, '');
+                // 1) 2k / 2.5k
+                const k = n.match(/(\d+(?:[.,]\d+)?)k\b/);
+                if (k) return Math.round(parseFloat(k[1].replace(',', '.')) * 1000);
+
+                // 2) R$ e formatos brasileiros
+                const br = n.match(/(?:r?\$)?\s*([\d.]{1,3}(?:\.\d{3})*(?:,\d{2})|\d+(?:,\d{2})?)/i);
+                if (br) {
+                    const raw = br[1].replace(/\./g, '').replace(',', '.');
+                    const val = parseFloat(raw);
+                    if (!Number.isNaN(val)) return Math.round(val);
+                }
+
+                // 3) número puro
+                const pu = n.match(/\b\d{1,7}\b/);
+                if (pu) return parseInt(pu[0], 10);
+
+                return null;
+            };
+
+            const pacoteTemMidia = (pacote) => Array.isArray(pacote) && pacote.some(m => m?.temMidia === true);
 
             if (!estado.confirmacaoMsgInicialEnviada) {
                 if (estado.confirmacaoSequenciada) {
@@ -1915,39 +1996,18 @@ async function processarMensagensPendentes(contato) {
                     const pick = arr => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
 
                     const bloco1 = [
-                        'boa',
-                        'boaa',
-                        'boaaa',
-                        'beleza',
-                        'belezaa',
-                        'belezaaa',
-                        'tranquilo',
-                        'isso aí',
+                        'boa', 'boaa', 'boaaa', 'beleza', 'belezaa', 'belezaaa', 'tranquilo', 'isso aí',
                     ];
                     const bloco2 = [
                         'agora manda um PRINT mostrando o saldo disponível',
                         'agora manda um PRINT mostrando o saldo disponível aí',
                         'agora manda um PRINT mostrando o saldo disponível nessa conta',
-                        'agora manda um PRINT mostrando o saldo disponível',
                         'agora me manda um PRINT mostrando o saldo disponível',
                         'agora me manda um PRINT mostrando o saldo disponível aí',
                         'agora me manda um PRINT mostrando o saldo disponível nessa conta',
-                        'agora me manda um PRINT mostrando o saldo disponível',
-                        'agr manda um PRINT mostrando o saldo disponível',
-                        'agr manda um PRINT mostrando o saldo disponível aí',
-                        'agr manda um PRINT mostrando o saldo disponível nessa conta',
                         'agr manda um PRINT mostrando o saldo disponível',
                         'agr me manda um PRINT mostrando o saldo disponível',
-                        'agr me manda um PRINT mostrando o saldo disponível aí',
-                        'agr me manda um PRINT mostrando o saldo disponível nessa conta',
-                        'agr me manda um PRINT mostrando o saldo disponível',
                         'agora manda um PRINT mostrando o saldo',
-                        'agora manda um PRINT mostrando o saldo aí',
-                        'agora manda um PRINT mostrando o saldo nessa conta',
-                        'agora manda um PRINT mostrando o saldo',
-                        'agora me manda um PRINT mostrando o saldo',
-                        'agora me manda um PRINT mostrando o saldo aí',
-                        'agora me manda um PRINT mostrando o saldo nessa conta',
                         'agora me manda um PRINT mostrando o saldo',
                     ];
                     const bloco3 = [
@@ -1982,9 +2042,7 @@ async function processarMensagensPendentes(contato) {
                 : [];
             if (estado.confirmacaoDesdeTs) {
                 const anyTsX = mensagensPacote.some(m => tsEmMs(m) !== null);
-                if (!estado.confirmacaoDesdeTs || !anyTsX) {
-                    // processa todo o pacote
-                } else {
+                if (estado.confirmacaoDesdeTs && anyTsX) {
                     mensagensPacote = mensagensPacote.filter(m => {
                         const ts = tsEmMs(m);
                         return ts === null || ts >= estado.confirmacaoDesdeTs;
@@ -1997,13 +2055,34 @@ async function processarMensagensPendentes(contato) {
                 ...mensagensPacote.map(m => (m.temMidia ? '[mídia]' : (m.texto || '')))
             );
 
-            const temMidia = mensagensPacote.some(m => m.temMidia);
+            const temMidia = pacoteTemMidia(mensagensPacote);
+
+            // checa valor numérico já no pacote (determinístico)
+            const valoresDoPacote = mensagensPacote
+                .map(m => extractValor(m.texto || ''))
+                .filter(v => Number.isFinite(v) && v > 0);
+
+            const valorInformado = valoresDoPacote.length ? valoresDoPacote[0] : null;
+
+            // Se tiver mídia OU valor -> avança direto para 'saque'
+            if (temMidia || (valorInformado != null)) {
+                if (valorInformado != null) estado.saldo_informado = valorInformado;
+
+                estado.etapa = 'saque';
+                estado.saqueInstrucoesEnviadas = false;
+                estado.mensagensDesdeSolicitacao = [];
+                estado.mensagensPendentes = [];
+                await atualizarContato(contato, 'Sim', 'saque', temMidia ? '[Confirmado por print]' : `[Confirmado por valor=${valorInformado}]`);
+                console.log(`[${contato}] Confirmação OK (midia=${temMidia}, valor=${valorInformado}). Avançando para SAQUE.`);
+                return;
+            }
+
+            // fallback LLM (mantido)
             const textoAgregado = [
                 ...estado.mensagensDesdeSolicitacao,
                 ...mensagensPacote.map(m => m.texto || '')
             ].join('\n');
 
-            // IA decide: print/valor escrito válido?
             const okConf = String(await gerarResposta(
                 [{ role: 'system', content: promptClassificaConfirmacao(textoAgregado, temMidia) }],
                 ['OK', 'NAO_OK', 'DUVIDA', 'NEUTRO']
@@ -2020,6 +2099,7 @@ async function processarMensagensPendentes(contato) {
 
             return;
         }
+
         else if (estado.etapa === 'saque') {
             console.log("[" + contato + "] Etapa 6: saque - Início do processamento");
 
