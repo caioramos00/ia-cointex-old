@@ -11,6 +11,7 @@ const EXTRA_FIRST_REPLY_JITTER_MS = 10000;
 const GLOBAL_PER_MSG_BASE_MS = 3000;
 const GLOBAL_PER_MSG_JITTER_MS = 1500;
 
+const processingDebounce = new Map();
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
@@ -52,28 +53,6 @@ function isMediaMessage(m) {
     // alguns conectores mandam "type: image"
     const t = String(m.type || '').toLowerCase();
     return t === 'image' || t === 'photo' || t === 'video';
-}
-
-function extractValorFromText(s) {
-    const n = String(s || '')
-        .normalize('NFD').replace(/\p{Diacritic}/gu, '')
-        .toLowerCase().replace(/\s/g, '');
-    // “2k”, “2.5k”
-    const k = n.match(/(\d+(?:[.,]\d+)?)k\b/);
-    if (k) return Math.round(parseFloat(k[1].replace(',', '.')) * 1000);
-
-    // “R$ 5.000,00”, “5000”, “5.000”
-    const br = n.match(/(?:r?\$)?\s*([\d.]{1,3}(?:\.\d{3})*(?:,\d{2})|\d+(?:,\d{2})?)/i);
-    if (br) {
-        const raw = br[1].replace(/\./g, '').replace(',', '.');
-        const val = parseFloat(raw);
-        if (!Number.isNaN(val)) return Math.round(val);
-    }
-
-    const pu = n.match(/\b\d{1,7}\b/);
-    if (pu) return parseInt(pu[0], 10);
-
-    return null;
 }
 
 function tsEmMs(m) {
@@ -760,17 +739,19 @@ async function processarMensagensPendentes(contato) {
     try {
         const estado = estadoContatos[contato];
 
+        if (!estado) return;
+
+        if (estado.enviandoMensagens) {
+            console.log(`[${contato}] Skipped processing (already running)`);
+            return;
+        }
+        estado.enviandoMensagens = true;
+
         if (estado && (estado.merrecaTimeout || estado.posMerrecaTimeout)) {
             console.log(`[${contato}] Ignorando mensagens durante timeout (merreca/posMerreca)`);
             estado.mensagensPendentes = [];
             return;
         }
-
-        if (!estado || estado.enviandoMensagens) {
-            console.log(`[${contato}] Bloqueado: estado=${!!estado}, enviandoMensagens=${estado && estado.enviandoMensagens}`);
-            return;
-        }
-        estado.enviandoMensagens = true;
 
         console.log(`[${contato}] etapa=${estado.etapa} acessoMsgsDisparadas=${estado.acessoMsgsDisparadas} credEnt=${estado.credenciaisEntregues} confirmIni=${estado.confirmacaoMsgInicialEnviada}`);
 
@@ -1971,57 +1952,53 @@ async function processarMensagensPendentes(contato) {
         if (estado.etapa === 'confirmacao') {
             console.log("[" + contato + "] Etapa 5: confirmação");
 
-            // ========= Helpers de MÍDIA & VALOR (robustos + logs) =========
+            // ========= Helpers de MÍDIA & VALOR (compatível com novo routes.js) =========
 
-            // URL típica de mídia (ManyChat S3, WhatsApp CDN, formatos de imagem)
+            // URL típica de mídia (ManyChat S3, WhatsApp CDN, extensões de imagem/arquivo)
             const looksLikeMediaUrl = (s = '') => {
                 const n = String(s || '');
-                return /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(n)
-                    || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
+                const matches = /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|cdn\.manychat\.com|lookaside\.fbsbx\.com|amazonaws\.com).*\/(original|file)_/i.test(n)
+                    || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp|bmp|heic|heif|mp4|mov|m4v|avi|mkv|mp3|m4a|ogg|wav|opus|pdf|docx?|xlsx?|pptx?)(?:\?\S*)?$/i.test(n);
+                console.log(`[${contato}] looksLikeMediaUrl("${n.slice(0, 100)}...") = ${matches}`);
+                return matches;
             };
 
-            // Extrai possíveis URLs de mídia de diferentes campos
+            // Extrai possíveis URLs de mídia dos campos enviados pelo routes.js
             const extractPossibleMediaUrls = (m = {}) => {
                 const urls = new Set();
                 const tryPush = v => { if (v && typeof v === 'string') urls.add(v); };
 
-                tryPush(m.url);
-                tryPush(m.mediaUrl);
-                tryPush(m.image_url);
-                tryPush(m.file_url);
-                tryPush(m?.payload?.url);
-                tryPush(m?.attachment?.payload?.url);
-
-                // Arrays comuns em conectores
+                // ► NOVO: o routes.js já agrega tudo em m.urls
                 (Array.isArray(m.urls) ? m.urls : []).forEach(tryPush);
-                (Array.isArray(m.attachments) ? m.attachments : []).forEach(a => tryPush(a?.payload?.url));
-                (Array.isArray(m.midias) ? m.midias : []).forEach(tryPush);
 
-                // Texto pode conter link
+                // ► E ainda podemos varrer o texto por links (ex.: ManyChat manda o link no texto)
                 if (m.texto && typeof m.texto === 'string') {
                     const rx = /(https?:\/\/\S+)/gi;
                     let mt;
                     while ((mt = rx.exec(m.texto)) !== null) tryPush(mt[1]);
                 }
 
+                console.log(`[${contato}] extractPossibleMediaUrls: ${Array.from(urls).map(u => u.slice(0, 100))}`);
                 return Array.from(urls);
             };
 
+            // Detector unificado de mídia (usa sinal do provedor + type + URLs)
             const isMediaMessage = (m = {}, contatoForLog = '-') => {
                 const toBool = v => v === true || v === 1 || String(v).toLowerCase() === 'true';
-                const flagCampo = (toBool(m.temMidia) || toBool(m.hasMedia));
+                // ► Meta/Twilio mandam o sinal do próprio provedor; ManyChat vem false e detectamos por URL/type
+                const flagProv = (toBool(m.temMidia) || toBool(m.hasMedia));
 
                 const urls = extractPossibleMediaUrls(m);
                 const urlPareceMidia = urls.some(looksLikeMediaUrl);
 
-                // ManyChat costuma mandar type=image|video|file|audio etc.
-                const typeMidia = /image|photo|picture|video|document|file|audio/i.test(String(m.type || ''));
+                // ManyChat/Meta/Twilio podem informar type: image|video|file|audio|document…
+                const typeMidia = /image|photo|picture|video|document|file|audio|sticker/i.test(String(m.type || ''));
 
-                const temMidia = !!(flagCampo || urlPareceMidia || typeMidia);
+                const temMidia = !!(flagProv || urlPareceMidia || typeMidia);
 
                 console.log(
-                    `[${contatoForLog}] mediaCheck> temMidiaCampo=${!!flagCampo} type=${m.type || '-'} urls=${urls.length} ` +
-                    `urlPareceMidia=${urlPareceMidia} => temMidia=${temMidia}`
+                    `[${contatoForLog}] mediaCheck> prov=${!!flagProv} type=${m.type || '-'} urls=${urls.length} ` +
+                    `urlPareceMidia=${urlPareceMidia} typeMidia=${typeMidia} => temMidia=${temMidia}`
                 );
 
                 if (!temMidia && (m.texto || urls.length)) {
@@ -2031,10 +2008,7 @@ async function processarMensagensPendentes(contato) {
             };
 
             // Normaliza string p/ análise de valor
-            const normalizeMoneyStr = (s = '') => s
-                .toLowerCase()
-                .replace(/\s+/g, ' ')
-                .trim();
+            const normalizeMoneyStr = (s = '') => s.toLowerCase().replace(/\s+/g, ' ').trim();
 
             // Converte token "numérico" em Number considerando pt-BR/en-US + mil/k
             const toNumberToken = (raw = '') => {
@@ -2051,46 +2025,33 @@ async function processarMensagensPendentes(contato) {
                 // 3) Formatos com R$ opcional e separadores
                 s = s.replace(/^r\$\s*/i, '');
 
-                // Heurística:
-                // - Se tem vírgula e não tem ponto => vírgula = decimal (pt-BR).
-                // - Se tem ponto e não tem vírgula:
-                //     * Se último bloco após ponto tem 3 dígitos => ponto = milhar (remove pontos).
-                //     * Senão => ponto = decimal.
-                // - Se tem ambos => ponto = milhar, vírgula = decimal.
                 if (/,/.test(s) && !/\./.test(s)) {
-                    // "1.234,56" (sem ponto aqui) => "1234,56"
-                    s = s.replace(/\./g, ''); // (só por segurança)
-                    s = s.replace(',', '.');
+                    s = s.replace(/\./g, '').replace(',', '.');
                     return Number(s);
                 } else if (/\./.test(s) && !/,/.test(s)) {
                     const last = s.split('.').pop() || '';
                     if (last.length === 3) {
-                        // "1.234" => milhar
                         s = s.replace(/\./g, '');
                         return Number(s);
                     } else {
-                        // "1234.56" => decimal
                         return Number(s);
                     }
                 } else if (/\./.test(s) && /,/.test(s)) {
-                    // "1.234,56" => pt-BR
                     s = s.replace(/\./g, '').replace(',', '.');
                     return Number(s);
                 } else {
-                    // "2000" puro
                     return Number(s);
                 }
             };
 
-            // Extrai o PRIMEIRO valor plausível > 0 do texto
+            // Extrai o MAIOR valor plausível > 0 do texto (saldo costuma ser o maior)
             const extractValorFromText = (texto = '', contatoForLog = '-') => {
                 const t = normalizeMoneyStr(texto);
                 if (!t) return null;
 
-                // Lista de candidatos:
                 const tokens = [];
 
-                // R$ …, números com separadores, k/mil
+                // R$ …, números com separadores, decimais
                 const rxMoney = /\b(?:r\$\s*)?(\d{1,3}(?:[.\s]\d{3})+|\d+(?:[.,]\d{1,2})?)(?=\b)/gi;
                 let m;
                 while ((m = rxMoney.exec(t)) !== null) tokens.push(m[0]);
@@ -2105,7 +2066,6 @@ async function processarMensagensPendentes(contato) {
                 let mi;
                 while ((mi = rxMil.exec(t)) !== null) tokens.push(mi[0]);
 
-                // Converte candidatos
                 const converted = tokens
                     .map(tok => ({ tok, num: toNumberToken(tok) }))
                     .filter(x => Number.isFinite(x.num) && x.num > 0);
@@ -2114,11 +2074,11 @@ async function processarMensagensPendentes(contato) {
 
                 if (!converted.length) return null;
 
-                // Heurística simples: pega o MAIOR valor (normalmente é o saldo)
                 const maior = converted.reduce((a, b) => (b.num > a.num ? b : a));
                 return maior.num;
             };
 
+            // === 5.0) Disparo da mensagem inicial de confirmação ===
             if (!estado.confirmacaoMsgInicialEnviada) {
                 if (estado.confirmacaoSequenciada) {
                     console.log(`[${contato}] Confirmação: já enviando, pulando.`);
@@ -2148,7 +2108,6 @@ async function processarMensagensPendentes(contato) {
                     const sent = await sendOnce(contato, estado, 'confirmacao.m1', msgConfirmacao);
 
                     if (sent) {
-                        // FOI ENVIADA AGORA → marcamos e encerramos este tick
                         estado.confirmacaoMsgInicialEnviada = true;
                         await atualizarContato(contato, 'Sim', 'confirmacao', msgConfirmacao);
                         estado.confirmacaoDesdeTs = Date.now();
@@ -2156,8 +2115,6 @@ async function processarMensagensPendentes(contato) {
                         console.log(`[${contato}] confirmação.m1 enviada; aguardando retorno do lead.`);
                         return;
                     } else {
-                        // **DEDUPE** → JÁ TINHA SIDO ENVIADA ANTES
-                        // Não retornar! Marcar como enviada e seguir para analisar o pacote nesta mesma iteração.
                         console.log(`[${contato}] confirmação.m1 já havia sido enviada (dedupe). Prosseguindo para análise do pacote.`);
                         estado.confirmacaoMsgInicialEnviada = true;
                         if (!estado.confirmacaoDesdeTs) estado.confirmacaoDesdeTs = Date.now();
@@ -2174,15 +2131,20 @@ async function processarMensagensPendentes(contato) {
                 ? estado.mensagensPendentes.splice(0)
                 : [];
 
+            console.log(`[${contato}] confirmacao> pacote apos splice: length=${mensagensPacote.length}`);
+
             // filtra por timestamp da solicitação de confirmação (se houver)
             if (estado.confirmacaoDesdeTs) {
                 const anyTsX = mensagensPacote.some(m => tsEmMs(m) !== null);
                 if (anyTsX) {
                     mensagensPacote = mensagensPacote.filter(m => {
                         const ts = tsEmMs(m);
-                        return ts === null || ts >= estado.confirmacaoDesdeTs;
+                        const kept = ts === null || ts >= estado.confirmacaoDesdeTs;
+                        console.log(`[${contato}] confirmacao> filter ts: msgTs=${ts} desdeTs=${estado.confirmacaoDesdeTs} kept=${kept}`);
+                        return kept;
                     });
                 }
+                console.log(`[${contato}] confirmacao> pacote apos ts filter: length=${mensagensPacote.length}`);
             }
 
             if (!mensagensPacote.length) {
@@ -2190,21 +2152,22 @@ async function processarMensagensPendentes(contato) {
                 return;
             }
 
+            // histórico legível (marca [mídia] quando detectado)
             estado.mensagensDesdeSolicitacao.push(
                 ...mensagensPacote.map(m => (isMediaMessage(m, contato) ? '[mídia]' : (m.texto || '')))
             );
 
             console.log(`[${contato}] confirmacao> pacote`, mensagensPacote.map(m => ({
-                temMidia: !!(m?.temMidia || m?.hasMedia),
+                temMidiaFlag: (m?.temMidia || m?.hasMedia) ? true : false,
                 type: m?.type || '-',
                 texto: (m?.texto || '').slice(0, 120),
-                urlCount: extractPossibleMediaUrls(m).length
+                urlCount: (Array.isArray(m?.urls) ? m.urls.length : extractPossibleMediaUrls(m).length)
             })));
 
             // === 5.2) Regra determinística: MÍDIA OU VALOR numérico ===
             const temMidia = mensagensPacote.some(m => isMediaMessage(m, contato));
-            let valorInformado = null;
 
+            let valorInformado = null;
             for (const m of mensagensPacote) {
                 const v = extractValorFromText(m?.texto || '', contato);
                 if (Number.isFinite(v) && v > 0) { valorInformado = v; break; }
@@ -2236,13 +2199,13 @@ async function processarMensagensPendentes(contato) {
             ].join('\n');
 
             const okConf = String(await gerarResposta(
-                [{ role: 'system', content: promptClassificaConfirmacao(textoAgregado, temMidia) }],
-                ['OK', 'NAO_OK', 'DUVIDA', 'NEUTRO']
+                [{ role: 'system', content: promptClassificaConfirmacao(textoAgregado) }],
+                ['CONFIRMADO', 'NAO_CONFIRMADO', 'DUVIDA', 'NEUTRO']
             )).toUpperCase();
 
             console.log(`[${contato}] confirmacao> fallbackLLM resposta=${okConf}`);
 
-            if (temMidia || okConf === 'OK') {
+            if (okConf === 'CONFIRMADO') {
                 estado.etapa = 'saque';
                 estado.saqueInstrucoesEnviadas = false;
                 estado.mensagensDesdeSolicitacao = [];

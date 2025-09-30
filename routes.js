@@ -664,6 +664,9 @@ function setupRoutes(
     }
   });
 
+  // Adicione isso aqui (debounce global para ManyChat)
+  const processingDebounce = new Map(); // contact -> timer ID
+
   // === ManyChat → seu webhook de entrada ===
   app.post('/webhook/manychat', express.json(), async (req, res) => {
     // ===== utilitários de log =====
@@ -942,18 +945,27 @@ function setupRoutes(
       declaredType
     });
 
-    // 9) Processamento
-    setTimeout(async () => {
+    // 9) Processamento com debounce (substitui o antigo setTimeout)
+    if (processingDebounce.has(idContato)) {
+      clearTimeout(processingDebounce.get(idContato));
+    }
+    const timer = setTimeout(async () => {
       const delayAleatorio = 10000 + Math.random() * 5000;
-      log('debug', `Processamento agendado em ~${Math.round(delayAleatorio / 1000)}s`, { idContato });
+      // For media/URL messages, reduce delay to 3-5s for faster response
+      const hasUrl = allUrls.length > 0;
+      const effectiveDelay = hasUrl ? 3000 + Math.random() * 2000 : delayAleatorio;
+      log('debug', `Processamento agendado em ~${Math.round(effectiveDelay / 1000)}s`, { idContato, hasUrl });
       try {
-        await delay(delayAleatorio);
+        await delay(effectiveDelay);
         await processarMensagensPendentes(idContato);
         log('debug', 'processarMensagensPendentes concluído', { idContato });
       } catch (e) {
         log('error', 'Erro no processamento assíncrono', { err: e.message });
+      } finally {
+        processingDebounce.delete(idContato);
       }
     }, 0);
+    processingDebounce.set(idContato, timer);
 
     return res.status(200).json({ ok: true, reqId });
   });
