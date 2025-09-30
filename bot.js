@@ -1963,17 +1963,81 @@ async function processarMensagensPendentes(contato) {
         if (estado.etapa === 'confirmacao') {
             console.log("[" + contato + "] Etapa 5: confirmação");
 
-            // URL de mídia (ManyChat S3, WhatsApp CDN, imagens)
-            const looksLikeMediaUrl = (s) => {
-                const n = String(s || '');
-                return /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(n)
-                    || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
+            // ===== Helpers de mídia =====
+            const getPossiveisStrings = (m) => {
+                if (!m) return [];
+                return [
+                    m.texto, m.text, m.caption, m.url, m.mediaUrl, m.documentUrl, m.imageUrl, m.videoUrl
+                ].filter(Boolean).map(String);
             };
 
-            // usa flags do conector + heurística de URL
-            const isMidia = (m) => !!(m && (m.temMidia === true || m.hasMedia === true || looksLikeMediaUrl(m.texto)));
+            const looksLikeMediaUrl = (s) => {
+                const n = String(s || '');
+                const hostCdn = /(many(chat|bot)-files\.s3|s3\.amazonaws\.com|mmg\.whatsapp\.net|cdn\.whatsapp\.net|whatsapp\.net|fbcdn\.net)/i.test(n);
+                const extImg = /https?:\/\/[^\s"'<>)]+?\.(?:jpg|jpeg|png|gif|webp|heic|heif|bmp)(?:\?[^\s"'<>)]*)?$/i.test(n);
+                return (hostCdn && /(original|file|image|media|attachment)/i.test(n)) || extImg;
+            };
 
-            // se ainda não mandou a primeira mensagem desta etapa, manda agora e retorna
+            const isMidia = (m) => {
+                if (!m) return false;
+                if (m.temMidia === true || m.hasMedia === true) return true;
+                if (typeof m.type === 'string' && /(image|video|document|sticker)/i.test(m.type)) return true;
+                const strs = getPossiveisStrings(m);
+                return strs.some(looksLikeMediaUrl);
+            };
+
+            // ===== Helpers de valor numérico =====
+            const parsePtEnNumber = (raw) => {
+                if (!raw) return null;
+                let s = String(raw).toLowerCase();
+
+                // normaliza espaços e símbolos de moeda
+                s = s.replace(/\s+/g, '').replace(/[r$\u20ac£¥]+/g, '');
+
+                // sufixos "k" e "mil"
+                let mult = 1;
+                if (/k\b/.test(s)) { mult = 1000; s = s.replace(/k\b/, ''); }
+                if (/(^|[^\p{L}])mil\b/iu.test(s)) { mult = 1000; s = s.replace(/mil\b/iu, ''); }
+
+                const lastComma = s.lastIndexOf(',');
+                const lastDot = s.lastIndexOf('.');
+
+                if (lastComma !== -1 && lastDot !== -1) {
+                    if (lastComma > lastDot) {
+                        // vírgula é decimal → remove pontos de milhar e troca vírgula por ponto
+                        s = s.replace(/\./g, '').replace(',', '.');
+                    } else {
+                        // ponto é decimal → remove vírgulas de milhar
+                        s = s.replace(/,/g, '');
+                    }
+                } else if (lastComma !== -1) {
+                    // só vírgula → tratar como decimal
+                    s = s.replace(/\./g, '').replace(',', '.');
+                } else {
+                    // só ponto (ou nenhum) → remover vírgulas de milhar
+                    s = s.replace(/,/g, '');
+                }
+
+                // mantém apenas dígitos, ponto e sinal
+                s = s.replace(/[^\d.\-]/g, '');
+
+                const n = Number(s);
+                return Number.isFinite(n) && n > 0 ? n * mult : null;
+            };
+
+            const extractValorFromTextSafe = (t) => {
+                if (!t) return null;
+                const text = String(t);
+                const matches = text.match(/(?:\d[\d.,]*\d|\d+)(?:\s*(?:k|mil))?/gi);
+                if (!matches) return null;
+                for (const cand of matches) {
+                    const v = parsePtEnNumber(cand);
+                    if (v != null) return v;
+                }
+                return null;
+            };
+
+            // ===== Mensagem inicial da etapa (uma única vez) =====
             if (!estado.confirmacaoMsgInicialEnviada) {
                 if (estado.confirmacaoSequenciada) {
                     console.log(`[${contato}] Confirmação: já enviando, pulando.`);
@@ -2012,7 +2076,7 @@ async function processarMensagensPendentes(contato) {
                 }
             }
 
-            // Pega o pacote desde o pedido
+            // ===== Consolida mensagens do usuário desde o pedido =====
             let mensagensPacote = Array.isArray(estado.mensagensPendentes)
                 ? estado.mensagensPendentes.splice(0)
                 : [];
@@ -2028,7 +2092,8 @@ async function processarMensagensPendentes(contato) {
             }
             if (!mensagensPacote.length) return;
 
-            // Guarda histórico legível
+            // histórico legível
+            if (!Array.isArray(estado.mensagensDesdeSolicitacao)) estado.mensagensDesdeSolicitacao = [];
             estado.mensagensDesdeSolicitacao.push(
                 ...mensagensPacote.map(m => (isMidia(m) ? '[mídia]' : (m.texto || '')))
             );
@@ -2038,12 +2103,12 @@ async function processarMensagensPendentes(contato) {
                 texto: (m?.texto || '').slice(0, 120)
             })));
 
-            // --- Regra determinística: mídia OU valor numérico ---
+            // ===== Regra determinística: MÍDIA OU VALOR numérico =====
             const temMidia = mensagensPacote.some(isMidia);
 
             const valorInformado =
                 mensagensPacote
-                    .map(m => extractValorFromText(m?.texto))
+                    .map(m => extractValorFromTextSafe(m?.texto || m?.text || m?.caption))
                     .find(v => Number.isFinite(v) && v > 0) ?? null;
 
             if (temMidia || valorInformado != null) {
@@ -2063,26 +2128,30 @@ async function processarMensagensPendentes(contato) {
                 return;
             }
 
-            // --- Fallback LLM (opcional, mantém como reforço) ---
-            const textoAgregado = [
-                ...estado.mensagensDesdeSolicitacao,
-                ...mensagensPacote.map(m => m.texto || '')
-            ].join('\n');
+            // ===== Fallback LLM opcional (mantido, mas desligado por padrão) =====
+            const USAR_FALLBACK_LLM_CONFIRMACAO = false;
+            if (USAR_FALLBACK_LLM_CONFIRMACAO) {
+                const textoAgregado = [
+                    ...(estado.mensagensDesdeSolicitacao || []),
+                    ...mensagensPacote.map(m => m.texto || m.text || m.caption || '')
+                ].join('\n');
 
-            const okConf = String(await gerarResposta(
-                [{ role: 'system', content: promptClassificaConfirmacao(textoAgregado, temMidia) }],
-                ['OK', 'NAO_OK', 'DUVIDA', 'NEUTRO']
-            )).toUpperCase();
+                const okConf = String(await gerarResposta(
+                    [{ role: 'system', content: promptClassificaConfirmacao(textoAgregado, temMidia) }],
+                    ['OK', 'NAO_OK', 'DUVIDA', 'NEUTRO']
+                )).toUpperCase();
 
-            if (temMidia || okConf === 'OK') {
-                estado.etapa = 'saque';
-                estado.saqueInstrucoesEnviadas = false;
-                estado.mensagensDesdeSolicitacao = [];
-                estado.mensagensPendentes = [];
-                await atualizarContato(contato, 'Sim', 'saque', '[Confirmado — avançando]');
-                return;
+                if (temMidia || okConf === 'OK') {
+                    estado.etapa = 'saque';
+                    estado.saqueInstrucoesEnviadas = false;
+                    estado.mensagensDesdeSolicitacao = [];
+                    estado.mensagensPendentes = [];
+                    await atualizarContato(contato, 'Sim', 'saque', '[Confirmado — avançando]');
+                    return;
+                }
             }
 
+            // se não confirmou, apenas aguarda novas mensagens
             return;
         }
 
@@ -2465,7 +2534,12 @@ async function processarMensagensPendentes(contato) {
             await atualizarContato(contato, 'Sim', estadoContatos[contato].etapa, mensagem);
         }
     } finally {
-        if (estadoContatos[contato]) estadoContatos[contato].enviandoMensagens = false;
+        try {
+            estado.enviandoMensagens = false;
+            if (Array.isArray(estado.mensagensPendentes) && estado.mensagensPendentes.length > 0) {
+                setImmediate(() => processarMensagensPendentes(contato).catch(console.error));
+            }
+        } catch (e) { console.error(e); }
     }
 }
 
