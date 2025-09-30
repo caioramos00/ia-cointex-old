@@ -148,8 +148,9 @@ async function bootstrapFromManychat(
   initialClickType = 'Orgânico'
 ) {
   const idContato = phone || `mc:${subscriberId}`;
+  const wasNew = !estado[idContato];
 
-  if (!estado[idContato]) {
+  if (wasNew) {
     if (typeof inicializarEstado === 'function') {
       inicializarEstado(idContato, initialTid, initialClickType);
     } else {
@@ -169,20 +170,19 @@ async function bootstrapFromManychat(
     }
   }
 
-  const stNow = estado[idContato] || {};
-
-  // ✅ criar usuário só na primeira mensagem (evita duplicidade)
-  if (phone && typeof criarUsuarioDjango === 'function') {
+  // ✅ criar usuário somente na PRIMEIRA mensagem do contato
+  if (wasNew && phone && typeof criarUsuarioDjango === 'function') {
     try {
       await criarUsuarioDjango(idContato);
     } catch (e) {
-      console.error(`[${idContato}] criarUsuarioDjango erro:`, e?.response?.data || e.message);
+      // silencioso para não poluir log simplificado
     }
   }
 
-  // ❌ NADA de salvarContato aqui — deixa apenas o handler salvar UMA vez por mensagem
+  // ❌ nada de salvarContato aqui (o handler já salva uma única vez por mensagem)
   return idContato;
 }
+
 
 function setupRoutes(
   app,
