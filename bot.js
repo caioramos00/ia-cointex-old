@@ -26,22 +26,19 @@ const OPTOUT_MSGS = {
 };
 
 function tsEmMs(m) {
-    let v = m?.ts ?? m?.recebidaEm ?? m?.time;
-    if (v == null) return null;
-
-    // numérico em string?
-    if (typeof v === 'string' && /^\d+$/.test(v)) v = Number(v);
-
-    // ISO string?
-    if (typeof v === 'string') {
-        const d = Date.parse(v);
-        if (!Number.isNaN(d)) v = d; else return null;
+    const cands = [
+        m.ts, m.timestamp, m.time, m.date, m.createdAt, m.created_at,
+        m.sentAt, m.sent_at, m.recebidaEm
+    ];
+    for (const v of cands) {
+        if (v == null) continue;
+        const n = typeof v === 'number' ? v : Date.parse(v);
+        if (!Number.isNaN(n) && n > 0) {
+            // se vier em segundos, normaliza para ms
+            return String(v).length <= 10 ? n * 1000 : n;
+        }
     }
-
-    // número em segundos?
-    if (typeof v === 'number' && v < 1e12) v = v * 1000;
-
-    return (typeof v === 'number' && Number.isFinite(v)) ? v : null;
+    return null; // sem timestamp detectável
 }
 
 function _ensureSentMap(estado) {
@@ -1844,23 +1841,27 @@ async function processarMensagensPendentes(contato) {
                 console.log(`[${contato}] Acesso: sequência já disparada (acessoMsgsDisparadas=true), não reenviando.`);
             }
 
-            const recentes = mensagensPacote.filter(m => {
-                const ts = tsEmMs(m);
-                return !!estado.acessoDesdeTs && ts !== null && ts >= estado.acessoDesdeTs;
-            });
-            if (!recentes.length) {
-                console.log(`[${contato}] acessoDesdeTs=${estado.acessoDesdeTs} msgsTS=` +
-                    mensagensPacote.map(m => tsEmMs(m)).join(','));
-                console.log(`[${contato}] Acesso: nada novo após credenciais — não vou classificar.`);
+            const anyTs = mensagensPacote.some(m => tsEmMs(m) !== null);
+            let recentes;
+
+            if (!estado.acessoDesdeTs || !anyTs) {
+                recentes = mensagensPacote;
+            } else {
+                recentes = mensagensPacote.filter(m => {
+                    const ts = tsEmMs(m);
+                    return ts === null || ts >= estado.acessoDesdeTs;
+                });
+            }
+
+            let mensagensTexto = recentes.map(m => m.texto || '').join('\n').trim();
+            if (!mensagensTexto) {
                 return;
             }
-            const mensagensTexto = recentes.map(m => m.texto).join('\n');
-            if (!mensagensTexto.trim()) return;
 
             const t = mensagensTexto.toLowerCase();
             const confirmou =
-                /\b(entrei|loguei|acessei|já entrei|ja entrei|entrei sim)\b/.test(t) &&
-                !/\b(n[aã]o\s+(entrei|loguei|acessei))\b/.test(t);
+                /\b(entrei|loguei|acessei|ja entrei|já entrei|entrei sim)\b/i.test(t) &&
+                !/\b(n[aã]o\s+(entrei|loguei|acessei))\b/i.test(t);
 
             if (confirmou) {
                 estado.etapa = 'confirmacao';
@@ -1868,7 +1869,7 @@ async function processarMensagensPendentes(contato) {
                 estado.tentativasAcesso = 0;
                 estado.confirmacaoMsgInicialEnviada = false;
                 await atualizarContato(contato, 'Sim', 'confirmacao', '[Login confirmado — atalho]');
-                console.log("[" + contato + "] Etapa 5: confirmação — avançou pelo atalho");
+                console.log(`[${contato}] Etapa 5: confirmação — avançou pelo atalho`);
                 return;
             }
 
@@ -1980,10 +1981,15 @@ async function processarMensagensPendentes(contato) {
                 ? estado.mensagensPendentes.splice(0)
                 : [];
             if (estado.confirmacaoDesdeTs) {
-                mensagensPacote = mensagensPacote.filter(m => {
-                    const ts = tsEmMs(m);
-                    return ts !== null && ts >= estado.confirmacaoDesdeTs;
-                });
+                const anyTsX = mensagensPacote.some(m => tsEmMs(m) !== null);
+                if (!estado.confirmacaoDesdeTs || !anyTsX) {
+                    // processa todo o pacote
+                } else {
+                    mensagensPacote = mensagensPacote.filter(m => {
+                        const ts = tsEmMs(m);
+                        return ts === null || ts >= estado.confirmacaoDesdeTs;
+                    });
+                }
             }
             if (!mensagensPacote.length) return;
 
