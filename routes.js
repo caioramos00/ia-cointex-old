@@ -950,13 +950,7 @@ function setupRoutes(
       clearTimeout(processingDebounce.get(idContato));
     }
     const timer = setTimeout(async () => {
-      const delayAleatorio = 10000 + Math.random() * 5000;
-      // For media/URL messages, reduce delay to 3-5s for faster response
-      const hasUrl = allUrls.length > 0;
-      const effectiveDelay = hasUrl ? 3000 + Math.random() * 2000 : delayAleatorio;
-      log('debug', `Processamento agendado em ~${Math.round(effectiveDelay / 1000)}s`, { idContato, hasUrl });
       try {
-        await delay(effectiveDelay);
         await processarMensagensPendentes(idContato);
         log('debug', 'processarMensagensPendentes concluído', { idContato });
       } catch (e) {
@@ -964,7 +958,7 @@ function setupRoutes(
       } finally {
         processingDebounce.delete(idContato);
       }
-    }, 0);
+    }, 5000); // debounce 5s after last message
     processingDebounce.set(idContato, timer);
 
     return res.status(200).json({ ok: true, reqId });

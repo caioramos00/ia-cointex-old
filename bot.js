@@ -738,33 +738,27 @@ async function criarUsuarioDjango(contato) {
 async function processarMensagensPendentes(contato) {
     try {
         const estado = estadoContatos[contato];
-
         if (!estado) return;
-
         if (estado.enviandoMensagens) {
             console.log(`[${contato}] Skipped processing (already running)`);
             return;
         }
         estado.enviandoMensagens = true;
-
         if (estado && (estado.merrecaTimeout || estado.posMerrecaTimeout)) {
             console.log(`[${contato}] Ignorando mensagens durante timeout (merreca/posMerreca)`);
             estado.mensagensPendentes = [];
             return;
         }
-
         console.log(`[${contato}] etapa=${estado.etapa} acessoMsgsDisparadas=${estado.acessoMsgsDisparadas} credEnt=${estado.credenciaisEntregues} confirmIni=${estado.confirmacaoMsgInicialEnviada}`);
-
         const mensagensPacote = Array.isArray(estado.mensagensPendentes)
             ? estado.mensagensPendentes.splice(0)
             : [];
-
+        console.log(`[${contato}] Before splice: mensagensPendentes.length = ${estado.mensagensPendentes.length}`);
         const { rows: dncRows } = await pool.query(
             'SELECT do_not_contact FROM contatos WHERE id = $1 LIMIT 1',
             [contato]
         );
         const dnc = !!dncRows?.[0]?.do_not_contact;
-
         if (dnc) {
             const labels = await Promise.all(
                 mensagensPacote.map(m => decidirOptLabel(m.texto || ''))
@@ -782,18 +776,15 @@ async function processarMensagensPendentes(contato) {
             estado.mensagensPendentes = [];
             return;
         }
-
         const agora = Date.now();
         if (estado.etapa === 'encerrado' && estado.encerradoAte && agora < estado.encerradoAte) {
             console.log("[" + contato + "] Lead em timeout até " + new Date(estado.encerradoAte).toLocaleTimeString());
             return;
         }
-
         if (mensagensPacote.length === 0) {
             console.log("[" + contato + "] Nenhuma mensagem nova para processar");
             return;
         }
-
         if (await checarOptOutGlobal(contato, mensagensPacote.map(m => m.texto))) {
             await atualizarContato(contato, 'Sim', 'encerrado', '[OPTOUT]');
             return;
@@ -1949,7 +1940,7 @@ async function processarMensagensPendentes(contato) {
             }
         }
 
-        if (estado.etapa === 'confirmacao') {
+if (estado.etapa === 'confirmacao') {
             console.log("[" + contato + "] Etapa 5: confirmação");
 
             // ========= Helpers de MÍDIA & VALOR (compatível com novo routes.js) =========
@@ -2222,16 +2213,13 @@ async function processarMensagensPendentes(contato) {
 
         else if (estado.etapa === 'saque') {
             console.log("[" + contato + "] Etapa 6: saque - Início do processamento");
-
             // 6.1) Dispara exatamente 3 MENSAGENS (com variações em blocos), uma única vez.
             if (!estado.saqueInstrucoesEnviadas) {
                 // flags de dedupe/retomada (como nas outras etapas)
                 estado.saqueMsg1Enviada = !!estado.saqueMsg1Enviada;
                 estado.saqueMsg2Enviada = !!estado.saqueMsg2Enviada;
                 estado.saqueMsg3Enviada = !!estado.saqueMsg3Enviada;
-
                 const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
-
                 // ---------- MSG 1: "{b1}, {b2}, {b3}, {b4}… {b5}, {b6}" ----------
                 const m1b1 = ['beleza', 'certo', 'tranquilo', 'fechou', 'show'];
                 const m1b2 = ['segue o saque agora', 'vamos pro saque agora', 'faz o saque agora', 'pode iniciar o saque'];
@@ -2239,20 +2227,15 @@ async function processarMensagensPendentes(contato) {
                 const m1b4 = ['vai cair certinho depois', 'vai certinho depois', 'fica tudo certo no final', 'sem erro no final'];
                 const m1b5 = ['nessa mesma conta', 'na conta que te passei', 'na conta aí', 'na conta de agora'];
                 const m1b6 = ['agora', 'já agora', 'de uma vez', 'nesse instante'];
-
                 const msg1 = `${pick(m1b1)}, ${pick(m1b2)}, ${pick(m1b3)}, ${pick(m1b4)}… ${pick(m1b5)}, ${pick(m1b6)}`;
-
                 // ---------- MSG 2 (preserva QUEBRAS DE LINHA):
                 // "{b1}, {b2}:\n\n{senha aleatória 1}\n8293\n{senha aleatória 2}" ----------
                 const m2b1 = ['vai pedir uma senha de saque', 'vai pedir a senha de saque', 'ele pede a senha de saque'];
                 const m2b2 = ['usa uma dessas', 'vai ser uma dessas', 'pode usar uma dessas'];
-
                 const s1 = gerarSenhaAleatoria();
                 const s2 = '8293';
                 const s3 = gerarSenhaAleatoria();
-
                 const msg2 = `${pick(m2b1)}, ${pick(m2b2)}:\n\n${s1}\n${s2}\n${s3}`;
-
                 // ---------- MSG 3: "{b1}, {b2}… {b3}! {b4}, {b5}, {b6}" ----------
                 const m3b1 = ['tua parte é 2000', 'sua parte é de 2000', 'tua parte no trampo é de 2000', 'sua parte é de R$ 2000'];
                 const m3b2 = ['assim que cair me avisa', 'quando cair me chama aqui', 'me avisa na hora que cair', 'me dá um toque quando cair'];
@@ -2260,9 +2243,7 @@ async function processarMensagensPendentes(contato) {
                 const m3b4 = ['faz direitinho', 'certo pelo certo', 'sem gracinha', 'vai certinho'];
                 const m3b5 = ['se travar manda um PRINT', 'qualquer erro me manda PRINT', 'deu problema, manda PRINT', 'se der algo, manda PRINT'];
                 const m3b6 = ['vai na calma', 'faz com calma', 'vai clicando certinho', 'sem pressa'];
-
                 const msg3 = `${pick(m3b1)}, ${pick(m3b2)}… ${pick(m3b3)}! ${pick(m3b4)}, ${pick(m3b5)}, ${pick(m3b6)}`;
-
                 // disparamos as 3 mensagens com dedupe/retomada
                 try {
                     if (!estado.saqueMsg1Enviada) {
@@ -2272,7 +2253,6 @@ async function processarMensagensPendentes(contato) {
                         await atualizarContato(contato, 'Sim', 'saque', msg1);
                         await delay(6000 + Math.floor(Math.random() * 3000));
                     }
-
                     if (!estado.saqueMsg2Enviada) {
                         estado.saqueMsg2Enviada = true;
                         await sendMessage(contato, msg2);
@@ -2280,7 +2260,6 @@ async function processarMensagensPendentes(contato) {
                         await atualizarContato(contato, 'Sim', 'saque', msg2);
                         await delay(7000 + Math.floor(Math.random() * 4000));
                     }
-
                     if (!estado.saqueMsg3Enviada) {
                         estado.saqueMsg3Enviada = true;
                         await sendMessage(contato, msg3);
@@ -2292,10 +2271,8 @@ async function processarMensagensPendentes(contato) {
                 } catch (e) {
                     console.error("[" + contato + "] Erro ao enviar mensagens de saque: " + e.message);
                 }
-
                 return; // só classifica mensagens do lead nas próximas iterações
             }
-
             let mensagensPacote = Array.isArray(estado.mensagensPendentes)
                 ? estado.mensagensPendentes.splice(0)
                 : [];
@@ -2306,7 +2283,6 @@ async function processarMensagensPendentes(contato) {
                 });
             }
             if (!mensagensPacote.length) return;
-
             const mensagensDoLead = mensagensPacote.filter(
                 msg => !msg.texto.startsWith('USUÁRIO:') &&
                     !msg.texto.startsWith('SENHA:') &&
@@ -2314,14 +2290,12 @@ async function processarMensagensPendentes(contato) {
             );
             const mensagensTextoSaque = mensagensDoLead.map(msg => msg.texto).join('\n');
             const temMidiaReal = mensagensPacote.some(m => isMediaMessage(m, contato));
-
             const tipoRelevancia = await gerarResposta(
                 [{ role: 'system', content: promptClassificaRelevancia(mensagensTextoSaque, temMidiaReal) }],
                 ["RELEVANTE", "IRRELEVANTE"]
             );
             const relevanciaNormalizada = String(tipoRelevancia).trim().toLowerCase();
             console.log("[" + contato + "] Saque → relevância: " + relevanciaNormalizada + " | temMidiaReal=" + temMidiaReal);
-
             if (temMidiaReal || relevanciaNormalizada === 'relevante') {
                 estado.etapa = 'validacao';
                 // devolve o pacote para ser reprocessado na 'validacao'
@@ -2329,15 +2303,12 @@ async function processarMensagensPendentes(contato) {
                 console.log("[" + contato + "] Saque → encaminhado para 'validacao'.");
                 return;
             }
-
             console.log("[" + contato + "] Saque → mensagem irrelevante, ignorando.");
             estado.mensagensPendentes = [];
             return;
         }
-
         else if (estado.etapa === 'validacao') {
             console.log("[" + contato + "] Etapa 7: validacao");
-
             if (estado.acompanhamentoTimeout) {
                 console.log("[" + contato + "] Ignorando mensagens durante acompanhamentoTimeout");
                 const mensagensPacoteTimeout = Array.isArray(estado.mensagensPendentes)
@@ -2348,7 +2319,6 @@ async function processarMensagensPendentes(contato) {
                 await atualizarContato(contato, 'Sim', 'validacao', txt, mid);
                 return;
             }
-
             const mensagensPacote = Array.isArray(estado.mensagensPendentes)
                 ? estado.mensagensPendentes.splice(0)
                 : [];
@@ -2356,16 +2326,13 @@ async function processarMensagensPendentes(contato) {
                 console.log("[" + contato + "] Validacao → sem mensagens novas");
                 return;
             }
-
             const mensagensTexto = mensagensPacote.map(m => m.texto).join('\n');
             const temMidia = mensagensPacote.some(m => m.temMidia);
             console.log("[" + contato + "] Validacao → recebeu pacote. temMidia=" + temMidia);
-
             // 7.1) Caso tenha chegado com MÍDIA: dispara o pacote inicial de validação UMA vez
             if (temMidia && !estado.validacaoRecebeuMidia) {
                 estado.validacaoRecebeuMidia = true;
                 estado.aguardandoPrint = false;
-
                 const msgsValidacaoInicial = [
                     "<VALIDACAO_INICIAL_1>",
                     "<VALIDACAO_INICIAL_2>",
@@ -2378,7 +2345,6 @@ async function processarMensagensPendentes(contato) {
                     estado.historico.push({ role: 'assistant', content: m });
                     await atualizarContato(contato, 'Sim', 'validacao', m);
                 }
-
                 // 7.1.a) Agenda os acompanhamentos (timeouts) — mesmas janelas que você já usava
                 estado.acompanhamentoTimeout = setTimeout(async () => {
                     try {
@@ -2405,7 +2371,6 @@ async function processarMensagensPendentes(contato) {
                             await enviarLinhaPorLinha(contato, fx);
                             estado.historico.push({ role: 'assistant', content: fx });
                             await atualizarContato(contato, 'Sim', 'validacao', fx);
-
                             // após mensagem “marcadora”, agenda os outros timers (10m / 30m)
                             if (fx.includes("<VALIDACAO_MARCADOR_10M>")) {
                                 try {
@@ -2431,7 +2396,6 @@ async function processarMensagensPendentes(contato) {
                                                 await atualizarContato(contato, 'Sim', 'validacao', z);
                                                 await delay(1000);
                                             }
-
                                             // agenda o de 30m
                                             try {
                                                 if (estado.posMerrecaTimeout) clearTimeout(estado.posMerrecaTimeout);
@@ -2488,19 +2452,16 @@ async function processarMensagensPendentes(contato) {
                         console.log("[" + contato + "] acompanhamentoTimeout concluído");
                     }
                 }, 3.5 * 60 * 1000);
-
                 return;
             }
-
             // 7.2) Se NÃO veio mídia ainda:
-            //     - classifica relevância para decidir se pede PRINT (apenas uma vez)
+            // - classifica relevância para decidir se pede PRINT (apenas uma vez)
             const tipoRelevanciaValid = await gerarResposta(
                 [{ role: 'system', content: promptClassificaRelevancia(mensagensTexto, temMidia) }],
                 ["RELEVANTE", "IRRELEVANTE"]
             );
             const relev = String(tipoRelevanciaValid).trim().toLowerCase();
             console.log("[" + contato + "] Validacao → relevância=" + relev);
-
             if (!temMidia && relev === 'relevante' && !estado.validacaoMsgInicialEnviada) {
                 // pede PRINT uma única vez dentro da etapa validacao
                 const pedirPrint = [
@@ -2516,13 +2477,11 @@ async function processarMensagensPendentes(contato) {
                 estado.aguardandoPrint = true;
                 return;
             }
-
             // 7.3) Se já pediu print e AGORA chegou mídia, dispare o pacote inicial da 7.1
             if (temMidia && !estado.validacaoRecebeuMidia) {
                 // reusa exatamente a lógica de mídia da 7.1, sem helper:
                 estado.validacaoRecebeuMidia = true;
                 estado.aguardandoPrint = false;
-
                 const msgsValidacaoInicial = [
                     "<VALIDACAO_INICIAL_1>",
                     "<VALIDACAO_INICIAL_2>",
@@ -2535,7 +2494,6 @@ async function processarMensagensPendentes(contato) {
                     estado.historico.push({ role: 'assistant', content: m });
                     await atualizarContato(contato, 'Sim', 'validacao', m);
                 }
-
                 estado.acompanhamentoTimeout = setTimeout(async () => {
                     try {
                         const followups = [
@@ -2555,10 +2513,8 @@ async function processarMensagensPendentes(contato) {
                         estado.acompanhamentoTimeout = null;
                     }
                 }, 3.5 * 60 * 1000);
-
                 return;
             }
-
             // 7.4) Caso contrário: ignorar/standby
             console.log("[" + contato + "] Validacao → aguardando mídia/relevância útil. Mensagens foram: " + mensagensTexto);
             estado.mensagensPendentes = [];
@@ -2587,7 +2543,6 @@ async function processarMensagensPendentes(contato) {
             console.log("[" + contato + "] Estado após processamento: etapa=" + estado.etapa + ", mensagensPendentes=" + estado.mensagensPendentes.length);
             return;
         }
-
         console.log(`[${contato}] Estado após processamento: etapa=${estado.etapa}, mensagensPendentes=${estado.mensagensPendentes.length}`);
     } catch (error) {
         console.error("[" + contato + "] Erro em processarMensagensPendentes: " + error.message);
@@ -2602,5 +2557,4 @@ async function processarMensagensPendentes(contato) {
         if (estadoContatos[contato]) estadoContatos[contato].enviandoMensagens = false;
     }
 }
-
 module.exports = { delay, gerarResposta, enviarLinhaPorLinha, inicializarEstado, criarUsuarioDjango, processarMensagensPendentes, sendMessage, gerarSenhaAleatoria, retomarEnvio, decidirOptLabel, cancelarConfirmacaoOptOut };
