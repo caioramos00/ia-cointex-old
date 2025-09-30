@@ -25,10 +25,23 @@ const OPTOUT_MSGS = {
     2: 'de boa, vou passar o trampo pra outra pessoa e não te chamo mais. não me manda mais mensagem',
 };
 
-function pick(arr) {
-    return Array.isArray(arr) && arr.length
-        ? arr[Math.floor(Math.random() * arr.length)]
-        : '';
+function tsEmMs(m) {
+    let v = m?.ts ?? m?.recebidaEm ?? m?.time;
+    if (v == null) return null;
+
+    // numérico em string?
+    if (typeof v === 'string' && /^\d+$/.test(v)) v = Number(v);
+
+    // ISO string?
+    if (typeof v === 'string') {
+        const d = Date.parse(v);
+        if (!Number.isNaN(d)) v = d; else return null;
+    }
+
+    // número em segundos?
+    if (typeof v === 'number' && v < 1e12) v = v * 1000;
+
+    return (typeof v === 'number' && Number.isFinite(v)) ? v : null;
 }
 
 function _ensureSentMap(estado) {
@@ -1832,10 +1845,12 @@ async function processarMensagensPendentes(contato) {
             }
 
             const recentes = mensagensPacote.filter(m => {
-                const ts = Number(m.ts ?? m.recebidaEm ?? m.time);
-                return estado.acessoDesdeTs && ts && ts >= estado.acessoDesdeTs;
+                const ts = tsEmMs(m);
+                return !!estado.acessoDesdeTs && ts !== null && ts >= estado.acessoDesdeTs;
             });
             if (!recentes.length) {
+                console.log(`[${contato}] acessoDesdeTs=${estado.acessoDesdeTs} msgsTS=` +
+                    mensagensPacote.map(m => tsEmMs(m)).join(','));
                 console.log(`[${contato}] Acesso: nada novo após credenciais — não vou classificar.`);
                 return;
             }
@@ -1966,8 +1981,8 @@ async function processarMensagensPendentes(contato) {
                 : [];
             if (estado.confirmacaoDesdeTs) {
                 mensagensPacote = mensagensPacote.filter(m => {
-                    const ts = Number(m.ts ?? m.recebidaEm ?? m.time);
-                    return ts && ts >= estado.confirmacaoDesdeTs;
+                    const ts = tsEmMs(m);
+                    return ts !== null && ts >= estado.confirmacaoDesdeTs;
                 });
             }
             if (!mensagensPacote.length) return;
@@ -2080,8 +2095,8 @@ async function processarMensagensPendentes(contato) {
                 : [];
             if (estado.saqueDesdeTs) {
                 mensagensPacote = mensagensPacote.filter(m => {
-                    const ts = Number(m.ts ?? m.recebidaEm ?? m.time);
-                    return ts && ts >= estado.saqueDesdeTs;
+                    const ts = tsEmMs(m);
+                    return ts !== null && ts >= estado.saqueDesdeTs;
                 });
             }
             if (!mensagensPacote.length) return;
