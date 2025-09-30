@@ -81,12 +81,37 @@ async function criarUsuarioDjango(contato) {
 
 const aberturaPath = path.join(__dirname, 'content', 'abertura.json');
 let aberturaCache = null;
+
 function loadAbertura() {
-  if (!aberturaCache) {
+  if (aberturaCache) return aberturaCache;
+  try {
     const raw = fs.readFileSync(aberturaPath, 'utf8');
-    aberturaCache = JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    // validações mínimas
+    if (!parsed?.msg1?.grupo1?.length || !parsed?.msg1?.grupo2?.length || !parsed?.msg1?.grupo3?.length) {
+      throw new Error('content/abertura.json incompleto: msg1.* ausente');
+    }
+    if (!parsed?.msg2?.grupo1?.length || !parsed?.msg2?.grupo2?.length || !parsed?.msg2?.grupo3?.length) {
+      throw new Error('content/abertura.json incompleto: msg2.* ausente');
+    }
+    aberturaCache = parsed;
+    return aberturaCache;
+  } catch (e) {
+    // fallback mínimo para não quebrar o envio
+    aberturaCache = {
+      msg1: {
+        grupo1: ['salve'],
+        grupo2: ['tô precisando de alguém pro trampo agora'],
+        grupo3: ['tá disponível?']
+      },
+      msg2: {
+        grupo1: ['nem liga pro nome desse whats,'],
+        grupo2: ['número empresarial q usamos pros trampo'],
+        grupo3: ['pode salvar como "Ryan"']
+      }
+    };
+    return aberturaCache;
   }
-  return aberturaCache;
 }
 
 const sentHashesGlobal = new Set();
