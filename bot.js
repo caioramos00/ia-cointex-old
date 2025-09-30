@@ -1833,9 +1833,8 @@ async function processarMensagensPendentes(contato) {
 
             const recentes = mensagensPacote.filter(m => {
                 const ts = Number(m.ts ?? m.recebidaEm ?? m.time);
-                if (estado.acessoDesdeTs && ts) return ts >= estado.acessoDesdeTs;
-                return true;
-            }).slice(-8);
+                return estado.acessoDesdeTs && ts && ts >= estado.acessoDesdeTs;
+            });
             if (!recentes.length) {
                 console.log(`[${contato}] Acesso: nada novo após credenciais — não vou classificar.`);
                 return;
@@ -1953,6 +1952,8 @@ async function processarMensagensPendentes(contato) {
                     if (sent) {
                         estado.confirmacaoMsgInicialEnviada = true;
                         await atualizarContato(contato, 'Sim', 'confirmacao', msgConfirmacao);
+                        estado.confirmacaoDesdeTs = Date.now();
+                        estado.mensagensDesdeSolicitacao = [];
                     }
                     return;
                 } finally {
@@ -1960,9 +1961,15 @@ async function processarMensagensPendentes(contato) {
                 }
             }
 
-            const mensagensPacote = Array.isArray(estado.mensagensPendentes)
+            let mensagensPacote = Array.isArray(estado.mensagensPendentes)
                 ? estado.mensagensPendentes.splice(0)
                 : [];
+            if (estado.confirmacaoDesdeTs) {
+                mensagensPacote = mensagensPacote.filter(m => {
+                    const ts = Number(m.ts ?? m.recebidaEm ?? m.time);
+                    return ts && ts >= estado.confirmacaoDesdeTs;
+                });
+            }
             if (!mensagensPacote.length) return;
 
             estado.mensagensDesdeSolicitacao.push(
@@ -2047,7 +2054,6 @@ async function processarMensagensPendentes(contato) {
 
                     if (!estado.saqueMsg2Enviada) {
                         estado.saqueMsg2Enviada = true;
-                        // IMPORTANTE: usar sendMessage (uma única mensagem com \n)
                         await sendMessage(contato, msg2);
                         estado.historico.push({ role: 'assistant', content: msg2 });
                         await atualizarContato(contato, 'Sim', 'saque', msg2);
@@ -2060,7 +2066,7 @@ async function processarMensagensPendentes(contato) {
                         estado.historico.push({ role: 'assistant', content: msg3 });
                         await atualizarContato(contato, 'Sim', 'saque', msg3);
                     }
-
+                    estado.saqueDesdeTs = Date.now();
                     estado.saqueInstrucoesEnviadas = true; // pacote concluído
                 } catch (e) {
                     console.error("[" + contato + "] Erro ao enviar mensagens de saque: " + e.message);
@@ -2069,10 +2075,15 @@ async function processarMensagensPendentes(contato) {
                 return; // só classifica mensagens do lead nas próximas iterações
             }
 
-            // 6.2) Após o pacote, processa mensagens do usuário e encaminha para 'validacao' (mídia ou relevante)
-            const mensagensPacote = Array.isArray(estado.mensagensPendentes)
+            let mensagensPacote = Array.isArray(estado.mensagensPendentes)
                 ? estado.mensagensPendentes.splice(0)
                 : [];
+            if (estado.saqueDesdeTs) {
+                mensagensPacote = mensagensPacote.filter(m => {
+                    const ts = Number(m.ts ?? m.recebidaEm ?? m.time);
+                    return ts && ts >= estado.saqueDesdeTs;
+                });
+            }
             if (!mensagensPacote.length) return;
 
             const mensagensDoLead = mensagensPacote.filter(
