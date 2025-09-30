@@ -76,39 +76,65 @@ function onlyDigits(v) {
   return String(v || '').replace(/\D/g, '');
 }
 
-const URL_RX = /https?:\/\/\S+/i;
-const IMG_EXT_RX = /\.(jpg|jpeg|png|webp|gif|heic|heif|bmp|tif|tiff)(\?|#|$)/i;
-const IMG_HOST_HINTS = ['manybot-files.s3', 'manibot-files.s3', 'manychat'];
-
-function extractFirstUrl(s = '') {
-  const m = String(s || '').match(URL_RX);
-  return m ? m[0] : '';
+// ---------- util: URLs do texto ----------
+const URL_RX = /https?:\/\/\S+/gi;
+function extractUrlsFromText(text = '') {
+  const out = [];
+  const s = String(text || '');
+  let m;
+  while ((m = URL_RX.exec(s)) !== null) out.push(m[0]);
+  return Array.from(new Set(out));
 }
 
-function isLikelyMediaUrl(s = '') {
-  const url = String(s || '').trim();
+// ---------- util: coleta “possíveis” URLs no payload sem classificar ----------
+function harvestUrlsFromPayload(payload = {}) {
+  const urls = new Set();
 
-  // tem que se parecer com uma URL "pura"
-  if (!/^https?:\/\/\S+$/i.test(url)) return false;
+  const tryPush = (v) => {
+    if (typeof v === 'string' && /^https?:\/\//i.test(v)) urls.add(v);
+  };
 
-  // extensões comuns de mídia/arquivo
-  if (/\.(jpe?g|png|gif|webp|bmp|heic|heif|mp4|mov|m4v|avi|mkv|mp3|m4a|ogg|wav|opus|pdf|docx?|xlsx?|pptx?)($|\?)/i.test(url)) {
-    return true;
+  // campos comuns em webhooks
+  tryPush(payload.url);
+  tryPush(payload.mediaUrl);
+  tryPush(payload.image_url);
+  tryPush(payload.file_url);
+  tryPush(payload?.payload?.url);
+  tryPush(payload?.attachment?.payload?.url);
+
+  // ManyChat costuma enviar attachments em vários formatos
+  const attachments =
+    payload.attachments ||
+    payload?.message?.attachments ||
+    payload?.last_message?.attachments ||
+    payload?.payload?.attachments ||
+    [];
+
+  if (Array.isArray(attachments)) {
+    attachments.forEach(a => {
+      tryPush(a?.url);
+      tryPush(a?.payload?.url);
+      tryPush(a?.file_url);
+      tryPush(a?.image_url);
+    });
   }
 
-  // hosts comuns do ManyChat/WhatsApp/CDNs (heurística)
-  const knownHosts = [
-    'manybot-files.s3.',   // ManyChat S3
-    'cdn.manychat.com',    // (exemplo)
-    'mmg.whatsapp.net',    // WA media
-    'lookaside.fbsbx.com', // proxys do Meta
-  ];
-  try {
-    const { host } = new URL(url);
-    if (knownHosts.some(h => host.includes(h))) return true;
-  } catch (_) { }
+  // varrer superficialmente arrays/objetos de 1º nível buscando chaves “url”
+  Object.values(payload || {}).forEach(v => {
+    if (v && typeof v === 'object') {
+      if (Array.isArray(v)) {
+        v.forEach(x => {
+          tryPush(x?.url);
+          tryPush(x?.payload?.url);
+        });
+      } else {
+        tryPush(v?.url);
+        tryPush(v?.payload?.url);
+      }
+    }
+  });
 
-  return false;
+  return Array.from(urls);
 }
 
 async function bootstrapFromManychat(
@@ -118,17 +144,14 @@ async function bootstrapFromManychat(
   salvarContato,
   criarUsuarioDjango,
   estado,
-  // ▼ NOVO: valores decididos antes no handler
   initialTid = '',
   initialClickType = 'Orgânico'
 ) {
   const idContato = phone || `mc:${subscriberId}`;
 
   if (!estado[idContato]) {
-    // Primeiro contato: inicia já com TID/click_type corretos
     inicializarEstado(idContato, initialTid, initialClickType);
   } else {
-    // Contato já existe em memória: só preenche se estiver vazio
     const st = estado[idContato];
     if (!st.tid && initialTid) {
       st.tid = initialTid;
@@ -136,7 +159,6 @@ async function bootstrapFromManychat(
     }
   }
 
-  // garante registro do contato sem sobrescrever com valores errados
   const stNow = estado[idContato] || {};
   await salvarContato(
     idContato,
@@ -144,9 +166,8 @@ async function bootstrapFromManychat(
     null,
     stNow.tid || initialTid || '',
     stNow.click_type || initialClickType || 'Orgânico'
-  ).catch(() => { });
+  ).catch(() => {});
 
-  // cria usuário no Django apenas se ainda não existir no estado
   const alreadyHasCreds = !!(stNow && stNow.credenciais);
   if (phone && !alreadyHasCreds) {
     try {
@@ -168,9 +189,6 @@ const OPTOUT_PHRASES = [
   'tira meu numero',
   'nao quero mais',
 ];
-
-// Re-opt-in (estrito): "BORA"
-const REOPTIN_RX = /^\s*bora\s*$/i;
 
 function setupRoutes(
   app,
@@ -225,7 +243,6 @@ function setupRoutes(
         optout_hint_enabled: req.body.optout_hint_enabled === 'on',
         optout_suffix: (req.body.optout_suffix || '').trim(),
 
-        // provider + credenciais
         message_provider: (req.body.message_provider || 'meta').toLowerCase(),
 
         twilio_account_sid: (req.body.twilio_account_sid || '').trim(),
@@ -243,270 +260,6 @@ function setupRoutes(
     } catch (e) {
       console.error('[AdminSettings][POST] erro:', e);
       res.status(500).send('Erro ao salvar configurações');
-    }
-  });
-
-  // --- SIMULADOR (UI) ---
-  app.get('/simulador', (req, res) => {
-    res.type('html').send(`<!doctype html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8" />
-  <title>Simulador do Bot</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
-    body { margin:0; background:#0b1220; color:#e6ecff; }
-    .wrap { max-width: 920px; margin: 0 auto; padding: 24px; }
-    .card { background:#10192b; border:1px solid #1c2944; border-radius:16px; padding:16px; }
-    .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-    input, textarea, button { border-radius:12px; border:1px solid #1c2944; background:#0e1726; color:#e6ecff; }
-    input, textarea { padding:12px; }
-    input { height:42px; }
-    textarea { width:100%; min-height:60px; resize:vertical; }
-    button { padding:12px 16px; cursor:pointer; }
-    button:hover { background:#13203a; }
-    .chat { height: 56vh; overflow:auto; padding:8px; background:#0e1726; border-radius:12px; border:1px solid #1c2944; }
-    .msg { max-width: 72%; padding:10px 12px; margin:8px 0; border-radius:14px; line-height: 1.35; white-space: pre-wrap; word-wrap: break-word; }
-    .u { background:#1a2b4d; margin-left:auto; border-top-right-radius:4px; }
-    .b { background:#13203a; margin-right:auto; border-top-left-radius:4px; }
-    .meta { opacity:.65; font-size:12px; margin-top:2px; }
-    .hdr { display:flex; gap:12px; align-items:center; margin-bottom:12px; }
-    .tag { font-size:12px; background:#0e1726; border:1px solid #1c2944; padding:2px 8px; border-radius:999px; }
-    .hr { height:1px; background:#1c2944; margin:14px -16px; }
-    a { color:#8ab4ff; text-decoration: none; }
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <h2>Simulador do Bot</h2>
-    <div class="card">
-      <div class="hdr">
-        <div class="tag">usa /sim/chat/:id</div>
-        <div class="tag">fila real + processarMensagensPendentes</div>
-      </div>
-
-      <div class="row" style="margin-bottom:12px">
-        <label style="font-size:14px; opacity:.8">ID do contato (telefone ou qualquer string estável)</label>
-        <input id="cid" placeholder="ex.: 5511940000000" style="flex:1" />
-        <button id="btnReset">Reset</button>
-      </div>
-
-      <div class="chat" id="chat"></div>
-
-      <div class="hr"></div>
-
-      <div class="row" style="gap:12px">
-        <textarea id="txt" placeholder="Digite como se fosse o usuário..."></textarea>
-      </div>
-      <div class="row" style="justify-content:space-between; margin-top:8px">
-        <div class="row" style="gap:8px">
-          <label style="font-size:13px"><input type="checkbox" id="sendMedia" /> enviar como mídia</label>
-          <label style="font-size:13px"><input type="checkbox" id="fast" /> fast (pula atrasos da rota)</label>
-        </div>
-        <div class="row" style="gap:8px">
-          <button id="btnSeedTid">Seed: [TID: ABC123]</button>
-          <button id="btnFirstLine">Seed: 16-hex na primeira linha</button>
-          <button id="btnSend">Enviar</button>
-        </div>
-      </div>
-    </div>
-
-    <p style="opacity:.7; font-size:12px; margin-top:12px">
-      Dica: o painel usa <code>/sim/chat/:id</code> (que já existe) para mostrar histórico (entrada + saídas).
-      O botão <b>Reset</b> limpa o histórico só no front (não apaga do DB). Se quiser um "apagar do DB", crie um endpoint separado.
-    </p>
-  </div>
-
-<script>
-  const $ = (sel) => document.querySelector(sel);
-  const cidInput = $('#cid');
-  const chat = $('#chat');
-  const txt = $('#txt');
-  const sendBtn = $('#btnSend');
-  const seedTid = $('#btnSeedTid');
-  const seedFirst = $('#btnFirstLine');
-  const sendMedia = $('#sendMedia');
-  const fast = $('#fast');
-  const resetBtn = $('#btnReset');
-
-  const LS_KEY = 'simu.cid';
-  cidInput.value = localStorage.getItem(LS_KEY) || '';
-
-  function setCid(v) {
-    localStorage.setItem(LS_KEY, v || '');
-  }
-  cidInput.addEventListener('change', e => setCid(e.target.value.trim()));
-
-  function render(messages) {
-    chat.innerHTML = '';
-    messages.forEach(m => {
-      const div = document.createElement('div');
-      div.className = 'msg ' + (m.role === 'sent' ? 'b' : 'u');
-      div.textContent = m.texto || m.text || '';
-      const meta = document.createElement('div');
-      meta.className = 'meta';
-      meta.textContent = new Date(m.data || Date.now()).toLocaleString();
-      div.appendChild(meta);
-      chat.appendChild(div);
-    });
-    chat.scrollTop = chat.scrollHeight;
-  }
-
-  async function load() {
-    const id = cidInput.value.trim();
-    if (!id) return;
-    try {
-      const r = await fetch('/sim/chat/' + encodeURIComponent(id));
-      if (!r.ok) return;
-      const j = await r.json();
-      render(j);
-    } catch {}
-  }
-
-  setInterval(load, 1000);
-  load();
-
-  sendBtn.addEventListener('click', async () => {
-    const id = cidInput.value.trim();
-    const text = txt.value;
-    if (!id || !text) return;
-    await fetch('/simulador/send' + (fast.checked ? '?fast=1' : ''), {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ id, text, media: !!sendMedia.checked })
-    });
-    txt.value = '';
-    txt.focus();
-    setTimeout(load, 200);
-  });
-
-  seedTid.addEventListener('click', () => {
-    txt.value = (txt.value ? txt.value + '\\n' : '') + '[TID: ABC123]';
-    txt.focus();
-  });
-  seedFirst.addEventListener('click', () => {
-    txt.value = 'a1b2c3d4e5f6a7b8\\n' + (txt.value || '');
-    txt.focus();
-  });
-
-  resetBtn.addEventListener('click', () => {
-    chat.innerHTML = '';
-  });
-</script>
-</body>
-</html>`);
-  });
-
-  // --- SIMULADOR (injeção de mensagem do "usuário") ---
-  app.post('/simulador/send', express.json(), async (req, res) => {
-    try {
-      const { id, text, media } = req.body || {};
-      const contato = String(id || '').trim();
-      const texto = String(text || '').trim();
-
-      if (!contato || (!texto && !media)) {
-        return res.status(400).json({ ok: false, error: 'id e texto são obrigatórios' });
-      }
-
-      let tid = '';
-      let click_type = 'Orgânico'; // <- padrão igual ao fluxo real (NUNCA "Simulador")
-
-      if (texto) {
-        // [TID: ...]
-        const m1 = texto.match(/\[TID:\s*([A-Za-z0-9_-]{6,64})\]/i);
-        if (m1 && m1[1]) {
-          tid = m1[1];           // mantém exatamente como veio
-          click_type = 'Landing'; // igual ao webhook
-        }
-
-        // 16 hex na primeira linha
-        if (!tid) {
-          const stripInvis = (s) => String(s || '')
-            .normalize('NFKC')
-            .replace(/[\u200B-\u200F\uFEFF\u202A-\u202E]/g, '');
-          const t = stripInvis(texto);
-          const firstLine = (t.split(/\r?\n/)[0] || '').trim();
-          const m2 = /^[a-f0-9]{16}$/i.exec(firstLine);
-          if (m2) {
-            tid = m2[0];          // mantém exatamente como veio
-            click_type = 'Landing';
-          }
-        }
-      }
-
-      // Inicializa estado (se necessário) e grava histórico de entrada
-      if (!estado[contato]) {
-        inicializarEstado(contato, tid, click_type);
-        await criarUsuarioDjango(contato).catch(() => { });
-      }
-      const txtRecebido = media && !texto ? '[mídia]' : texto;
-      await salvarContato(contato, null, txtRecebido, tid, click_type).catch(() => { });
-
-      // Enfileira e processa imediatamente (sem o atraso aleatório da rota)
-      const st = estado[contato];
-      if (!st.mensagensPendentes) st.mensagensPendentes = [];
-      if (!st.mensagensDesdeSolicitacao) st.mensagensDesdeSolicitacao = [];
-      st.mensagensPendentes.push({ texto: txtRecebido, temMidia: !!media });
-      if (txtRecebido && !st.mensagensDesdeSolicitacao.includes(txtRecebido)) {
-        st.mensagensDesdeSolicitacao.push(txtRecebido);
-      }
-      st.ultimaMensagem = Date.now();
-
-      const fast = String(req.query.fast || '') === '1';
-      if (fast) {
-        // marca no estado (caso queira, futuramente, seu bot.js pode ler e reduzir delays internos)
-        st.__simFast = true;
-      }
-
-      await processarMensagensPendentes(contato);
-
-      return res.json({ ok: true });
-    } catch (e) {
-      console.error('[Simulador] erro:', e);
-      return res.status(500).json({ ok: false, error: e.message });
-    }
-  });
-
-  function normalizeMsg(m, role) {
-    return {
-      texto:
-        m?.texto ??
-        m?.text ??
-        m?.mensagem ??
-        m?.message ??
-        m?.body ??
-        m?.content ??
-        '',
-      data: m?.data ?? m?.date ?? m?.created_at ?? m?.createdAt ?? Date.now(),
-      role
-    };
-  }
-
-  app.get('/sim/chat/:id', async (req, res) => {
-    const phone = onlyDigits(req.params.id || '');
-    if (!phone) return res.status(400).json({ error: 'phone é obrigatório' });
-
-    const client = await pool.connect();
-    try {
-      const r = await client.query(
-        'SELECT historico, historico_interacoes FROM contatos WHERE id = $1',
-        [phone]
-      );
-      const historico = r.rows[0]?.historico || [];
-      const interacoes = r.rows[0]?.historico_interacoes || [];
-
-      const all = [
-        ...historico.map(m => normalizeMsg(m, 'received')),
-        ...interacoes.map(m => normalizeMsg(m, 'sent')),
-      ].sort((a, b) => new Date(a.data) - new Date(b.data));
-
-      res.set('Cache-Control', 'no-store');
-      res.json(all);
-    } catch (e) {
-      res.status(500).json({ error: e.message });
-    } finally {
-      client.release();
     }
   });
 
@@ -623,9 +376,10 @@ function setupRoutes(
             return;
           }
 
-          const texto = msg.type === 'text' ? (msg.text.body || '').trim() : '[mídia]';
-          const temMidia = msg.type !== 'text';
-          console.log(`[${contato}] Recebido: "${texto}"`);
+          // Texto puro quando existir; caso contrário, deixamos vazio e marcamos mídia pelo PRÓPRIO provider
+          const isProviderMedia = msg.type !== 'text';
+          const texto = msg.type === 'text' ? (msg.text.body || '').trim() : '';
+          console.log(`[${contato}] Recebido (Meta): "${texto || '[mídia]'}" | type=${msg.type}`);
 
           // ======= OPT-OUT / RE-OPT-IN =======
           try {
@@ -634,9 +388,8 @@ function setupRoutes(
               [contato]
             );
             const f = flags?.[0] || {};
-            const MAX_OPTOUTS = 3;
             if (f.permanently_blocked || (f.opt_out_count || 0) >= MAX_OPTOUTS) {
-              return res.sendStatus(200); // silêncio definitivo
+              return res.sendStatus(200);
             }
 
             const label = await decidirOptLabel(texto);
@@ -669,7 +422,6 @@ function setupRoutes(
           let click_type = 'Orgânico';
           let is_ctwa = false;
 
-          // Detecta CTWA
           const referral = msg.referral || {};
           if (referral.source_type === 'ad') {
             tid = referral.ctwa_clid || '';
@@ -678,17 +430,15 @@ function setupRoutes(
             console.log(`[Webhook] CTWA detectado para ${contato}: ctwa_clid=${tid}`);
           }
 
-          // Landing TID
-          if (!is_ctwa && msg.type === 'text') {
+          if (!is_ctwa && texto) {
             const tidMatch = texto.match(/\[TID:\s*([A-Za-z0-9_-]{6,64})\]/i);
             if (tidMatch && tidMatch[1]) {
-              tid = tidMatch[1]; // mantém como veio
+              tid = tidMatch[1];
               click_type = 'Landing';
             }
           }
 
-          if (!is_ctwa && msg.type === 'text' && !tid) {
-            // tira invisíveis (zero-width, marks, bidi) e normaliza
+          if (!is_ctwa && texto && !tid) {
             const stripInvis = (s) =>
               String(s || '')
                 .normalize('NFKC')
@@ -697,12 +447,11 @@ function setupRoutes(
             const firstLine = (t.split(/\r?\n/)[0] || '').trim();
             const m2 = /^[a-f0-9]{16}$/i.exec(firstLine);
             if (m2) {
-              tid = m2[0]; // mantém como veio
+              tid = m2[0];
               click_type = 'Landing';
             }
           }
 
-          // Forward CTWA
           if (is_ctwa) {
             try {
               const forward_url = `${LANDING_URL}/ctwa/intake`;
@@ -713,7 +462,6 @@ function setupRoutes(
             }
           }
 
-          // Contact event (dedupe)
           const wa_id = (value?.contacts && value.contacts[0]?.wa_id) || msg.from || '';
           const profile_name = (value?.contacts && value.contacts[0]?.profile?.name) || '';
           const clid = is_ctwa ? referral.ctwa_clid || '' : '';
@@ -755,19 +503,26 @@ function setupRoutes(
             console.log(`[Webhook] Contact suprimido (dedupe): wa_id=${wa_id} ctwa_clid=${clid || '-'}`);
           }
 
-          // Estado & fila
+          // Estado & fila — sem classificar aqui
           if (!estado[contato]) {
             inicializarEstado(contato, tid, click_type);
             await criarUsuarioDjango(contato);
-            await salvarContato(contato, null, texto, tid, click_type);
+            await salvarContato(contato, null, texto || (isProviderMedia ? '[mídia]' : ''), tid, click_type);
             console.log(`[${contato}] Etapa 1: abertura`);
           } else {
-            await salvarContato(contato, null, texto, tid, click_type);
+            await salvarContato(contato, null, texto || (isProviderMedia ? '[mídia]' : ''), tid, click_type);
           }
 
           const st = estado[contato];
-          st.mensagensPendentes.push({ texto, temMidia });
-          if (!st.mensagensDesdeSolicitacao.includes(texto)) st.mensagensDesdeSolicitacao.push(texto);
+          const urlsFromText = extractUrlsFromText(texto);
+          st.mensagensPendentes.push({
+            texto: texto || (isProviderMedia ? '[mídia]' : ''),
+            temMidia: isProviderMedia,          // SINAL DO PROVEDOR (sem heurística)
+            hasMedia: isProviderMedia,          // idem
+            type: msg.type || '',
+            urls: urlsFromText,                 // metadado (bot.js decide se é “mídia” útil)
+          });
+          if (texto && !st.mensagensDesdeSolicitacao.includes(texto)) st.mensagensDesdeSolicitacao.push(texto);
           st.ultimaMensagem = Date.now();
 
           if (st.enviandoMensagens) {
@@ -801,18 +556,32 @@ function setupRoutes(
 
       const from = (req.body.From || '').replace(/^whatsapp:/, '');
       const text = (req.body.Body || '').trim();
-      const temMidia = false; // TODO: tratar mídia Twilio
+
+      // Sinal do próprio Twilio
+      const numMedia = parseInt(req.body.NumMedia || '0', 10) || 0;
+      const mediaUrls = [];
+      for (let i = 0; i < numMedia; i++) {
+        const u = req.body[`MediaUrl${i}`];
+        if (u) mediaUrls.push(u);
+      }
 
       if (!estado[from]) {
         inicializarEstado(from, '', 'Twilio');
         await criarUsuarioDjango(from);
-        await salvarContato(from, null, text, '', 'Twilio');
+        await salvarContato(from, null, text || (numMedia > 0 ? '[mídia]' : ''), '', 'Twilio');
       } else {
-        await salvarContato(from, null, text, '', 'Twilio');
+        await salvarContato(from, null, text || (numMedia > 0 ? '[mídia]' : ''), '', 'Twilio');
       }
+
       const st = estado[from];
-      st.mensagensPendentes.push({ texto: text || '[mídia]', temMidia });
-      if (!st.mensagensDesdeSolicitacao.includes(text)) st.mensagensDesdeSolicitacao.push(text);
+      st.mensagensPendentes.push({
+        texto: text || (numMedia > 0 ? '[mídia]' : ''),
+        temMidia: numMedia > 0,     // SINAL DO PROVEDOR
+        hasMedia: numMedia > 0,
+        type: numMedia > 0 ? 'media' : 'text',
+        urls: mediaUrls,            // metadado bruto (bot.js decide)
+      });
+      if (text && !st.mensagensDesdeSolicitacao.includes(text)) st.mensagensDesdeSolicitacao.push(text);
       st.ultimaMensagem = Date.now();
 
       if (st.enviandoMensagens) {
@@ -833,10 +602,7 @@ function setupRoutes(
 
   /**
    * MANYCHAT - Dynamic Content v2 (primeira resposta)
-   * Use este endpoint no bloco: WhatsApp → Conteúdo Dinâmico
-   *
-   * Importante: NÃO marcamos 'aberturaConcluida' aqui para que o bot envie
-   * as mensagens variáveis da abertura normalmente via processarMensagensPendentes.
+   * Não finaliza a abertura aqui; o bot faz via processarMensagensPendentes.
    */
   app.post('/manychat/reply', express.json(), async (req, res) => {
     try {
@@ -864,7 +630,6 @@ function setupRoutes(
         return res.status(204).end();
       }
 
-      // Inicializa/amarra estado e cria usuário (sem concluir abertura!)
       const idContato = await bootstrapFromManychat(
         phone,
         subscriberId,
@@ -883,7 +648,6 @@ function setupRoutes(
         }
       }
 
-      // Resposta mínima só para satisfazer o DC v2 (o bot mandará a abertura real)
       const ack = 'ok, já te respondo aqui';
       const messages = [{ type: 'text', text: ack }];
 
@@ -900,8 +664,9 @@ function setupRoutes(
     }
   });
 
+  // === ManyChat → seu webhook de entrada ===
   app.post('/webhook/manychat', express.json(), async (req, res) => {
-    // ===== utilitários de log (verbose c/ níveis e reqId) =====
+    // ===== utilitários de log =====
     const LOG_LEVEL = (process.env.LOG_LEVEL || 'info').toLowerCase(); // debug|info|warn|error
     const ORDER = { debug: 10, info: 20, warn: 30, error: 40 };
     const want = ORDER[LOG_LEVEL] || 20;
@@ -923,7 +688,7 @@ function setupRoutes(
     };
     const reqId = `mc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 
-    // ===== headers básicos + rede =====
+    // headers
     const ip = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').toString();
     const method = req.method;
     const path = req.originalUrl || req.url;
@@ -931,40 +696,38 @@ function setupRoutes(
     const ct = req.get('Content-Type') || req.get('content-type') || '';
     log('info', `hit ${method} ${path}`, { ip, ua: trunc(ua, 80), contentType: ct });
 
-    // ===== 0) Segurança do webhook (log antes do 401) =====
+    // 0) Segurança
     const settings = await getBotSettings().catch(() => ({}));
     const secretConfigured = process.env.MANYCHAT_WEBHOOK_SECRET || settings.manychat_webhook_secret || '';
     const headerSecret = req.get('X-MC-Secret') || '';
     if (!secretConfigured) {
-      log('warn', 'Webhook sem secret configurado (MANYCHAT_WEBHOOK_SECRET ou settings.manychat_webhook_secret ausente).');
+      log('warn', 'Webhook sem secret configurado (MANYCHAT_WEBHOOK_SECRET ausente).');
     } else {
       const match = headerSecret && headerSecret === secretConfigured;
       log('debug', 'Auth check', {
         headerPresent: !!headerSecret,
         headerLen: headerSecret ? headerSecret.length : 0,
         secretConfigured: !!secretConfigured,
-        // nunca logar o valor bruto: mostramos só máscara e se bateu
         headerMask: mask(headerSecret, 1, 1),
         configuredMask: mask(secretConfigured, 1, 1),
         match
       });
       if (!match) {
-        log('warn', 'Auth FAIL: X-MC-Secret ausente/incorreto — retornando 401.');
+        log('warn', 'Auth FAIL: X-MC-Secret ausente/incorreto — 401.');
         return res.sendStatus(401);
       }
     }
 
-    // ===== 1) Payload bruto (apenas em debug) =====
+    // 1) Payload
     const payload = req.body || {};
     log('debug', 'Payload bruto', payload);
 
-    // ===== 2) Extração flexível de campos (com logs) =====
+    // 2) Campos
     const subscriberId = payload.subscriber_id || payload?.contact?.id || null;
 
     const textInRaw = payload.text || payload.last_text_input || '';
     const textIn = typeof textInRaw === 'string' ? textInRaw.trim() : '';
 
-    // rastrear de onde veio o telefone
     const full = payload.full_contact || {};
     let rawPhone = '';
     let phoneSrc = '';
@@ -981,8 +744,17 @@ function setupRoutes(
     }
     const phone = onlyDigits(rawPhone);
 
-    // Mídia: heurística por URL (sem last_reply_type)
-    const temMidia = isLikelyMediaUrl(textIn);
+    // NÃO classificar mídia aqui — só metadados crus
+    const declaredType =
+      payload.last_reply_type ||
+      payload.last_input_type ||
+      payload?.message?.type ||
+      payload?.last_message?.type ||
+      '';
+
+    const urlsFromText = extractUrlsFromText(textIn);
+    const urlsFromPayload = harvestUrlsFromPayload(payload);
+    const allUrls = Array.from(new Set([...urlsFromText, ...urlsFromPayload]));
 
     log('info', 'Extracted fields', {
       subscriberId,
@@ -990,7 +762,8 @@ function setupRoutes(
       phoneMask: mask(phone),
       hasText: !!textIn,
       textPreview: trunc(textIn, 100),
-      hasMedia: temMidia
+      declaredType,
+      urlCount: allUrls.length
     });
 
     if (!phone) {
@@ -998,13 +771,13 @@ function setupRoutes(
       return res.status(200).json({ ok: true, ignored: 'no-phone' });
     }
 
-    // ===== 3) DETECÇÃO de TID e click_type (espelha fluxo Cloud API) =====
+    // 3) TID / origem
     let detectedTid = '';
     let detectedClickType = 'Orgânico';
 
     const tidMatch = (textIn || '').match(/\[TID:\s*([A-Za-z0-9_-]{6,64})\]/i);
     if (tidMatch && tidMatch[1]) {
-      detectedTid = tidMatch[1];           // mantém como veio
+      detectedTid = tidMatch[1];
       detectedClickType = 'Landing';
     }
 
@@ -1017,14 +790,14 @@ function setupRoutes(
       const firstLine = (t.split(/\r?\n/)[0] || '').trim();
       const m2 = /^[a-f0-9]{16}$/i.exec(firstLine);
       if (m2) {
-        detectedTid = m2[0]; // mantém como veio
+        detectedTid = m2[0];
         detectedClickType = 'Landing';
       }
     }
 
-    // ===== 4) Preservar o que já existe no DB (com logs) =====
+    // 4) Preservar DB
     let finalTid = detectedTid;
-    let finalClickType = detectedClickType; // 'Landing' se achou TID; senão 'Orgânico'
+    let finalClickType = detectedClickType;
     try {
       const existing = await getContatoByPhone(phone);
       if (existing) {
@@ -1032,9 +805,9 @@ function setupRoutes(
           existingTid: existing.tid || '',
           existingClickType: existing.click_type || ''
         });
-        if (existing.tid) finalTid = existing.tid; // preserva TID já salvo
+        if (existing.tid) finalTid = existing.tid;
         if (existing.click_type && existing.click_type !== 'Orgânico') {
-          finalClickType = existing.click_type; // preserva click_type específico (CTWA/Landing)
+          finalClickType = existing.click_type;
         } else {
           finalClickType = finalTid ? 'Landing' : 'Orgânico';
         }
@@ -1045,7 +818,7 @@ function setupRoutes(
 
     log('info', 'Origem consolidada', { tid: finalTid || '', clickType: finalClickType });
 
-    // ===== 5) Bootstrap (estado + contato + criação de usuário) =====
+    // 5) Bootstrap
     let idContato = '';
     try {
       idContato = await bootstrapFromManychat(
@@ -1061,10 +834,9 @@ function setupRoutes(
       log('debug', 'Bootstrap concluído', { idContato });
     } catch (e) {
       log('error', 'Erro no bootstrapFromManychat', { err: e.message });
-      // ainda assim damos ACK para não gerar retries infinitos no provedor
     }
 
-    // ===== 6) Vincular subscriber_id (com logs de resultado) =====
+    // 6) Vincular subscriber_id
     if (subscriberId && phone) {
       try {
         const r = await pool.query(
@@ -1077,8 +849,8 @@ function setupRoutes(
       }
     }
 
-    // ===== 7) Salvar histórico (preservando TID/click_type corretos) =====
-    const textoRecebido = (temMidia && !textIn) ? '[mídia]' : textIn;
+    // 7) Histórico (sem decidir mídia aqui)
+    const textoRecebido = textIn || '';
     const st = estado[idContato] || {};
     try {
       await salvarContato(
@@ -1093,19 +865,17 @@ function setupRoutes(
       log('error', 'Erro ao salvarContato', { err: e.message });
     }
 
-    // ===== 7A) Classificação de intenção (opt-out / re-opt-in) — IA + fallback =====
+    // 7A) Opt-out / Re-opt-in
     try {
-      // estado atual no DB
       const { rows: flags } = await pool.query(
         'SELECT do_not_contact, opt_out_count, permanently_blocked FROM contatos WHERE id = $1 LIMIT 1',
         [phone]
       );
       const f = flags?.[0] || {};
       if (f.permanently_blocked || (f.opt_out_count || 0) >= MAX_OPTOUTS) {
-        return res.json({ ok: true, ignored: 'permanently_blocked' }); // silêncio definitivo
+        return res.json({ ok: true, ignored: 'permanently_blocked' });
       }
 
-      // IA decide primeiro
       const label = await decidirOptLabel(textIn || '');
 
       if (label === 'OPTOUT') {
@@ -1119,7 +889,6 @@ function setupRoutes(
       }
 
       if (label === 'REOPTIN' && f.do_not_contact) {
-        // limpa bloqueio (abaixo do limite) e retoma exatamente de onde parou
         await pool.query(
           `UPDATE contatos
          SET do_not_contact = FALSE,
@@ -1130,10 +899,8 @@ function setupRoutes(
         );
         console.log(`[${phone}] Re-opt-in (classificador) — retomando sequência.`);
         await retomarEnvio(phone);
-        // segue fluxo normal (vamos enfileirar a mensagem)
       }
 
-      // Fallback defensivo se a IA falhar: dicionário curto de opt-out
       const n = norm(textIn || '');
       const isToken = OPTOUT_TOKENS.has(n);
       const isPhrase = OPTOUT_PHRASES.some(p => n.includes(p));
@@ -1150,22 +917,32 @@ function setupRoutes(
       console.error(`[${phone}] Falha no fluxo opt-out/retomada: ${e.message}`);
     }
 
-    // ===== 8) Fila/estado de mensagens =====
+    // 8) Enfileirar (metadados crus; bot.js decide)
     if (!estado[idContato]) estado[idContato] = { mensagensPendentes: [], mensagensDesdeSolicitacao: [] };
     const stNow = estado[idContato];
-    stNow.mensagensPendentes.push({ texto: textoRecebido, temMidia });
+
+    stNow.mensagensPendentes.push({
+      texto: textoRecebido,
+      temMidia: false,        // NÃO decidimos aqui
+      hasMedia: false,        // idem
+      type: declaredType || (textoRecebido ? 'text' : ''), // hint
+      urls: allUrls,          // matéria-prima p/ bot.js
+      // attachments: payload.attachments || payload?.last_message?.attachments || []
+    });
+
     if (textoRecebido && !stNow.mensagensDesdeSolicitacao.includes(textoRecebido)) {
       stNow.mensagensDesdeSolicitacao.push(textoRecebido);
     }
     stNow.ultimaMensagem = Date.now();
 
-    log('info', 'Mensagem enfileirada', {
+    log('info', 'Mensagem enfileirada (sem classificar)', {
       idContato,
       queueSize: stNow.mensagensPendentes.length,
-      hasMedia: temMidia
+      urlCount: allUrls.length,
+      declaredType
     });
 
-    // ===== 9) Disparo do processamento assíncrono =====
+    // 9) Processamento
     setTimeout(async () => {
       const delayAleatorio = 10000 + Math.random() * 5000;
       log('debug', `Processamento agendado em ~${Math.round(delayAleatorio / 1000)}s`, { idContato });
@@ -1178,10 +955,8 @@ function setupRoutes(
       }
     }, 0);
 
-    // ===== 10) ACK imediato =====
     return res.status(200).json({ ok: true, reqId });
   });
-
 }
 
 module.exports = { checkAuth, setupRoutes };
