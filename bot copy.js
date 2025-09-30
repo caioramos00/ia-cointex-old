@@ -531,8 +531,6 @@ async function sendManychatBatch(phone, textOrLines) {
 
     async function postMC(path, payload, label) {
         const url = `https://api.manychat.com${path}`;
-        console.log(`[ManyChat][${label}] POST ${url}`);
-        console.log(`[ManyChat][${label}] Payload: ${JSON.stringify(payload)}`);
         const resp = await axios.post(url, payload, {
             headers: {
                 Authorization: `Bearer ${token}`,
@@ -542,7 +540,6 @@ async function sendManychatBatch(phone, textOrLines) {
             validateStatus: () => true
         });
         const brief = typeof resp.data === 'string' ? resp.data.slice(0, 300) : resp.data;
-        console.log(`[ManyChat][${label}] HTTP ${resp.status} Body: ${JSON.stringify(brief)}`);
 
         if (resp.status >= 400 || resp.data?.status === 'error') {
             const err = new Error(`${label} falhou: HTTP ${resp.status}`);

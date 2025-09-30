@@ -1,45 +1,10 @@
-// bot.js — v0 (apenas receber e logar mensagens)
-// CommonJS, estado in-memory, ManyChat ativo, Meta Graph stub, sem Twilio
-
 'use strict';
 
-/**
- * Dependências existentes no projeto
- * (mantemos a estrutura atual; não usamos OpenAI/prompts por enquanto)
- */
 const estadoContatos = require('./state.js');
-// const { getActiveTransport } = require('./lib/transport'); // manter se precisar depois
-// const { atualizarContato, getBotSettings, pool } = require('./db.js'); // futuro
 
-/**
- * Logger simples (console por padrão), com opção de injeção via init()
- */
 let log = console;
 
-/**
- * Estado mínimo por contato.
- * Mantemos in-memory conforme pedido. Sem FSM por enquanto.
- */
-function ensureEstado(contato) {
-  if (!estadoContatos[contato]) {
-    estadoContatos[contato] = {
-      contato,
-      etapa: 'none',           // sem etapas no v0
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-  } else {
-    estadoContatos[contato].updatedAt = Date.now();
-  }
-  return estadoContatos[contato];
-}
-
-/**
- * Utilidades
- */
-function safeStr(v) {
-  return (v === null || v === undefined) ? '' : String(v);
-}
+function safeStr(v) { return (v === null || v === undefined) ? '' : String(v); }
 
 function previewText(text, max = 120) {
   const t = safeStr(text).replace(/\s+/g, ' ').trim();
@@ -47,34 +12,65 @@ function previewText(text, max = 120) {
   return t.length > max ? t.slice(0, max - 1) + '…' : t;
 }
 
-/**
- * Normalizadores de entrada
- * - ManyChat (ativo)
- * - Meta Graph (stub, não usado agora)
- */
+function normalizeContato(raw) {
+  const n = safeStr(raw).replace(/\D/g, '');
+  return n;
+}
 
-/**
- * Normaliza payload do ManyChat para um shape único:
- * {
- *   contato: '55XXXXXXXXXXX',
- *   texto: 'mensagem do usuário',
- *   temMidia: boolean,
- *   midias: [ { url, type } ],
- *   ts: epoch_ms,
- *   origem: 'manychat',
- *   messageId: string|undefined,
- * }
- */
+function ensureEstado(contato) {
+  const key = safeStr(contato) || 'desconhecido';
+  if (!estadoContatos[key]) {
+    estadoContatos[key] = {
+      contato: key,
+      etapa: 'none',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+  } else {
+    estadoContatos[key].updatedAt = Date.now();
+  }
+  return estadoContatos[key];
+}
+
+function inicializarEstado(contato, overrides = {}) {
+  const norm = normalizeContato(contato);
+  const estado = ensureEstado(norm);
+  if (overrides && typeof overrides === 'object') {
+    for (const k of Object.keys(overrides)) estado[k] = overrides[k];
+    estado.updatedAt = Date.now();
+  }
+  return estado;
+}
+
+function decidirOptLabel(texto) {
+  const t = safeStr(texto).toLowerCase();
+  const patterns = [
+    /\bpar(a|e)\b/,
+    /\bpare\b/,
+    /\bchega\b/,
+    /\bremover\b/,
+    /\bremova\b/,
+    /\bnao\s*quero\b/,
+    /\bsem\s*mensagem\b/,
+    /\bstop\b/,
+    /\bcancel(ar)?\b/,
+    /\bdesinscrever\b/,
+    /\bunsubscribe\b/,
+    /\bnao\s*me\s*chame\b/,
+    /\bnao\s*mand(a|e)\b/
+  ];
+  const isOptout = patterns.some(r => r.test(t));
+  return isOptout ? 'OPTOUT' : 'NAO_OPTOUT';
+}
+
 function normalizeManyChat(body) {
-  const payload = body && (body.payload || body); // alguns setups enviam direto em .payload
+  const payload = body && (body.payload || body);
   const user = payload && (payload.user || payload.contact || payload.subscriber);
   const msg = payload && payload.message;
 
-  // telefone em números (BR geralmente começa com 55)
   const rawPhone = safeStr(user && (user.phone || user.whatsapp || user.msisdn)).replace(/\D/g, '');
   const contato = rawPhone || 'desconhecido';
 
-  // texto (várias variações comuns do ManyChat)
   const texto =
     safeStr((msg && msg.text) ||
             (msg && msg.input && msg.input.text) ||
@@ -82,7 +78,6 @@ function normalizeManyChat(body) {
             payload.message_text ||
             '');
 
-  // mídia (attachment único ou array)
   const attachments = [];
   const att = msg && (msg.attachment || msg.attachments);
   if (att) {
@@ -126,49 +121,25 @@ function normalizeManyChat(body) {
   };
 }
 
-/**
- * Stub do Meta Graph (não utilizado agora, mas mantido no código)
- */
-function normalizeMetaGraph(body) {
-  // TODO: implementar quando ativarmos o conector
+function normalizeMetaGraph() {
   return null;
 }
 
-/**
- * Handler genérico para uma mensagem já normalizada.
- * - garante estado
- * - LOGA apenas a mensagem recebida (como pedido)
- */
 async function handleIncomingNormalizedMessage(normalized) {
   if (!normalized) return;
-
   const { contato, texto, temMidia, ts } = normalized;
-
-  // Ignora eventos sem texto e sem mídia
   const hasText = !!safeStr(texto);
   const hasMedia = !!temMidia;
   if (!hasText && !hasMedia) return;
-
   const estado = ensureEstado(contato);
-
-  // Log **apenas** da mensagem recebida do usuário, no formato solicitado
   const pvw = hasText ? `"${previewText(texto)}"` : '';
   const midiaFlag = hasMedia ? ' [MÍDIA]' : '';
-  log.info(`[${contato}] etapa=${estado.etapa} in=${pvw}${midiaFlag}`);
-
-  // Atualiza último ts visto (útil para futuras lógicas)
+  log.info(`[${estado.contato}] etapa=${estado.etapa} in=${pvw}${midiaFlag}`);
   estado.lastIncomingTs = ts;
 }
 
-/**
- * Handlers públicos
- * - init: permite trocar logger se quiser
- * - handleManyChatWebhook: recebe o body do webhook e processa
- * - processarMensagensPendentes: alias de compat (no-op por enquanto)
- */
 function init(options = {}) {
   if (options.logger) {
-    // Precisa suportar info/warn/error
     const { info, warn, error } = options.logger;
     if (typeof info === 'function' && typeof warn === 'function' && typeof error === 'function') {
       log = options.logger;
@@ -188,25 +159,21 @@ async function handleManyChatWebhook(body) {
   }
 }
 
-// Alias de compatibilidade: alguns trechos antigos podem chamar isso.
-// No v0 não há fila/envio, então apenas garante estado e retorna.
 async function processarMensagensPendentes(contato) {
   ensureEstado(contato);
   return { ok: true, noop: true };
 }
 
-/**
- * Exports
- */
 module.exports = {
   init,
   handleManyChatWebhook,
   handleIncomingNormalizedMessage,
-  processarMensagensPendentes, // compat no-op
-  // stubs/normalizadores expostos se precisar testar
+  processarMensagensPendentes,
+  inicializarEstado,
+  decidirOptLabel,
   _normalize: {
     manychat: normalizeManyChat,
     meta: normalizeMetaGraph,
   },
-  _utils: { ensureEstado, previewText },
+  _utils: { ensureEstado, previewText, normalizeContato },
 };

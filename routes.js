@@ -691,14 +691,6 @@ function setupRoutes(
     };
     const reqId = `mc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 
-    // headers
-    const ip = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').toString();
-    const method = req.method;
-    const path = req.originalUrl || req.url;
-    const ua = req.get('User-Agent') || req.get('user-agent') || '';
-    const ct = req.get('Content-Type') || req.get('content-type') || '';
-    log('info', `hit ${method} ${path}`, { ip, ua: trunc(ua, 80), contentType: ct });
-
     // 0) Segurança
     const settings = await getBotSettings().catch(() => ({}));
     const secretConfigured = process.env.MANYCHAT_WEBHOOK_SECRET || settings.manychat_webhook_secret || '';
