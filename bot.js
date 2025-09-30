@@ -1711,8 +1711,11 @@ async function processarMensagensPendentes(contato) {
                     estado.etapa = 'acesso';
                     estado.tentativasAcesso = 0;
                     estado.mensagensDesdeSolicitacao = [];
+                    estado.acessoMsgsDisparadas = false;
+                    estado.acessoMsg1Enviada = false;
+                    estado.acessoMsg2Enviada = false;
+                    estado.acessoMsg3Enviada = false;
                     await atualizarContato(contato, 'Sim', 'acesso', '[ACEITE após instruções]');
-                    return;
                 }
                 console.log(`[${contato}] Stand-by em 'instruções' (aguardando ACEITE).`);
                 return;
