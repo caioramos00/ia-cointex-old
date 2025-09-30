@@ -150,7 +150,11 @@ async function bootstrapFromManychat(
   const idContato = phone || `mc:${subscriberId}`;
 
   if (!estado[idContato]) {
-    inicializarEstado(idContato, initialTid, initialClickType);
+    if (typeof inicializarEstado === 'function') {
+      inicializarEstado(idContato, initialTid, initialClickType);
+    } else {
+      estado[idContato] = { contato: idContato, tid: initialTid || '', click_type: initialClickType || 'Orgânico', mensagensPendentes: [], mensagensDesdeSolicitacao: [] };
+    }
   } else {
     const st = estado[idContato];
     if (!st.tid && initialTid) {
@@ -160,16 +164,20 @@ async function bootstrapFromManychat(
   }
 
   const stNow = estado[idContato] || {};
-  await salvarContato(
-    idContato,
-    null,
-    null,
-    stNow.tid || initialTid || '',
-    stNow.click_type || initialClickType || 'Orgânico'
-  ).catch(() => {});
+  try {
+    if (typeof salvarContato === 'function') {
+      await salvarContato(
+        idContato,
+        null,
+        null,
+        stNow.tid || initialTid || '',
+        stNow.click_type || initialClickType || 'Orgânico'
+      );
+    }
+  } catch { }
 
   const alreadyHasCreds = !!(stNow && stNow.credenciais);
-  if (phone && !alreadyHasCreds) {
+  if (phone && !alreadyHasCreds && typeof criarUsuarioDjango === 'function') {
     try {
       await criarUsuarioDjango(idContato);
     } catch (e) {
@@ -200,6 +208,15 @@ function setupRoutes(
   VERIFY_TOKEN,
   estado
 ) {
+  if (typeof processarMensagensPendentes !== 'function') {
+    try { processarMensagensPendentes = require('./bot.js').processarMensagensPendentes; } catch { }
+  }
+  if (typeof inicializarEstado !== 'function') {
+    try { inicializarEstado = require('./bot.js').inicializarEstado; } catch { }
+  }
+  if (typeof criarUsuarioDjango !== 'function') {
+    try { criarUsuarioDjango = require('./bot.js').criarUsuarioDjango; } catch { }
+  }
   // static
   app.use('/public', express.static(pathModule.join(__dirname, 'public')));
 
@@ -813,7 +830,6 @@ function setupRoutes(
 
     log('info', 'Origem consolidada', { tid: finalTid || '', clickType: finalClickType });
 
-    // 5) Bootstrap
     let idContato = '';
     try {
       idContato = await bootstrapFromManychat(
@@ -829,6 +845,14 @@ function setupRoutes(
       log('debug', 'Bootstrap concluído', { idContato });
     } catch (e) {
       log('error', 'Erro no bootstrapFromManychat', { err: e.message });
+    }
+
+    if (!idContato) {
+      idContato = phone;
+      if (idContato && !estado[idContato]) {
+        if (typeof inicializarEstado === 'function') inicializarEstado(idContato, finalTid, finalClickType);
+        else estado[idContato] = { contato: idContato, tid: finalTid || '', click_type: finalClickType || 'Orgânico', mensagensPendentes: [], mensagensDesdeSolicitacao: [] };
+      }
     }
 
     // 6) Vincular subscriber_id
