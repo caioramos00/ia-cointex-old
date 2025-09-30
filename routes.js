@@ -365,7 +365,7 @@ function setupRoutes(
           if (contato === PHONE_NUMBER_ID) { res.sendStatus(200); return; }
           const isProviderMedia = msg.type !== 'text';
           const texto = msg.type === 'text' ? (msg.text.body || '').trim() : '';
-          console.log(`[${contato}] "${texto || '[mídia]'}"`);
+          console.log(`[${contato}] ${texto || '[mídia]'}`);
           try {
             const { rows: flags } = await pool.query(
               'SELECT do_not_contact, opt_out_count, permanently_blocked FROM contatos WHERE id = $1 LIMIT 1',
@@ -498,7 +498,7 @@ function setupRoutes(
       '';
     if (!phone) return res.status(200).json({ ok: true, ignored: 'no-phone' });
 
-    console.log(`[${phone}] "${textIn || '[mídia]'}"`);
+    console.log(`[${phone}] ${textIn || '[mídia]'}`);
 
     let detectedTid = '';
     let detectedClickType = 'Orgânico';
