@@ -1,22 +1,20 @@
 const axios = require('axios');
 const OpenAI = require('openai');
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const { getActiveTransport } = require('./lib/transport');
+const { atualizarContato, getBotSettings, pool, getContatoByPhone } = require('./db');
+const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, promptClassificaOptOut, promptClassificaReoptin } = require('./prompts.js');
+const estadoContatos = require('./state.js');
 
 const EXTRA_FIRST_REPLY_BASE_MS = 45000;
 const EXTRA_FIRST_REPLY_JITTER_MS = 10000;
 const GLOBAL_PER_MSG_BASE_MS = 3000;
 const GLOBAL_PER_MSG_JITTER_MS = 1500;
 
-const { getActiveTransport } = require('./lib/transport');
-const { getContatoByPhone } = require('./db');
-const { atualizarContato, getBotSettings, pool } = require('./db.js');
-const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, promptClassificaOptOut, promptClassificaReoptin } = require('./prompts.js');
-const estadoContatos = require('./state.js');
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
-const URL_RX = /https?:\/\/\S+/i;
 const OPTOUT_RX = /\b(pare|para(?!\w)|parar|não quero|nao quero|me remove|remova|me tira|me exclui|excluir|cancelar|unsubscribe|cancel|stop|parem|não mandar|nao mandar)\b/i;
 
 const MAX_OPTOUTS = 3;
@@ -32,29 +30,39 @@ function norm(str) {
         .toLowerCase().trim();
 }
 
-function saidEntered(s) {
-    const n = norm(s);
-    // gatilhos curtos e comuns
-    const hits = [
-        'entrei', 'ja entrei', 'entrei aqui', 'pronto', 'foi', 'consegui',
-        'logou', 'logei', 'logado', 'entrou', 'to dentro', 'tô dentro',
-        'ok entrei', 'ok loguei', 'ok to dentro', 'ok to dentro'
-    ];
-    if (hits.some(x => n.includes(x))) return true;
+// --- mídia & números: utilidades globais --- //
+const truthyFlag = v => v === true || v === 'true' || v === 1 || v === '1';
 
-    // perguntas/respostas que indicam sucesso/avanço
-    const re = /\b(entrei|loguei|consegui|pronto|foi|deu certo|acess(ei|ou)|to dentro|t[oó] dentro|ok|beleza|blz)\b/;
-    return re.test(n);
+function looksLikeMediaUrl(s) {
+    const n = String(s || '');
+    return /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(n)
+        || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
 }
 
-function extractValor(s) {
-    // captura algo como "5000", "5.000", "R$ 5.000,00", "2k", "2.5k"
-    const n = norm(s).replace(/\s/g, '');
-    // 1) k/KK (ex: 5k -> 5000)
+function isMediaMessage(m) {
+    if (!m) return false;
+    if (truthyFlag(m.temMidia) || truthyFlag(m.hasMedia)) return true;
+
+    // procura URLs de mídia em vários campos comuns
+    const possible = [m.texto, m.url, m.mediaUrl, m.media_url, m.preview, m.previewUrl]
+        .filter(Boolean)
+        .join(' ');
+    if (looksLikeMediaUrl(possible)) return true;
+
+    // alguns conectores mandam "type: image"
+    const t = String(m.type || '').toLowerCase();
+    return t === 'image' || t === 'photo' || t === 'video';
+}
+
+function extractValorFromText(s) {
+    const n = String(s || '')
+        .normalize('NFD').replace(/\p{Diacritic}/gu, '')
+        .toLowerCase().replace(/\s/g, '');
+    // “2k”, “2.5k”
     const k = n.match(/(\d+(?:[.,]\d+)?)k\b/);
     if (k) return Math.round(parseFloat(k[1].replace(',', '.')) * 1000);
 
-    // 2) R$ e formatos brasileiros
+    // “R$ 5.000,00”, “5000”, “5.000”
     const br = n.match(/(?:r?\$)?\s*([\d.]{1,3}(?:\.\d{3})*(?:,\d{2})|\d+(?:,\d{2})?)/i);
     if (br) {
         const raw = br[1].replace(/\./g, '').replace(',', '.');
@@ -62,15 +70,10 @@ function extractValor(s) {
         if (!Number.isNaN(val)) return Math.round(val);
     }
 
-    // 3) número puro
     const pu = n.match(/\b\d{1,7}\b/);
     if (pu) return parseInt(pu[0], 10);
 
     return null;
-}
-
-function pacoteTemMidia(pacote) {
-    return Array.isArray(pacote) && pacote.some(m => m?.hasMedia === true);
 }
 
 function tsEmMs(m) {
@@ -107,19 +110,6 @@ async function sendOnce(contato, estado, key, texto, opts = {}) {
     markSent(estado, key);
     estado.historico.push({ role: 'assistant', content: texto });
     return true;
-}
-
-async function enviarLinhaPorLinhaOnce(contato, estado, baseKey, texto) {
-    const linhas = String(texto || '').split('\n').filter(l => l !== '');
-    for (let i = 0; i < linhas.length; i++) {
-        const line = linhas[i];
-        const key = `${baseKey}#${i}#${line}`;
-        if (!wasSent(estado, key)) {
-            await enviarLinhaPorLinha(contato, line);
-            markSent(estado, key);
-            estado.historico.push({ role: 'assistant', content: line });
-        }
-    }
 }
 
 async function setDoNotContact(contato, value = true) {
@@ -258,11 +248,8 @@ async function retomarEnvio(contato) {
         return false;
     }
 
-    // mesmo delay das mensagens de opt-out (10–15s)
     await delay(rand(10000, 15000));
 
-    // 1ª retomada => msg curta; 2ª retomada => aviso "última chance"
-    // usa opt_out_count do DB para decidir
     try {
         const { rows } = await pool.query(
             'SELECT opt_out_count FROM contatos WHERE id = $1 LIMIT 1',
@@ -280,7 +267,6 @@ async function retomarEnvio(contato) {
         if (retomadaMsg) {
             await sendMessage(contato, retomadaMsg);
             try {
-                // registra no histórico com a etapa atual (ou "retomada" se não houver)
                 await atualizarContato(contato, 'Sim', st.etapa || 'retomada', retomadaMsg);
                 st.historico?.push?.({ role: 'assistant', content: retomadaMsg });
             } catch (e) {
@@ -291,11 +277,9 @@ async function retomarEnvio(contato) {
         console.error(`[${contato}] Falha ao buscar opt_out_count para retomada: ${e.message}`);
     }
 
-    // limpar flags e continuar a partir da próxima linha
     st.cancelarEnvio = false;
     st.paused = false;
 
-    // reutiliza o mesmo mecanismo, passando apenas as linhas restantes
     await enviarLinhaPorLinha(contato, remaining);
     if (!st.seqLines && st.seqKind === 'credenciais') {
         st.credenciaisEntregues = true;
@@ -305,7 +289,6 @@ async function retomarEnvio(contato) {
     return true;
 }
 
-// --- helpers --- //
 function toUpperSafe(x) { return String(x || "").trim().toUpperCase(); }
 
 function normalizeAllowedLabels(allowedLabels) {
@@ -328,7 +311,6 @@ function extractJsonLabel(outputText, allowed) {
     } catch { return null; }
 }
 
-// --- principal --- //
 async function gerarResposta(messages, allowedLabels) {
     const allow = normalizeAllowedLabels(allowedLabels || []);
     const DEFAULT_LABEL = allow.includes("CONTINUAR") ? "CONTINUAR" : (allow[0] || "UNKNOWN");
@@ -336,7 +318,6 @@ async function gerarResposta(messages, allowedLabels) {
     try {
         const promptStr = messages.map(m => m.content).join("\n");
 
-        // 1) Tentativa pedindo JSON via prompt (sem response_format / text.format)
         const promptJson = `${promptStr}
 
 Retorne estritamente JSON, exatamente neste formato:
@@ -406,10 +387,6 @@ async function decidirOptLabel(texto) {
 
     // 3) default
     return 'CONTINUAR';
-}
-
-function quebradizarTexto(resposta) {
-    return resposta.replace(/\b(você|vcê|cê|ce)\b/gi, 'vc');
 }
 
 function gerarSenhaAleatoria() {
@@ -2048,12 +2025,17 @@ async function processarMensagensPendentes(contato) {
                 ...mensagensPacote.map(m => (isMidia(m) ? '[mídia]' : (m.texto || '')))
             );
 
+            console.log(`[${contato}] confirmacao> pacote`, mensagensPacote.map(m => ({
+                temMidia: m?.temMidia, hasMedia: m?.hasMedia, type: m?.type,
+                texto: (m?.texto || '').slice(0, 120)
+            })));
+
             // --- Regra determinística: mídia OU valor numérico ---
             const temMidia = mensagensPacote.some(isMidia);
 
             const valorInformado =
                 mensagensPacote
-                    .map(m => extractValor(m.texto || ''))
+                    .map(m => extractValorFromText(m?.texto))
                     .find(v => Number.isFinite(v) && v > 0) ?? null;
 
             if (temMidia || valorInformado != null) {
@@ -2069,7 +2051,7 @@ async function processarMensagensPendentes(contato) {
                     'saque',
                     temMidia ? '[Confirmado por print]' : `[Confirmado por valor=${valorInformado}]`
                 );
-                console.log(`[${contato}] Confirmação OK (midia=${temMidia}, valor=${valorInformado}). Avançando para SAQUE.`);
+                console.log(`[${contato}] Confirmação OK -> SAQUE (midia=${temMidia}, valor=${valorInformado})`);
                 return;
             }
 
@@ -2189,7 +2171,7 @@ async function processarMensagensPendentes(contato) {
                     !/saca|senha/i.test(msg.texto || '')
             );
             const mensagensTextoSaque = mensagensDoLead.map(msg => msg.texto).join('\n');
-            const temMidiaReal = mensagensPacote.some(msg => msg.temMidia);
+            const temMidiaReal = mensagensPacote.some(isMediaMessage);
 
             const tipoRelevancia = await gerarResposta(
                 [{ role: 'system', content: promptClassificaRelevancia(mensagensTextoSaque, temMidiaReal) }],
@@ -2479,95 +2461,4 @@ async function processarMensagensPendentes(contato) {
     }
 }
 
-function gerarBlocoInstrucoes() {
-    const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
-    const pickNested = (arr, i) => (Array.isArray(arr?.[i]) ? pick(arr[i]) : '');
-
-    const checklistVariacoes = [
-        // (0) Pré-requisito (PIX ativo)
-        [
-            'você precisa ter uma conta com pix ativo pra receber o dinheiro',
-            'você tem que ter uma conta com pix ativo pra receber o dinheiro',
-            'você precisa de uma conta com pix ativo pra receber o dinheiro',
-        ],
-
-        // (1) Banco
-        [
-            'pode ser qualquer banco, físico ou digital, tanto faz',
-            'pode ser banco físico ou digital, tanto faz',
-            'pode ser qualquer tipo de banco, físico ou digital',
-        ],
-
-        // (2) Conexão (inalterado)
-        [
-            'se tiver como, desativa o wi-fi e ativa só os dados móveis',
-            'se der, desativa o wi-fi e ativa os dados móveis',
-            'se conseguir, desliga o wi-fi e liga os dados móveis',
-            'se puder, desliga o wi-fi e liga o 5g',
-        ],
-
-        // (3) Acesso (credenciais)
-        [
-            'vou te passar o email e a senha de uma conta pra você entrar',
-            'vou te passar o email e a senha de uma conta pra você acessar',
-            'vou te passar o email e a senha de uma conta pra vc entrar',
-        ],
-
-        // (4) Bloco final (sem "reforço")
-        [
-            // Saque
-            [
-                'vc vai sacar R$ 5000 dessa conta pra sua conta de recebimento',
-                'vc vai sacar R$ 5000 dessa conta pra sua conta de recebimento',
-                'vc vai sacar R$ 5000 do saldo disponível lá pra sua conta bancária',
-            ],
-            // Parte / repasse
-            [
-                'sua parte vai ser R$ 2000 nesse trampo, e vc vai mandar o restante pra gente assim que cair',
-                'sua parte nesse trampo é de R$ 2000, manda o restante pra minha conta assim que cair',
-                'vc fica com R$ 2000 desse trampo, o resto manda pra gente assim que cair',
-                'sua parte é R$ 2000, o restante manda pra minha conta logo que cair',
-            ],
-        ],
-    ];
-
-    const mensagensPosChecklist = [
-        ['mas fica tranquilo', 'mas relaxa', 'mas fica suave'],
-        ['a gente vai fazer parte por parte', 'a gente faz parte por parte', 'a gente faz na calma, parte por parte']
-    ];
-
-    const checklist = [
-        pick(checklistVariacoes?.[0]),
-        pick(checklistVariacoes?.[1]),
-        pick(checklistVariacoes?.[2]),
-        pick(checklistVariacoes?.[3]),
-        pickNested(checklistVariacoes?.[4], 0),
-        pickNested(checklistVariacoes?.[4], 1),
-    ].filter(line => typeof line === 'string' && line.trim() !== '');
-
-    console.log("[Debug] Checklist gerado:", checklist);
-
-    if (checklist.length < 5) {
-        console.error("[Error] Checklist incompleto, esperado >=5 itens, recebido:", checklist.length);
-        return "Erro ao gerar instruções, tente novamente.";
-    }
-
-    const posChecklist = [
-        Array.isArray(mensagensPosChecklist?.[0]) ? pick(mensagensPosChecklist[0]) : '',
-        Array.isArray(mensagensPosChecklist?.[1]) ? pick(mensagensPosChecklist[1]) : '',
-    ].filter(Boolean).join('\n');
-
-    const checklistTexto = checklist.map(line => `- ${line}`).join('\n');
-    const textoFinal = `
- presta atenção e segue cada passo:
-
-${checklistTexto}
-
-${posChecklist}
-  `.trim();
-
-    console.log("[Debug] Texto final gerado em gerarBlocoInstrucoes:", textoFinal);
-    return textoFinal;
-}
-
-module.exports = { delay, gerarResposta, quebradizarTexto, enviarLinhaPorLinha, inicializarEstado, criarUsuarioDjango, processarMensagensPendentes, sendMessage, gerarSenhaAleatoria, gerarBlocoInstrucoes, retomarEnvio, decidirOptLabel, cancelarConfirmacaoOptOut };
+module.exports = { delay, gerarResposta, enviarLinhaPorLinha, inicializarEstado, criarUsuarioDjango, processarMensagensPendentes, sendMessage, gerarSenhaAleatoria, retomarEnvio, decidirOptLabel, cancelarConfirmacaoOptOut };
