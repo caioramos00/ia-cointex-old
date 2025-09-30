@@ -1265,9 +1265,12 @@ async function processarMensagensPendentes(contato) {
                     estado.etapa = 'instruções';
                     estado.primeiraRespostaPendente = false;
                     estado.instrucoesEnviadas = false;
-                    estado.instrucoesCompletas = true;
+                    estado.instrucoesCompletas = false;
+                    estado.instrucoesConcluida = false;
+                    estado.instrMsg1Enviada = false;
+                    estado.instrMsg2Enviada = false;
+                    estado.instrMsg3Enviada = false;
                     await atualizarContato(contato, 'Sim', 'instruções', '[Avanço automático após ACEITE]');
-                    return;
                 } else {
                     console.log(`[${contato}] Stand-by em 'interesse' (aguardando ACEITE).`);
                     return;
