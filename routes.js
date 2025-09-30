@@ -153,7 +153,13 @@ async function bootstrapFromManychat(
     if (typeof inicializarEstado === 'function') {
       inicializarEstado(idContato, initialTid, initialClickType);
     } else {
-      estado[idContato] = { contato: idContato, tid: initialTid || '', click_type: initialClickType || 'Orgânico', mensagensPendentes: [], mensagensDesdeSolicitacao: [] };
+      estado[idContato] = {
+        contato: idContato,
+        tid: initialTid || '',
+        click_type: initialClickType || 'Orgânico',
+        mensagensPendentes: [],
+        mensagensDesdeSolicitacao: [],
+      };
     }
   } else {
     const st = estado[idContato];
@@ -164,20 +170,9 @@ async function bootstrapFromManychat(
   }
 
   const stNow = estado[idContato] || {};
-  try {
-    if (typeof salvarContato === 'function') {
-      await salvarContato(
-        idContato,
-        null,
-        null,
-        stNow.tid || initialTid || '',
-        stNow.click_type || initialClickType || 'Orgânico'
-      );
-    }
-  } catch { }
 
-  const alreadyHasCreds = !!(stNow && stNow.credenciais);
-  if (phone && !alreadyHasCreds && typeof criarUsuarioDjango === 'function') {
+  // ✅ criar usuário só na primeira mensagem (evita duplicidade)
+  if (phone && typeof criarUsuarioDjango === 'function') {
     try {
       await criarUsuarioDjango(idContato);
     } catch (e) {
@@ -185,18 +180,9 @@ async function bootstrapFromManychat(
     }
   }
 
+  // ❌ NADA de salvarContato aqui — deixa apenas o handler salvar UMA vez por mensagem
   return idContato;
 }
-
-const OPTOUT_TOKENS = new Set(['sair', 'parar', 'cancelar', 'remover', 'nao quero']);
-const OPTOUT_PHRASES = [
-  'nao quero receber',
-  'para de enviar',
-  'chega',
-  'para com isso',
-  'tira meu numero',
-  'nao quero mais',
-];
 
 function setupRoutes(
   app,

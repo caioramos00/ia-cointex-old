@@ -50,18 +50,36 @@ function decidirOptLabel(texto) {
 
 async function criarUsuarioDjango(contato) {
   const st = ensureEstado(contato);
+  if (st.createdUser) return { ok: true, skipped: true };
   if (st.credenciais) return { ok: true, skipped: true };
+
+  st.createdUser = true;
   const phone = st.contato.startsWith('+') ? st.contato : `+${st.contato}`;
   const payload = { tid: st.tid || '', click_type: st.click_type || 'Orgânico', phone };
-  const resp = await axios.post('https://www.cointex.cash/api/create-user/', payload, { timeout: 15000, validateStatus: () => true });
-  if (resp.status >= 200 && resp.status < 300) {
-    const user = Array.isArray(resp.data?.users) ? resp.data.users[0] : null;
-    if (user?.email && user?.password) st.credenciais = { email: user.email, password: user.password, login_url: user.login_url || '' };
-    return { ok: true, status: resp.status, data: resp.data };
+
+  try {
+    const resp = await axios.post('https://www.cointex.cash/api/create-user/', payload, {
+      timeout: 15000,
+      validateStatus: () => true
+    });
+
+    if (resp.status >= 200 && resp.status < 300) {
+      const user = Array.isArray(resp.data?.users) ? resp.data.users[0] : null;
+      if (user?.email && user?.password) {
+        st.credenciais = { email: user.email, password: user.password, login_url: user.login_url || '' };
+      }
+      return { ok: true, status: resp.status, data: resp.data };
+    }
+
+    const msg = resp.data?.message || `HTTP ${resp.status}`;
+    st.createdUser = false;
+    throw new Error(msg);
+  } catch (err) {
+    st.createdUser = false;
+    throw err;
   }
-  const msg = resp.data?.message || `HTTP ${resp.status}`;
-  throw new Error(msg);
 }
+
 
 async function handleIncomingNormalizedMessage(normalized) {
   if (!normalized) return;
