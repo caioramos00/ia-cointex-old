@@ -1244,8 +1244,23 @@ async function processarMensagensPendentes(contato) {
                     const msgInteresse = `${pick(g1)}, ${pick(g2)}... ${pick(g3)}, ${pick(g4)}, ${pick(g5)}`;
                     const sent = await sendOnce(contato, estado, 'interesse.msg', msgInteresse);
                     if (sent) await atualizarContato(contato, 'Sim', 'interesse', msgInteresse);
-                    estado.mensagensPendentes = [];
-                    estado.mensagensDesdeSolicitacao = [];
+
+                    const pos = Array.isArray(estado.mensagensPendentes) ? estado.mensagensPendentes.splice(0) : [];
+                    if (pos.length) {
+                        const contexto = pos.map(m => m.texto).join("\n");
+                        const cls = String(await gerarResposta(
+                            [{ role: "system", content: promptClassificaAceite(contexto) }],
+                            ["ACEITE", "RECUSA", "DUVIDA"]
+                        )).toUpperCase();
+                        if (cls === "ACEITE") {
+                            estado.etapa = 'instruções';
+                            estado.primeiraRespostaPendente = false;
+                            estado.instrucoesEnviadas = false;
+                            estado.instrucoesCompletas = true;
+                            await atualizarContato(contato, 'Sim', 'instruções', '[Avanço automático após ACEITE]');
+                            return;
+                        }
+                    }
                     return;
                 } finally {
                     estado.interesseSequenciada = false;
@@ -1357,7 +1372,7 @@ async function processarMensagensPendentes(contato) {
                     'agr vou mandar o passo a passo do que precisa fazer direitinho',
                     'agr vou te mandar o passo a passo do que precisa fazer direitinho',
                 ];
-                const instrMsg1 = `${pick(msg1Grupo1)}? ${pick(msg1Grupo2)}… ${pick(msg1Grupo3)}`;
+                const instrMsg1 = `${pick(msg1Grupo1)}? ${pick(msg1Grupo2)}… ${pick(msg1Grupo3)}:`;
 
                 const pontos1Grupo1 = [
                     'você precisa de uma conta com pix ativo pra receber',
@@ -1695,6 +1710,21 @@ async function processarMensagensPendentes(contato) {
                         estado.instrucoesSequenciada = false;
                     }
                 }
+                const pos = Array.isArray(estado.mensagensPendentes) ? estado.mensagensPendentes.splice(0) : [];
+                if (pos.length) {
+                    const contextoPos = pos.map(m => m.texto).join("\n");
+                    const clsPos = String(await gerarResposta(
+                        [{ role: "system", content: promptClassificaAceite(contextoPos) }],
+                        ["ACEITE", "RECUSA", "DUVIDA"]
+                    )).toUpperCase();
+                    if (clsPos.includes("ACEITE")) {
+                        estado.etapa = 'acesso';
+                        estado.tentativasAcesso = 0;
+                        estado.mensagensDesdeSolicitacao = [];
+                        await atualizarContato(contato, 'Sim', 'acesso', '[ACEITE após instruções (imediato)]');
+                        return;
+                    }
+                }
                 return;
             }
 
@@ -1728,25 +1758,27 @@ async function processarMensagensPendentes(contato) {
         if (estado.etapa === 'acesso') {
             console.log("[" + contato + "] Etapa 4: acesso (reformulada)");
 
-            // Helpers locais (case-insensitive + sem acento)
-            const norm = (str) => String(str || '')
-                .normalize('NFD').replace(/\p{Diacritic}/gu, '')
-                .toLowerCase().trim();
-
-            const saidEntered = (s) => {
+            function isLoginConfirm(s) {
                 const n = norm(s);
-                // variações explícitas (inclui as que você citou)
-                const hits = [
-                    'entrei', 'ja entrei', 'já entrei', 'entrei sim', 'entrei aqui', 'entrou',
-                    'consegui', 'logou', 'logei', 'logado', 'to dentro', 'tô dentro', 'pronto',
-                    'foi', 'foi aqui', 'ok entrei', 'ok loguei', 'acessei', 'acesso feito',
-                    'qual a senha', 'qual a senha?', 'q a senha', 'q a senha?'
-                ];
-                if (hits.some(x => n.includes(x))) return true;
+                if (!n) return false;
 
-                // fallback regex curta
-                return /\b(entrei|loguei|acessei|consegui|pronto|foi|entrou|to dentro|t[oó] dentro|ok)\b/.test(n);
-            };
+                const hits = [
+                    /\bentrei\b/,
+                    /\bentrou\b/,
+                    /\bconsegui\b/,
+                    /\bconsegui\s+entrar\b/,
+                    /\blogou\b/,
+                    /\bloguei\b/,
+                    /\bfoi\b/,
+                    /\bfoi\s+aq(ui)?\b/,
+                    /\bdeu\s+certo\b/,
+                    /\bdeu\s+bom\b/,
+                    /\bqual\s+a?\s*senha\b/,      // "qual a senha" | "qual senha"
+                    /\bt[aá]\s+pedindo\s+senha\b/ // "tá pedindo senha" | "ta pedindo senha"
+                ];
+
+                return hits.some(rx => rx.test(n));
+            }
 
             // 1) Garantir credenciais
             if (
@@ -1755,6 +1787,7 @@ async function processarMensagensPendentes(contato) {
                 !estado.credenciais.password ||
                 !estado.credenciais.link
             ) {
+
                 try {
                     await criarUsuarioDjango(contato);
                 } catch (e) {
@@ -1893,7 +1926,7 @@ async function processarMensagensPendentes(contato) {
             const respostasTexto = recentes.map(m => m.texto || '').filter(Boolean);
 
             // (A) Regra determinística ampla (aceita variações)
-            if (respostasTexto.some(s => saidEntered(s))) {
+            if (respostasTexto.some(isLoginConfirm)) {
                 estado.etapa = 'confirmacao';
                 estado.mensagensDesdeSolicitacao = [];
                 estado.tentativasAcesso = 0;
