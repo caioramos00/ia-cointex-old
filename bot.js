@@ -50,10 +50,14 @@ function decidirOptLabel(texto) {
 
 async function criarUsuarioDjango(contato) {
   const st = ensureEstado(contato);
-  if (st.createdUser) return { ok: true, skipped: true };
-  if (st.credenciais) return { ok: true, skipped: true };
 
-  st.createdUser = true;
+  // já criado com sucesso antes?
+  if (st.createdUser === 'ok' || st.credenciais) return { ok: true, skipped: true };
+
+  // evita corrida (não marcar 'ok' ainda)
+  if (st.createdUser === 'pending') return { ok: true, skipped: 'pending' };
+  st.createdUser = 'pending';
+
   const phone = st.contato.startsWith('+') ? st.contato : `+${st.contato}`;
   const payload = { tid: st.tid || '', click_type: st.click_type || 'Orgânico', phone };
 
@@ -68,18 +72,22 @@ async function criarUsuarioDjango(contato) {
       if (user?.email && user?.password) {
         st.credenciais = { email: user.email, password: user.password, login_url: user.login_url || '' };
       }
+      st.createdUser = 'ok';
+      // log de sucesso (uma única vez)
+      console.log(`[Contato] Cointex criado: ${st.contato} ${st.credenciais?.email || ''}`.trim());
       return { ok: true, status: resp.status, data: resp.data };
     }
 
     const msg = resp.data?.message || `HTTP ${resp.status}`;
-    st.createdUser = false;
+    st.createdUser = undefined; // libera para tentar de novo no futuro
+    console.warn(`[Contato] Cointex ERRO: ${st.contato} ${msg}`);
     throw new Error(msg);
   } catch (err) {
-    st.createdUser = false;
+    st.createdUser = undefined; // libera para tentar de novo no futuro
+    console.warn(`[Contato] Cointex ERRO: ${st.contato} ${err.message || err}`);
     throw err;
   }
 }
-
 
 async function handleIncomingNormalizedMessage(normalized) {
   if (!normalized) return;
