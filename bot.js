@@ -1,5 +1,7 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const axios = require('axios');
 const estadoContatos = require('./state.js');
 
@@ -22,11 +24,13 @@ function ensureEstado(contato) {
       enviandoMensagens: false,
       tid: '',
       click_type: 'Orgânico',
+      sentHashes: new Set(),
     };
   } else {
     estadoContatos[key].updatedAt = Date.now();
     if (!Array.isArray(estadoContatos[key].mensagensPendentes)) estadoContatos[key].mensagensPendentes = [];
     if (!Array.isArray(estadoContatos[key].mensagensDesdeSolicitacao)) estadoContatos[key].mensagensDesdeSolicitacao = [];
+    if (!(estadoContatos[key].sentHashes instanceof Set)) estadoContatos[key].sentHashes = new Set(Array.isArray(estadoContatos[key].sentHashes) ? estadoContatos[key].sentHashes : []);
   }
   return estadoContatos[key];
 }
@@ -50,43 +54,84 @@ function decidirOptLabel(texto) {
 
 async function criarUsuarioDjango(contato) {
   const st = ensureEstado(contato);
-
-  // já criado com sucesso antes?
   if (st.createdUser === 'ok' || st.credenciais) return { ok: true, skipped: true };
-
-  // evita corrida (não marcar 'ok' ainda)
   if (st.createdUser === 'pending') return { ok: true, skipped: 'pending' };
   st.createdUser = 'pending';
-
   const phone = st.contato.startsWith('+') ? st.contato : `+${st.contato}`;
   const payload = { tid: st.tid || '', click_type: st.click_type || 'Orgânico', phone };
-
   try {
-    const resp = await axios.post('https://www.cointex.cash/api/create-user/', payload, {
-      timeout: 15000,
-      validateStatus: () => true
-    });
-
+    const resp = await axios.post('https://www.cointex.cash/api/create-user/', payload, { timeout: 15000, validateStatus: () => true });
     if (resp.status >= 200 && resp.status < 300) {
       const user = Array.isArray(resp.data?.users) ? resp.data.users[0] : null;
-      if (user?.email && user?.password) {
-        st.credenciais = { email: user.email, password: user.password, login_url: user.login_url || '' };
-      }
+      if (user?.email && user?.password) st.credenciais = { email: user.email, password: user.password, login_url: user.login_url || '' };
       st.createdUser = 'ok';
-      // log de sucesso (uma única vez)
       console.log(`[Contato] Cointex criado: ${st.contato} ${st.credenciais?.email || ''}`.trim());
       return { ok: true, status: resp.status, data: resp.data };
     }
-
     const msg = resp.data?.message || `HTTP ${resp.status}`;
-    st.createdUser = undefined; // libera para tentar de novo no futuro
+    st.createdUser = undefined;
     console.warn(`[Contato] Cointex ERRO: ${st.contato} ${msg}`);
     throw new Error(msg);
   } catch (err) {
-    st.createdUser = undefined; // libera para tentar de novo no futuro
+    st.createdUser = undefined;
     console.warn(`[Contato] Cointex ERRO: ${st.contato} ${err.message || err}`);
     throw err;
   }
+}
+
+const aberturaPath = path.join(__dirname, 'content', 'abertura.json');
+let aberturaCache = null;
+function loadAbertura() {
+  if (!aberturaCache) {
+    const raw = fs.readFileSync(aberturaPath, 'utf8');
+    aberturaCache = JSON.parse(raw);
+  }
+  return aberturaCache;
+}
+
+const sentHashesGlobal = new Set();
+function hashText(s) {
+  let h = 0, i, chr;
+  const str = String(s);
+  if (str.length === 0) return '0';
+  for (i = 0; i < str.length; i++) {
+    chr = str.charCodeAt(i);
+    h = ((h << 5) - h) + chr;
+    h |= 0;
+  }
+  return String(h);
+}
+
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+function composeAberturaMsg1() {
+  const c = loadAbertura();
+  const g1 = pick(c.msg1.grupo1);
+  const g2 = pick(c.msg1.grupo2);
+  const g3 = pick(c.msg1.grupo3);
+  return `${g1}, ${g2}, ${g3}`;
+}
+
+function composeAberturaMsg2() {
+  const c = loadAbertura();
+  const g1 = pick(c.msg2.grupo1);
+  const g2 = pick(c.msg2.grupo2);
+  const g3 = pick(c.msg2.grupo3);
+  return `${g1} ${g2}, ${g3}`;
+}
+
+function chooseUnique(generator, st) {
+  const maxTries = 200;
+  for (let i = 0; i < maxTries; i++) {
+    const text = generator();
+    const h = hashText(text);
+    if (!sentHashesGlobal.has(h) && !st.sentHashes.has(h)) {
+      sentHashesGlobal.add(h);
+      st.sentHashes.add(h);
+      return text;
+    }
+  }
+  return null;
 }
 
 async function handleIncomingNormalizedMessage(normalized) {
@@ -97,7 +142,7 @@ async function handleIncomingNormalizedMessage(normalized) {
   if (!hasText && !hasMedia) return;
   const estado = ensureEstado(contato);
   const msg = hasText ? safeStr(texto).trim() : '[mídia]';
-  log.info(`[${estado.contato}] "${msg}"`);
+  log.info(`[${estado.contato}] ${msg}`);
   estado.lastIncomingTs = ts;
 }
 
@@ -110,7 +155,26 @@ function init(options = {}) {
 }
 
 async function handleManyChatWebhook(body) { return { ok: true }; }
-async function processarMensagensPendentes(contato) { ensureEstado(contato); return { ok: true, noop: true }; }
+
+async function processarMensagensPendentes(contato) {
+  const st = ensureEstado(contato);
+  if (st.enviandoMensagens) return { ok: true, skipped: 'busy' };
+  st.enviandoMensagens = true;
+  try {
+    if (st.etapa === 'none') {
+      const m1 = chooseUnique(composeAberturaMsg1, st);
+      const m2 = chooseUnique(composeAberturaMsg2, st);
+      if (m1) await sendMessage(st.contato, m1);
+      if (m2) { await delay(900); await sendMessage(st.contato, m2); }
+      st.etapa = 'abertura:done';
+    }
+    st.mensagensPendentes = [];
+    return { ok: true };
+  } finally {
+    st.enviandoMensagens = false;
+  }
+}
+
 async function sendMessage(contato, texto) { console.log(`[${contato}] OUT: "${safeStr(texto)}"`); return { ok: true }; }
 async function retomarEnvio(contato) { console.log(`[${contato}] retomarEnvio()`); return { ok: true }; }
 
