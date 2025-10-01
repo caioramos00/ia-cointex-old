@@ -271,46 +271,66 @@ async function processarMensagensPendentes(contato) {
             } else {
                 try {
                     const allowed = ['aceite', 'recusa', 'duvida'];
+
                     const r = await axios.post(
                         'https://api.openai.com/v1/responses',
                         {
                             model: 'gpt-5',
-                            input: prompt + '\nResponda estritamente como JSON no formato {"label":"<uma das opções>"}',
+                            input: prompt,
                             max_output_tokens: 32,
-                            response_format: {
-                                type: 'json_schema',
-                                json_schema: {
-                                    name: 'Label',
-                                    schema: {
-                                        type: 'object',
-                                        properties: {
-                                            label: { type: 'string', enum: allowed }
-                                        },
-                                        required: ['label'],
-                                        additionalProperties: false
+                            // <- AQUI é o jeito novo: nada de response_format na raiz
+                            text: {
+                                format: {
+                                    type: 'json_schema',
+                                    json_schema: {
+                                        name: 'Label',
+                                        schema: {
+                                            type: 'object',
+                                            properties: {
+                                                label: { type: 'string', enum: allowed }
+                                            },
+                                            required: ['label'],
+                                            additionalProperties: false
+                                        }
                                     }
                                 }
                             }
                         },
                         {
-                            headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                            headers: {
+                                Authorization: `Bearer ${apiKey}`,
+                                'Content-Type': 'application/json'
+                            },
                             timeout: 15000,
                             validateStatus: () => true
                         }
                     );
 
-                    console.log(`[${st.contato}] [LLM][interesse] http=${r.status} body=${truncate(JSON.stringify(r.data), 800)}`);
+                    // Log amigável
+                    const rawText = extractTextForLog(r.data);
+                    console.log(`[${st.contato}] [LLM][${st.etapa.split(':')[0]}] http=${r.status} body=${truncate(rawText, 800)}`);
 
                     if (r.status >= 200 && r.status < 300) {
-                        const picked = pickLabelFromResponseData(r.data, allowed);
-                        console.log(`[${st.contato}] [LLM][interesse] picked=${picked || '(null)'} allowed=${allowed.join(',')}`);
+                        // 1) Tenta ler JSON estruturado do output_text
+                        let picked = null;
+                        try {
+                            const parsed = JSON.parse(rawText);
+                            if (parsed && typeof parsed.label === 'string') {
+                                picked = parsed.label.toLowerCase();
+                            }
+                        } catch (_) { /* ignora JSON inválido */ }
+
+                        // 2) Se não vier JSON legível, cai no parser “solto”
+                        if (!picked) picked = pickLabelFromResponseData(r.data, allowed);
+
+                        console.log(`[${st.contato}] [LLM][${st.etapa.split(':')[0]}] picked=${picked || '(null)'} allowed=${allowed.join(',')}`);
                         if (picked) classe = picked;
-                        else console.warn(`[${st.contato}] [LLM][interesse] nenhum label reconhecido — fallback=duvida`);
+                        else console.warn(`[${st.contato}] [LLM][${st.etapa.split(':')[0]}] nenhum label reconhecido — fallback=duvida`);
                     } else {
-                        console.warn(`[${st.contato}] [LLM][interesse] status != 2xx — fallback=duvida`);
+                        console.warn(`[${st.contato}] [LLM][${st.etapa.split(':')[0]}] status != 2xx — fallback=duvida`);
                     }
                 } catch (e) {
-                    console.warn(`[${st.contato}] [LLM][interesse] erro="${e.message || e}" — fallback=duvida`);
+                    console.warn(`[${st.contato}] [LLM][${st.etapa.split(':')[0]}] erro="${e.message || e}" — fallback=duvida`);
                 }
             }
 
@@ -419,46 +439,66 @@ async function processarMensagensPendentes(contato) {
             } else {
                 try {
                     const allowed = ['aceite', 'recusa', 'duvida'];
+
                     const r = await axios.post(
                         'https://api.openai.com/v1/responses',
                         {
                             model: 'gpt-5',
-                            input: prompt + '\nResponda estritamente como JSON no formato {"label":"<uma das opções>"}',
+                            input: prompt,
                             max_output_tokens: 32,
-                            response_format: {
-                                type: 'json_schema',
-                                json_schema: {
-                                    name: 'Label',
-                                    schema: {
-                                        type: 'object',
-                                        properties: {
-                                            label: { type: 'string', enum: allowed }
-                                        },
-                                        required: ['label'],
-                                        additionalProperties: false
+                            // <- AQUI é o jeito novo: nada de response_format na raiz
+                            text: {
+                                format: {
+                                    type: 'json_schema',
+                                    json_schema: {
+                                        name: 'Label',
+                                        schema: {
+                                            type: 'object',
+                                            properties: {
+                                                label: { type: 'string', enum: allowed }
+                                            },
+                                            required: ['label'],
+                                            additionalProperties: false
+                                        }
                                     }
                                 }
                             }
                         },
                         {
-                            headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                            headers: {
+                                Authorization: `Bearer ${apiKey}`,
+                                'Content-Type': 'application/json'
+                            },
                             timeout: 15000,
                             validateStatus: () => true
                         }
                     );
 
-                    console.log(`[${st.contato}] [LLM][instrucoes] http=${r.status} body=${truncate(JSON.stringify(r.data), 800)}`);
+                    // Log amigável
+                    const rawText = extractTextForLog(r.data);
+                    console.log(`[${st.contato}] [LLM][${st.etapa.split(':')[0]}] http=${r.status} body=${truncate(rawText, 800)}`);
 
                     if (r.status >= 200 && r.status < 300) {
-                        const picked = pickLabelFromResponseData(r.data, allowed);
-                        console.log(`[${st.contato}] [LLM][instrucoes] picked=${picked || '(null)'} allowed=${allowed.join(',')}`);
+                        // 1) Tenta ler JSON estruturado do output_text
+                        let picked = null;
+                        try {
+                            const parsed = JSON.parse(rawText);
+                            if (parsed && typeof parsed.label === 'string') {
+                                picked = parsed.label.toLowerCase();
+                            }
+                        } catch (_) { /* ignora JSON inválido */ }
+
+                        // 2) Se não vier JSON legível, cai no parser “solto”
+                        if (!picked) picked = pickLabelFromResponseData(r.data, allowed);
+
+                        console.log(`[${st.contato}] [LLM][${st.etapa.split(':')[0]}] picked=${picked || '(null)'} allowed=${allowed.join(',')}`);
                         if (picked) classe = picked;
-                        else console.warn(`[${st.contato}] [LLM][instrucoes] nenhum label reconhecido — fallback=duvida`);
+                        else console.warn(`[${st.contato}] [LLM][${st.etapa.split(':')[0]}] nenhum label reconhecido — fallback=duvida`);
                     } else {
-                        console.warn(`[${st.contato}] [LLM][instrucoes] status != 2xx — fallback=duvida`);
+                        console.warn(`[${st.contato}] [LLM][${st.etapa.split(':')[0]}] status != 2xx — fallback=duvida`);
                     }
                 } catch (e) {
-                    console.warn(`[${st.contato}] [LLM][instrucoes] erro="${e.message || e}" — fallback=duvida`);
+                    console.warn(`[${st.contato}] [LLM][${st.etapa.split(':')[0]}] erro="${e.message || e}" — fallback=duvida`);
                 }
             }
 
