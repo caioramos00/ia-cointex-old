@@ -1937,7 +1937,7 @@ async function processarMensagensPendentes(contato) {
             }
         }
 
-if (estado.etapa === 'confirmacao') {
+        if (estado.etapa === 'confirmacao') {
             console.log("[" + contato + "] Etapa 5: confirmação");
 
             // ========= Helpers de MÍDIA & VALOR (compatível com novo routes.js) =========

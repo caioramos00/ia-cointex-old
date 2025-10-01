@@ -353,6 +353,7 @@ async function processarMensagensPendentes(contato) {
         if (st.etapa === 'instrucoes:send') {
             const instrucoesPath = path.join(__dirname, 'content', 'instrucoes.json');
             let instrucoesData = null;
+
             const loadInstrucoes = () => {
                 if (instrucoesData) return instrucoesData;
                 try {
@@ -379,8 +380,12 @@ async function processarMensagensPendentes(contato) {
                 }
                 return instrucoesData;
             };
-            const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
 
+            const pick = (arr) => Array.isArray(arr) && arr.length
+                ? arr[Math.floor(Math.random() * arr.length)]
+                : '';
+
+            // Cabeçalho (linha 1)
             const composeMsg1 = () => {
                 const c = loadInstrucoes();
                 const g1 = pick(c.msg1.grupo1);
@@ -388,14 +393,19 @@ async function processarMensagensPendentes(contato) {
                 const g3 = pick(c.msg1.grupo3);
                 return `${g1}? ${g2}… ${g3}:`;
             };
-            const composeMsg2 = () => {
+
+            // Bullets (uma linha por ponto — quebras de linha entre eles)
+            const composeBullets = () => {
                 const c = loadInstrucoes();
                 const p1 = `• ${pick(c.pontos1.grupo1)}, ${pick(c.pontos1.grupo2)}, ${pick(c.pontos1.grupo3)}`;
                 const p2 = `• ${pick(c.pontos2.grupo1)}, ${pick(c.pontos2.grupo2)}, ${pick(c.pontos2.grupo3)}`;
                 const p3 = `• ${pick(c.pontos3.grupo1)}, ${pick(c.pontos3.grupo2)}, ${pick(c.pontos3.grupo3)}`;
                 const p4 = `• ${pick(c.pontos4.grupo1)}, ${pick(c.pontos4.grupo2)}, ${pick(c.pontos4.grupo3)}`;
-                return `${p1}\n\n${p2}\n\n${p3}\n\n${p4}`;
+                // Uma única mensagem com quebras de linha entre os pontos (sem enviar várias mensagens)
+                return [p1, p2, p3, p4].join('\n');
             };
+
+            // Fechamento (última linha)
             const composeMsg3 = () => {
                 const c = loadInstrucoes();
                 const g1 = pick(c.msg3.grupo1);
@@ -403,15 +413,16 @@ async function processarMensagensPendentes(contato) {
                 return `${g1}… ${g2}?`;
             };
 
+            // Monta tudo em UMA MENSAGEM (com quebras de linha internas)
             const m1 = composeMsg1();
-            const m2 = composeMsg2();
+            const bullets = composeBullets();
             const m3 = composeMsg3();
 
-            if (m1) await sendMessage(st.contato, m1);
-            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-            if (m2) { const d = Math.floor(20000 + Math.random() * 10000); await delay(d); await sendMessage(st.contato, m2); }
-            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-            if (m3) await sendMessage(st.contato, m3);
+            const unicaMensagem = [m1, bullets, m3].join('\n\n');
+
+            if (unicaMensagem) {
+                await sendMessage(st.contato, unicaMensagem);
+            }
 
             st.mensagensPendentes = [];
             st.mensagensDesdeSolicitacao = [];
