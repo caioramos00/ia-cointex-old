@@ -301,8 +301,12 @@ async function processarMensagensPendentes(contato) {
                     if (rawText) {
                         try {
                             const parsed = JSON.parse(rawText);
-                            if (parsed && typeof parsed.label === 'string') picked = parsed.label.toLowerCase();
-                        } catch { }
+                            if (parsed && typeof parsed.label === 'string') picked = parsed.label.toLowerCase().trim();
+                        } catch {
+                            // Fallback regex if parse fails
+                            const m = rawText.match(/"label"\s*:\s*"([^"]+)"/i);
+                            if (m && m[1]) picked = m[1].toLowerCase().trim();
+                        }
                     }
                     if (!picked) picked = pickLabelFromResponseData(data, allowed);
 
@@ -471,8 +475,12 @@ async function processarMensagensPendentes(contato) {
                     if (rawText) {
                         try {
                             const parsed = JSON.parse(rawText);
-                            if (parsed && typeof parsed.label === 'string') picked = parsed.label.toLowerCase();
-                        } catch { }
+                            if (parsed && typeof parsed.label === 'string') picked = parsed.label.toLowerCase().trim();
+                        } catch {
+                            // Fallback regex if parse fails
+                            const m = rawText.match(/"label"\s*:\s*"([^"]+)"/i);
+                            if (m && m[1]) picked = m[1].toLowerCase().trim();
+                        }
                     }
                     if (!picked) picked = pickLabelFromResponseData(data, allowed);
 
