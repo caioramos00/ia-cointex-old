@@ -399,6 +399,7 @@ async function processarMensagensPendentes(contato) {
                 const g2 = pick(c.msg3.grupo2);
                 return `${g1}… ${g2}?`;
             };
+
             const m1 = composeMsg1();
             const m2 = composeMsg2();
             const m3 = composeMsg3();
@@ -406,18 +407,6 @@ async function processarMensagensPendentes(contato) {
 
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
             if (blocoUnico) await sendMessage(st.contato, blocoUnico);
-
-            if (m1) await sendMessage(st.contato, m1);
-            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-
-            if (m2) {
-                const extra = Math.floor(10000 + Math.random() * 10000);
-                await delay(extra);
-                await sendMessage(st.contato, m2);
-            }
-            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-
-            if (m3) await sendMessage(st.contato, m3);
 
             st.mensagensPendentes = [];
             st.mensagensDesdeSolicitacao = [];
@@ -429,6 +418,7 @@ async function processarMensagensPendentes(contato) {
             console.log(`[${st.contato}] etapa->${st.etapa}`);
             return { ok: true };
         }
+
     } finally {
         st.enviandoMensagens = false;
     }
