@@ -77,8 +77,7 @@ function ensureEstado(contato) {
             sentHashes: new Set(),
             classificacaoAceite: null,
             classesSinceSolicitacao: [],
-            // Removido: heurClassesSinceSolicitacao (não usamos mais heurística)
-            lastClassifiedIdx: { interesse: 0, acesso: 0, confirmacao: 0, saque: 0 }, // ponteiros por etapa
+            lastClassifiedIdx: { interesse: 0, acesso: 0, confirmacao: 0, saque: 0 },
         };
     } else {
         const st = estadoContatos[key];
@@ -87,7 +86,6 @@ function ensureEstado(contato) {
         if (!Array.isArray(st.mensagensDesdeSolicitacao)) st.mensagensDesdeSolicitacao = [];
         if (!(st.sentHashes instanceof Set)) st.sentHashes = new Set(Array.isArray(st.sentHashes) ? st.sentHashes : []);
         if (!st.lastClassifiedIdx) st.lastClassifiedIdx = { interesse: 0, acesso: 0, confirmacao: 0, saque: 0 };
-        // garantir todas as chaves do ponteiro
         for (const k of ['interesse', 'acesso', 'confirmacao', 'saque']) {
             if (typeof st.lastClassifiedIdx[k] !== 'number' || st.lastClassifiedIdx[k] < 0) st.lastClassifiedIdx[k] = 0;
         }
@@ -237,7 +235,7 @@ async function processarMensagensPendentes(contato) {
 
             st.mensagensPendentes = [];
             st.mensagensDesdeSolicitacao = [];
-            st.lastClassifiedIdx.interesse = 0; // novo ciclo de classificação para a etapa
+            st.lastClassifiedIdx.interesse = 0;
             st.etapa = 'interesse:wait';
             console.log(`[${st.contato}] etapa->${st.etapa}`);
             return { ok: true };
@@ -246,11 +244,9 @@ async function processarMensagensPendentes(contato) {
         if (st.etapa === 'interesse:wait') {
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
 
-            // === NOVO: classificar apenas o "lote novo" desde o último índice classificado ===
             const total = st.mensagensDesdeSolicitacao.length;
             const startIdx = Math.max(0, st.lastClassifiedIdx?.interesse || 0);
             if (startIdx >= total) {
-                // nada novo para classificar
                 st.mensagensPendentes = [];
                 return { ok: true, noop: 'no-new-messages' };
             }
@@ -398,33 +394,9 @@ async function processarMensagensPendentes(contato) {
                 const p3 = `${pick(c.pontos.p3.g1)}, ${pick(c.pontos.p3.g2)}, ${pick(c.pontos.p3.g3)}`;
                 const p4 = `${pick(c.pontos.p4.g1)}, ${pick(c.pontos.p4.g2)}, ${pick(c.pontos.p4.g3)}`;
 
-                // Monta em linhas
-                let out = [
-                    p1,
-                    '',
-                    p2,
-                    '',
-                    p3,
-                    '',
-                    p4
-                ].map(v => safeStr(v)).join('\n');
+                let out = [p1, '', p2, '', p3, '', p4].join('\n');
 
-                // Normaliza CRLF → LF
-                out = out.replace(/\r\n/g, '\n').trim();
-
-                // >>> TRUQUE CRÍTICO: substituir quebras '\n' por separadores Unicode que o WhatsApp
-                // renderiza como nova linha, mas o conector não detecta como "quebra para fatiar".
-                //
-                // • U+2028 LINE SEPARATOR → quebra de linha “visual”
-                // • Para linhas em branco, usamos U+2028 + U+200B (zero-width space) para preservar o espaçamento
-                //
-                // 1) linhas em branco: \n\n  ->  \u2028\u200B\u2028
-                out = out.replace(/\n\n/g, '\u2028\u200B\u2028');
-                // 2) demais quebras: \n -> \u2028
-                out = out.replace(/\n/g, '\u2028');
-
-                // Opcional: prefixo invisível só para reforçar que é 1 mensagem (não afeta visual)
-                out = '\u2063' + out; // Invisible Separator
+                out = out.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 
                 return out;
             };
@@ -444,7 +416,7 @@ async function processarMensagensPendentes(contato) {
             if (m1) await sendMessage(st.contato, m1);
 
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-            if (m2) await sendMessage(st.contato, m2); // sai em UMA mensagem só, multilinha
+            if (m2) await sendMessage(st.contato, m2);
 
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
             if (m3) await sendMessage(st.contato, m3);
@@ -486,27 +458,13 @@ async function sendMessage(contato, texto) {
                 return { ok: false, reason: 'no-subscriber-id' };
             }
 
-            // >>> FORÇA 1 ÚNICA MENSAGEM, PRESERVANDO QUEBRAS <<<
-            let finalText = msg;
-
-            // normaliza CRLF e excesso de linhas vazias
-            if (finalText.indexOf('\n') !== -1) {
-                finalText = finalText.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
-                // se já vier com crases, escapa para não quebrar o bloco
-                const hasBackticks = finalText.includes('```') || finalText.includes('`');
-                if (hasBackticks) {
-                    finalText = finalText.replace(/```/g, 'ʼʼʼ').replace(/`/g, 'ʼ'); // apóstrofo modificado
-                }
-                // empacota em bloco de código para impedir split por \n
-                finalText = '```' + finalText + '```';
-                // limite conservador para evitar auto-chunking
-                if (finalText.length > 3500) {
-                    // compacta mantendo legibilidade
-                    finalText = '```' + finalText.slice(3, 3497).trimEnd() + '…```';
-                }
-            }
+            let finalText = String(msg ?? '')
+                .replace(/\r\n/g, '\n')
+                .replace(/\n{3,}/g, '\n\n')
+                .trim();
 
             await mod.sendText({ subscriberId, text: finalText }, settings);
+
             console.log(`[${contato}] envio=ok provider=manychat msg="${finalText}"`);
             return { ok: true, provider };
         }
