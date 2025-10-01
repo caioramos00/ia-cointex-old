@@ -87,10 +87,12 @@ function ensureEstado(contato) {
             sentHashes: new Set(),
             classificacaoAceite: null,
             classesSinceSolicitacao: [],
-            lastClassifiedIdx: { interesse: 0, acesso: 0, confirmacao: 0, saque: 0, validacao: 0 },
+            lastClassifiedIdx: { interesse: 0, acesso: 0, confirmacao: 0, saque: 0, validacao: 0, conversao: 0 },
             saquePediuPrint: false,
             validacaoAwaitFirstMsg: false,
-            validacaoTimeoutUntil: 0
+            validacaoTimeoutUntil: 0,
+            conversaoBatch: 0,
+            conversaoAwaitMsg: false
         };
     } else {
         const st = estadoContatos[key];
@@ -98,16 +100,20 @@ function ensureEstado(contato) {
         if (!Array.isArray(st.mensagensPendentes)) st.mensagensPendentes = [];
         if (!Array.isArray(st.mensagensDesdeSolicitacao)) st.mensagensDesdeSolicitacao = [];
         if (!(st.sentHashes instanceof Set)) st.sentHashes = new Set(Array.isArray(st.sentHashes) ? st.sentHashes : []);
-        if (!st.lastClassifiedIdx) st.lastClassifiedIdx = { interesse: 0, acesso: 0, confirmacao: 0, saque: 0, validacao: 0 };
-        for (const k of ['interesse', 'acesso', 'confirmacao', 'saque', 'validacao']) {
+        if (!st.lastClassifiedIdx) st.lastClassifiedIdx = { interesse: 0, acesso: 0, confirmacao: 0, saque: 0, validacao: 0, conversao: 0 };
+        for (const k of ['interesse', 'acesso', 'confirmacao', 'saque', 'validacao', 'conversao']) {
             if (typeof st.lastClassifiedIdx[k] !== 'number' || st.lastClassifiedIdx[k] < 0) st.lastClassifiedIdx[k] = 0;
         }
         if (typeof st.saquePediuPrint !== 'boolean') st.saquePediuPrint = false;
         if (typeof st.validacaoAwaitFirstMsg !== 'boolean') st.validacaoAwaitFirstMsg = false;
         if (typeof st.validacaoTimeoutUntil !== 'number') st.validacaoTimeoutUntil = 0;
+
+        if (typeof st.conversaoBatch !== 'number') st.conversaoBatch = 0;
+        if (typeof st.conversaoAwaitMsg !== 'boolean') st.conversaoAwaitMsg = false;
     }
     return estadoContatos[key];
 }
+
 
 function inicializarEstado(contato, maybeTid, maybeClickType) {
     const st = ensureEstado(contato);
@@ -150,6 +156,49 @@ async function criarUsuarioDjango(contato) {
         st.createdUser = undefined;
         console.warn(`[Contato] Cointex ERRO: ${st.contato} ${err.message || err}`);
         throw err;
+    }
+}
+
+async function sendImage(contato, imageUrl) {
+    await extraGlobalDelay();
+    const url = safeStr(imageUrl).trim();
+    if (!url) return { ok: false, reason: 'empty-image-url' };
+
+    try {
+        const { mod, settings } = await getActiveTransport();
+        const provider = mod?.name || 'unknown';
+
+        if (provider === 'manychat') {
+            let subscriberId = null;
+            try {
+                const c = await getContatoByPhone(contato);
+                subscriberId = c?.manychat_subscriber_id || c?.subscriber_id || null;
+            } catch { }
+
+            if (!subscriberId) {
+                const st = ensureEstado(contato);
+                if (st.manychat_subscriber_id) subscriberId = st.manychat_subscriber_id;
+            }
+            if (!subscriberId) {
+                console.log(`[${contato}] envio=fail provider=manychat reason=no-subscriber-id image="${url}"`);
+                return { ok: false, reason: 'no-subscriber-id' };
+            }
+
+            if (typeof mod.sendImage === 'function') {
+                await mod.sendImage({ subscriberId, imageUrl: url }, settings);
+                console.log(`[${contato}] envio=ok provider=manychat image="${url}"`);
+                return { ok: true, provider };
+            } else {
+                console.log(`[${contato}] envio=fail provider=manychat reason=no-sendImage image="${url}"`);
+                return { ok: false, reason: 'no-sendImage' };
+            }
+        }
+
+        console.log(`[${contato}] envio=fail provider=${provider} reason=unsupported image="${url}"`);
+        return { ok: false, reason: 'unsupported' };
+    } catch (e) {
+        console.log(`[${contato}] envio=fail provider=unknown reason="${e.message}" image="${url}"`);
+        return { ok: false, error: e.message };
     }
 }
 
@@ -1032,107 +1081,106 @@ async function processarMensagensPendentes(contato) {
             st.saquePediuPrint = false;
             st.etapa = 'validacao:send';
             console.log(`[${st.contato}] etapa->${st.etapa}`);
-            return { ok: true, classe: 'imagem' };
-        }
+        } else {
+            let relevante = false;
+            if (apiKey) {
+                const allowed = ['relevante', 'irrelevante'];
+                const contexto = novasMsgs.map(s => safeStr(s)).join(' | ');
+                const structuredPrompt =
+                    `${promptClassificaRelevancia(contexto, false)}\n\n` +
+                    `Output only this valid JSON format with double quotes around keys and values, nothing else: ` +
+                    `{"label": "relevante"} or {"label": "irrelevante"}`;
 
-        let relevante = false;
-        if (apiKey) {
-            const allowed = ['relevante', 'irrelevante'];
-            const contexto = novasMsgs.map(s => safeStr(s)).join(' | ');
-            const structuredPrompt =
-                `${promptClassificaRelevancia(contexto, false)}\n\n` +
-                `Output only this valid JSON format with double quotes around keys and values, nothing else: ` +
-                `{"label": "relevante"} or {"label": "irrelevante"}`;
-
-            const callOnce = async (maxTok) => {
-                let r;
-                try {
-                    r = await axios.post(
-                        'https://api.openai.com/v1/responses',
-                        {
-                            model: 'gpt-5',
-                            input: structuredPrompt,
-                            max_output_tokens: maxTok,
-                            reasoning: { effort: 'low' }
-                        },
-                        {
-                            headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-                            timeout: 15000,
-                            validateStatus: () => true
-                        }
-                    );
-                } catch {
-                    return { status: 0, picked: null };
-                }
-                const data = r.data;
-                let rawText = '';
-                if (Array.isArray(data?.output)) {
-                    data.output.forEach(item => {
-                        if (item.type === 'message' && Array.isArray(item.content) && item.content[0]?.text) {
-                            rawText = item.content[0].text;
-                        }
-                    });
-                }
-                if (!rawText) rawText = extractTextForLog(data);
-                rawText = String(rawText || '').trim();
-
-                let picked = null;
-                if (rawText) {
+                const callOnce = async (maxTok) => {
+                    let r;
                     try {
-                        const parsed = JSON.parse(rawText);
-                        if (parsed && typeof parsed.label === 'string') picked = parsed.label.toLowerCase().trim();
+                        r = await axios.post(
+                            'https://api.openai.com/v1/responses',
+                            {
+                                model: 'gpt-5',
+                                input: structuredPrompt,
+                                max_output_tokens: maxTok,
+                                reasoning: { effort: 'low' }
+                            },
+                            {
+                                headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                                timeout: 15000,
+                                validateStatus: () => true
+                            }
+                        );
                     } catch {
-                        const m = rawText.match(/(?:"label"|label)\s*:\s*"([^"]+)"/i);
-                        if (m && m[1]) picked = m[1].toLowerCase().trim();
+                        return { status: 0, picked: null };
                     }
-                }
-                if (!picked) picked = pickLabelFromResponseData(data, allowed);
-                return { status: r.status, picked };
-            };
+                    const data = r.data;
+                    let rawText = '';
+                    if (Array.isArray(data?.output)) {
+                        data.output.forEach(item => {
+                            if (item.type === 'message' && Array.isArray(item.content) && item.content[0]?.text) {
+                                rawText = item.content[0].text;
+                            }
+                        });
+                    }
+                    if (!rawText) rawText = extractTextForLog(data);
+                    rawText = String(rawText || '').trim();
 
-            try {
-                let resp = await callOnce(64);
-                if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) resp = await callOnce(256);
-                relevante = (resp.status >= 200 && resp.status < 300 && resp.picked === 'relevante');
-            } catch { }
-        }
+                    let picked = null;
+                    if (rawText) {
+                        try {
+                            const parsed = JSON.parse(rawText);
+                            if (parsed && typeof parsed.label === 'string') picked = parsed.label.toLowerCase().trim();
+                        } catch {
+                            const m = rawText.match(/(?:"label"|label)\s*:\s*"([^"]+)"/i);
+                            if (m && m[1]) picked = m[1].toLowerCase().trim();
+                        }
+                    }
+                    if (!picked) picked = pickLabelFromResponseData(data, allowed);
+                    return { status: r.status, picked };
+                };
 
-        st.lastClassifiedIdx.saque = total;
-        st.mensagensPendentes = [];
-
-        if (relevante) {
-            const saquePath = path.join(__dirname, 'content', 'saque.json');
-            let saqueMsgPrint = null;
-            try {
-                let raw = fs.readFileSync(saquePath, 'utf8');
-                raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
-                const parsed = JSON.parse(raw);
-                if (Array.isArray(parsed?.msgprint) && parsed.msgprint.length > 0) {
-                    saqueMsgPrint = parsed.msgprint;
-                }
-            } catch { }
-            if (!Array.isArray(saqueMsgPrint) || saqueMsgPrint.length === 0) {
-                saqueMsgPrint = [
-                    'o que aconteceu aí? me manda um PRINT ou uma foto da tela',
-                    'o que apareceu na tela? me manda um PRINT'
-                ];
+                try {
+                    let resp = await callOnce(64);
+                    if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) resp = await callOnce(256);
+                    relevante = (resp.status >= 200 && resp.status < 300 && resp.picked === 'relevante');
+                } catch { }
             }
 
-            if (!st.saquePediuPrint) {
-                const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
-                const composeMsgPrint = () => pick(saqueMsgPrint);
-                const m = chooseUnique(composeMsgPrint, st) || composeMsgPrint();
+            st.lastClassifiedIdx.saque = total;
+            st.mensagensPendentes = [];
 
-                await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-                if (m) await sendMessage(st.contato, m);
-                st.saquePediuPrint = true;
-                return { ok: true, classe: 'relevante' };
+            if (relevante) {
+                const saquePath = path.join(__dirname, 'content', 'saque.json');
+                let saqueMsgPrint = null;
+                try {
+                    let raw = fs.readFileSync(saquePath, 'utf8');
+                    raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
+                    const parsed = JSON.parse(raw);
+                    if (Array.isArray(parsed?.msgprint) && parsed.msgprint.length > 0) {
+                        saqueMsgPrint = parsed.msgprint;
+                    }
+                } catch { }
+                if (!Array.isArray(saqueMsgPrint) || saqueMsgPrint.length === 0) {
+                    saqueMsgPrint = [
+                        'o que aconteceu aí? me manda um PRINT ou uma foto da tela',
+                        'o que apareceu na tela? me manda um PRINT'
+                    ];
+                }
+
+                if (!st.saquePediuPrint) {
+                    const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
+                    const composeMsgPrint = () => pick(saqueMsgPrint);
+                    const m = chooseUnique(composeMsgPrint, st) || composeMsgPrint();
+
+                    await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+                    if (m) await sendMessage(st.contato, m);
+                    st.saquePediuPrint = true;
+                    return { ok: true, classe: 'relevante' };
+                }
+
+                return { ok: true, classe: 'aguardando_imagem' };
             }
 
-            return { ok: true, classe: 'aguardando_imagem' };
+            return { ok: true, classe: 'irrelevante' };
         }
-
-        return { ok: true, classe: 'irrelevante' };
     }
 
     if (st.etapa === 'validacao:send') {
@@ -1245,10 +1293,151 @@ async function processarMensagensPendentes(contato) {
         st.mensagensDesdeSolicitacao = [];
         st.lastClassifiedIdx.validacao = 0;
 
-        st.etapa = 'posvalidacao:send';
+        st.conversaoBatch = 0;
+        st.conversaoAwaitMsg = false;
+        if (!st.lastClassifiedIdx) st.lastClassifiedIdx = {};
+        st.lastClassifiedIdx.conversao = 0;
+
+        st.etapa = 'conversao:send';
         console.log(`[${st.contato}] etapa->${st.etapa}`);
-        return { ok: true, advanced: 'posvalidacao:send' };
+        return { ok: true, advanced: 'conversao:send' };
     }
+    if (st.etapa === 'conversao:send') {
+        let conversao = null;
+        try {
+            let raw = fs.readFileSync(path.join(__dirname, 'content', 'conversao.json'), 'utf8');
+            raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
+            const parsed = JSON.parse(raw);
+            if (!parsed?.msg1?.msg1b1?.length || !parsed?.msg1?.msg1b2?.length) throw new Error('conversao.msg1 incompleto');
+            if (!parsed?.msg3?.msg3b1?.length || !parsed?.msg3?.msg3b2?.length || !parsed?.msg3?.msg3b3?.length) throw new Error('conversao.msg3 incompleto');
+
+            if (!parsed?.msg4?.msg4b1?.length || !parsed?.msg4?.msg4b2?.length || !parsed?.msg4?.msg4b3?.length ||
+                !parsed?.msg4?.msg4b4?.length || !parsed?.msg4?.msg4b5?.length || !parsed?.msg4?.msg4b6?.length || !parsed?.msg4?.msg4b7?.length) {
+                throw new Error('conversao.msg4 incompleto');
+            }
+            if (!parsed?.msg5?.msg5b1?.length || !parsed?.msg5?.msg5b2?.length) throw new Error('conversao.msg5 incompleto');
+            if (!parsed?.msg6?.msg6b1?.length || !parsed?.msg6?.msg6b2?.length || !parsed?.msg6?.msg6b3?.length) throw new Error('conversao.msg6 incompleto');
+            if (!parsed?.msg7?.msg7b1?.length || !parsed?.msg7?.msg7b2?.length || !parsed?.msg7?.msg7b3?.length || !parsed?.msg7?.msg7b4?.length || !parsed?.msg7?.msg7b5?.length) throw new Error('conversao.msg7 incompleto');
+            if (!parsed?.msg8?.msg8b1?.length || !parsed?.msg8?.msg8b2?.length || !parsed?.msg8?.msg8b3?.length || !parsed?.msg8?.msg8b4?.length) throw new Error('conversao.msg8 incompleto');
+            if (!parsed?.msg9?.msg9b1?.length || !parsed?.msg9?.msg9b2?.length || !parsed?.msg9?.msg9b3?.length || !parsed?.msg9?.msg9b4?.length || !parsed?.msg9?.msg9b5?.length || !parsed?.msg9?.msg9b6?.length || !parsed?.msg9?.msg9b7?.length) throw new Error('conversao.msg9 incompleto');
+
+            conversao = parsed;
+        } catch (e) {
+            console.warn(`[Conversao] Falha ao ler conversao.json: ${e?.message || e}`);
+            conversao = {
+                msg1: { msg1b1: ['voltei'], msg1b2: ['já tive uma resposta'] },
+                msg2: { images: [] },
+                msg3: { msg3b1: ['me responderam isso'], msg3b2: ['é pq a plataforma é gringa'], msg3b3: ['essa validação é por causa da transferencia internacional'] },
+                msg4: { msg4b1: ['pior que nao tem muito o que fazer'], msg4b2: ['é a única forma de sacar dinheiro de lá pro brasil'], msg4b3: ['pelo menos nao pedem documento'], msg4b4: ['é só a taxa de 3 dólares mesmo'], msg4b5: ['o câmbio que pesa'], msg4b6: ['3 dólares já dá 17 reais 🤦🏽'], msg4b7: ['ainda bem que não é 10 dólares kkkk'] },
+                msg5: { msg5b1: ['acho que nem preciso falar isso'], msg5b2: ['mas você não acha que eu ia te dar um golpe de 17 reais né'] },
+                msg6: { msg6b1: ['e não esquece'], msg6b2: ['ela disse na mensagem que tem que validar pela mesma conta que voce vai receber o pix'], msg6b3: ['se não n valida'] },
+                msg7: { msg7b1: ['não consigo te mandar o valor da taxa'], msg7b2: ['eu não posso ter vinculo com sua conta'], msg7b3: ['por isso que tô atrás de lara kkkkkk'], msg7b4: ['quando você for mandar minha parte'], msg7b5: ['eu te passo o copia e cola da minha carteira cripto'] },
+                msg8: { msg8b1: ['sei que as vezes esse valor tá em falta'], msg8b2: ['mas se for o caso, não deixa de sacar por causa disso'], msg8b3: ['pede um pix emprestado aí rapidinho'], msg8b4: ['depois vc devolve o dobro pra pessoa'] },
+                msg9: { msg9b1: ['confia que o trampo é garantido'], msg9b2: ['não perde por causa de 17 reais'], msg9b3: ['pode ficar com 2.500 pelo imprevisto beleza'], msg9b4: ['e te chamo pros próximos trampos'], msg9b5: ['vou resolver um assunto aqui'], msg9b6: ['vou ficar offline por meia hora'], msg9b7: ['assim que eu voltar já te chamo'] }
+            };
+        }
+
+        const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
+
+        if (st.conversaoBatch === 0) {
+            const m1 = `${pick(conversao.msg1.msg1b1)}, ${pick(conversao.msg1.msg1b2)}`;
+            const img = Array.isArray(conversao?.msg2?.images) && conversao.msg2.images.length ? pick(conversao.msg2.images) : '';
+            const m3 = `${pick(conversao.msg3.msg3b1)}, ${pick(conversao.msg3.msg3b2)}, ${pick(conversao.msg3.msg3b3)}`;
+
+            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+            if (m1) await sendMessage(st.contato, m1);
+
+            if (img) {
+                await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+                await sendImage(st.contato, img);
+            }
+
+            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+            if (m3) await sendMessage(st.contato, m3);
+
+            st.conversaoBatch = 1;
+            st.conversaoAwaitMsg = true;
+            st.mensagensPendentes = [];
+            st.mensagensDesdeSolicitacao = [];
+            return { ok: true, batch: 1 };
+        }
+
+        if (st.conversaoAwaitMsg) {
+            const temMsg =
+                (Array.isArray(st.mensagensPendentes) && st.mensagensPendentes.length > 0) ||
+                (Array.isArray(st.mensagensDesdeSolicitacao) && st.mensagensDesdeSolicitacao.length > (st.lastClassifiedIdx?.conversao || 0));
+
+            if (!temMsg) {
+                st.mensagensPendentes = [];
+                return { ok: true, noop: 'await-user-message' };
+            }
+
+            st.lastClassifiedIdx.conversao = st.mensagensDesdeSolicitacao.length;
+            st.mensagensPendentes = [];
+            st.mensagensDesdeSolicitacao = [];
+
+            if (st.conversaoBatch === 1) {
+                const m4 = `${pick(conversao.msg4.msg4b1)}. ${pick(conversao.msg4.msg4b2)}. ${pick(conversao.msg4.msg4b3)}. ${pick(conversao.msg4.msg4b4)}. ${pick(conversao.msg4.msg4b5)}. ${pick(conversao.msg4.msg4b6)} ${pick(conversao.msg4.msg4b7)}`;
+                const m5 = `${pick(conversao.msg5.msg5b1)}, ${pick(conversao.msg5.msg5b2)}`;
+                const m6 = `${pick(conversao.msg6.msg6b1)}, ${pick(conversao.msg6.msg6b2)}, ${pick(conversao.msg6.msg6b3)}`;
+
+                await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+                if (m4) await sendMessage(st.contato, m4);
+
+                await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+                if (m5) await sendMessage(st.contato, m5);
+
+                await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+                if (m6) await sendMessage(st.contato, m6);
+
+                st.conversaoBatch = 2;
+                st.conversaoAwaitMsg = true;
+                return { ok: true, batch: 2 };
+            }
+
+            if (st.conversaoBatch === 2) {
+                const m7 = `${pick(conversao.msg7.msg7b1)}, ${pick(conversao.msg7.msg7b2)}. ${pick(conversao.msg7.msg7b3)}. ${pick(conversao.msg7.msg7b4)}, ${pick(conversao.msg7.msg7b5)}`;
+                const m8 = `${pick(conversao.msg8.msg8b1)}, ${pick(conversao.msg8.msg8b2)}, ${pick(conversao.msg8.msg8b3)}, ${pick(conversao.msg8.msg8b4)}`;
+                const m9 = `${pick(conversao.msg9.msg9b1)}, ${pick(conversao.msg9.msg9b2)}. ${pick(conversao.msg9.msg9b3)}, ${pick(conversao.msg9.msg9b4)}. ${pick(conversao.msg9.msg9b5)}, ${pick(conversao.msg9.msg9b6)}. ${pick(conversao.msg9.msg9b7)}`;
+
+                await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+                if (m7) await sendMessage(st.contato, m7);
+
+                await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+                if (m8) await sendMessage(st.contato, m8);
+
+                await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+                if (m9) await sendMessage(st.contato, m9);
+
+                st.conversaoBatch = 3;
+                st.conversaoAwaitMsg = false;
+
+                st.mensagensPendentes = [];
+                st.mensagensDesdeSolicitacao = [];
+                st.lastClassifiedIdx.conversao = 0;
+
+                st.etapa = 'conversao:wait';
+                console.log(`[${st.contato}] etapa->${st.etapa}`);
+                return { ok: true, batch: 3, done: true };
+            }
+        }
+
+        if (st.conversaoBatch >= 3) {
+            st.conversaoAwaitMsg = false;
+            st.mensagensPendentes = [];
+            st.mensagensDesdeSolicitacao = [];
+            st.etapa = 'conversao:wait';
+            console.log(`[${st.contato}] etapa->${st.etapa}`);
+            return { ok: true, coerced: 'conversao:wait' };
+        }
+
+        return { ok: true };
+    }
+    if (st.etapa === 'conversao:wait') {
+        st.mensagensPendentes = [];
+        return { ok: true, noop: 'idle' };
+    }
+
 }
 
 async function sendMessage(contato, texto) {
@@ -1304,6 +1493,7 @@ module.exports = {
     criarUsuarioDjango,
     delay,
     sendMessage,
+    sendImage,
     retomarEnvio,
     _utils: { ensureEstado, normalizeContato },
 };

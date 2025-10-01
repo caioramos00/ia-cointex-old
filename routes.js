@@ -1,8 +1,5 @@
-const path = require('path');
 const express = require('express');
 const axios = require('axios');
-const twilio = require('twilio');
-const qs = require('qs');
 
 const { pool } = require('./db.js');
 const { delay, sendMessage, retomarEnvio, decidirOptLabel } = require('./bot.js');
