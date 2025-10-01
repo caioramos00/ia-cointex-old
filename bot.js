@@ -1268,6 +1268,16 @@ async function processarMensagensPendentes(contato) {
 
             st.mensagensPendentes = [];
             st.mensagensDesdeSolicitacao = [];
+
+            if (st.validacaoTimer) { try { clearTimeout(st.validacaoTimer); } catch { } }
+            st.validacaoTimer = setTimeout(async () => {
+                try {
+                    await processarMensagensPendentes(contato);
+                } catch (e) {
+                    console.warn(`[${st.contato}] validacaoTimer erro: ${e?.message || e}`);
+                }
+            }, rnd + 100);
+
             st.etapa = 'validacao:cooldown';
             console.log(`[${st.contato}] etapa->${st.etapa} t+${Math.round(rnd / 1000)}s`);
             return { ok: true, started: rnd };
@@ -1289,6 +1299,9 @@ async function processarMensagensPendentes(contato) {
 
         st.validacaoTimeoutUntil = 0;
         st.validacaoAwaitFirstMsg = false;
+
+        if (st.validacaoTimer) { try { clearTimeout(st.validacaoTimer); } catch {} st.validacaoTimer = null; }
+
         st.mensagensPendentes = [];
         st.mensagensDesdeSolicitacao = [];
         st.lastClassifiedIdx.validacao = 0;
@@ -1300,7 +1313,6 @@ async function processarMensagensPendentes(contato) {
 
         st.etapa = 'conversao:send';
         console.log(`[${st.contato}] etapa->${st.etapa}`);
-        return { ok: true, advanced: 'conversao:send' };
     }
     if (st.etapa === 'conversao:send') {
         let conversao = null;
