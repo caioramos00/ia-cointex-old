@@ -408,7 +408,6 @@ async function processarMensagensPendentes(contato) {
             if (m1) await sendMessage(st.contato, m1);
 
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-            await delay(10000 + Math.floor(Math.random() * 10000));
             if (m2) await sendMessage(st.contato, m2);
 
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
