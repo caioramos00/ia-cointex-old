@@ -34,7 +34,7 @@ function pickLabelFromResponseData(data, allowed) {
             try {
                 const parsed = JSON.parse(raw);
                 if (parsed && typeof parsed.label === 'string') label = parsed.label;
-            } catch { }
+            } catch {}
         }
     }
     if (typeof label === 'string') {
@@ -259,69 +259,66 @@ async function processarMensagensPendentes(contato) {
                 console.warn(`[${st.contato}] [LLM][interesse] OPENAI_API_KEY ausente — usando fallback=duvida`);
             } else {
                 const allowed = ['aceite', 'recusa', 'duvida'];
-                const structuredPrompt = `${prompt}\n\nRespond with only the following JSON and nothing else: {"label": "aceite" or "recusa" or "duvida"}`;
 
                 const callOnce = async (maxTok, tag) => {
-                    let r;
+                    let resp = null;
                     try {
-                        r = await axios.post(
+                        resp = await axios.post(
                             'https://api.openai.com/v1/responses',
                             {
                                 model: 'gpt-5',
-                                input: structuredPrompt,
+                                input: prompt,
+                                temperature: 0,
                                 max_output_tokens: maxTok,
-                                reasoning: { effort: 'low' }
+                                text: {
+                                    format: {
+                                        type: 'json_schema',
+                                        name: 'Label',
+                                        schema: {
+                                            type: 'object',
+                                            properties: {
+                                                label: { type: 'string', enum: allowed }
+                                            },
+                                            required: ['label'],
+                                            additionalProperties: false
+                                        }
+                                    }
+                                }
                             },
                             {
-                                headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                                headers: {
+                                    Authorization: `Bearer ${apiKey}`,
+                                    'Content-Type': 'application/json'
+                                },
                                 timeout: 15000,
                                 validateStatus: () => true
                             }
                         );
+                        const rawText = extractTextForLog(resp.data);
+                        const usage = resp.data?.usage ? JSON.stringify(resp.data.usage) : '';
+                        const incomplete = resp.data?.status === 'incomplete' ? (resp.data?.incomplete_details?.reason || 'yes') : 'no';
+                        console.log(`[${st.contato}] [LLM][interesse][${tag}] http=${resp.status} incomplete=${incomplete} usage=${usage} body=${truncate(rawText, 800)}`);
                     } catch (e) {
                         console.warn(`[${st.contato}] [LLM][interesse][${tag}] erro="${e.message || e}"`);
-                        return { status: 0, incomplete: null, picked: null };
+                        return { status: 0, inc: 'exception', picked: null };
                     }
-
-                    const data = r.data;
-                    let rawText = '';
-                    if (Array.isArray(data?.output)) {
-                        data.output.forEach(item => {
-                            if (item.type === 'message' && Array.isArray(item.content) && item.content[0]?.text) {
-                                rawText = item.content[0].text;
-                            }
-                        });
-                    }
-                    if (!rawText) rawText = extractTextForLog(data);
-                    const incomplete = data?.incomplete_details?.reason || '';
-                    const usage = data?.usage ? JSON.stringify(data.usage) : '';
-                    console.log(`[${st.contato}] [LLM][interesse][${tag}] http=${r.status} incomplete=${incomplete || 'no'} usage=${usage} body=${truncate(rawText, 800)}`);
-
-                    let picked = null;
-                    if (rawText) {
-                        try {
-                            const parsed = JSON.parse(rawText);
-                            if (parsed && typeof parsed.label === 'string') picked = parsed.label.toLowerCase().trim();
-                        } catch {
-                            // Fallback regex if parse fails
-                            const m = rawText.match(/"label"\s*:\s*"([^"]+)"/i);
-                            if (m && m[1]) picked = m[1].toLowerCase().trim();
-                        }
-                    }
-                    if (!picked) picked = pickLabelFromResponseData(data, allowed);
-
-                    return { status: r.status, incomplete, picked };
+                    const status = resp.status;
+                    const inc = resp.data?.status === 'incomplete' ? (resp.data?.incomplete_details?.reason || 'unknown') : null;
+                    let picked = resp.data?.output?.[0]?.content?.[0]?.json?.label || null;
+                    if (!picked) picked = pickLabelFromResponseData(resp.data, allowed);
+                    picked = picked ? String(picked).toLowerCase() : null;
+                    return { status, inc, picked };
                 };
 
                 try {
-                    let resp = await callOnce(64, 'try1');
-                    if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) {
-                        if (resp.incomplete === 'max_output_tokens' || !resp.picked) {
-                            resp = await callOnce(256, 'try2');
+                    let r1 = await callOnce(96, 'try1');
+                    if (!(r1.status >= 200 && r1.status < 300 && r1.picked)) {
+                        if (r1.inc === 'max_output_tokens' || !r1.picked) {
+                            r1 = await callOnce(192, 'try2');
                         }
                     }
-                    if (resp.status >= 200 && resp.status < 300 && resp.picked) {
-                        classe = resp.picked;
+                    if (r1.status >= 200 && r1.status < 300 && r1.picked) {
+                        classe = r1.picked;
                     } else {
                         console.warn(`[${st.contato}] [LLM][interesse] sem label válido — fallback=duvida`);
                     }
@@ -433,69 +430,66 @@ async function processarMensagensPendentes(contato) {
                 console.warn(`[${st.contato}] [LLM][instrucoes] OPENAI_API_KEY ausente — usando fallback=duvida`);
             } else {
                 const allowed = ['aceite', 'recusa', 'duvida'];
-                const structuredPrompt = `${prompt}\n\nRespond with only the following JSON and nothing else: {"label": "aceite" or "recusa" or "duvida"}`;
 
                 const callOnce = async (maxTok, tag) => {
-                    let r;
+                    let resp = null;
                     try {
-                        r = await axios.post(
+                        resp = await axios.post(
                             'https://api.openai.com/v1/responses',
                             {
                                 model: 'gpt-5',
-                                input: structuredPrompt,
+                                input: prompt,
+                                temperature: 0,
                                 max_output_tokens: maxTok,
-                                reasoning: { effort: 'low' }
+                                text: {
+                                    format: {
+                                        type: 'json_schema',
+                                        name: 'Label',
+                                        schema: {
+                                            type: 'object',
+                                            properties: {
+                                                label: { type: 'string', enum: allowed }
+                                            },
+                                            required: ['label'],
+                                            additionalProperties: false
+                                        }
+                                    }
+                                }
                             },
                             {
-                                headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                                headers: {
+                                    Authorization: `Bearer ${apiKey}`,
+                                    'Content-Type': 'application/json'
+                                },
                                 timeout: 15000,
                                 validateStatus: () => true
                             }
                         );
+                        const rawText = extractTextForLog(resp.data);
+                        const usage = resp.data?.usage ? JSON.stringify(resp.data.usage) : '';
+                        const incomplete = resp.data?.status === 'incomplete' ? (resp.data?.incomplete_details?.reason || 'yes') : 'no';
+                        console.log(`[${st.contato}] [LLM][instrucoes][${tag}] http=${resp.status} incomplete=${incomplete} usage=${usage} body=${truncate(rawText, 800)}`);
                     } catch (e) {
                         console.warn(`[${st.contato}] [LLM][instrucoes][${tag}] erro="${e.message || e}"`);
-                        return { status: 0, incomplete: null, picked: null };
+                        return { status: 0, inc: 'exception', picked: null };
                     }
-
-                    const data = r.data;
-                    let rawText = '';
-                    if (Array.isArray(data?.output)) {
-                        data.output.forEach(item => {
-                            if (item.type === 'message' && Array.isArray(item.content) && item.content[0]?.text) {
-                                rawText = item.content[0].text;
-                            }
-                        });
-                    }
-                    if (!rawText) rawText = extractTextForLog(data);
-                    const incomplete = data?.incomplete_details?.reason || '';
-                    const usage = data?.usage ? JSON.stringify(data.usage) : '';
-                    console.log(`[${st.contato}] [LLM][instrucoes][${tag}] http=${r.status} incomplete=${incomplete || 'no'} usage=${usage} body=${truncate(rawText, 800)}`);
-
-                    let picked = null;
-                    if (rawText) {
-                        try {
-                            const parsed = JSON.parse(rawText);
-                            if (parsed && typeof parsed.label === 'string') picked = parsed.label.toLowerCase().trim();
-                        } catch {
-                            // Fallback regex if parse fails
-                            const m = rawText.match(/"label"\s*:\s*"([^"]+)"/i);
-                            if (m && m[1]) picked = m[1].toLowerCase().trim();
-                        }
-                    }
-                    if (!picked) picked = pickLabelFromResponseData(data, allowed);
-
-                    return { status: r.status, incomplete, picked };
+                    const status = resp.status;
+                    const inc = resp.data?.status === 'incomplete' ? (resp.data?.incomplete_details?.reason || 'unknown') : null;
+                    let picked = resp.data?.output?.[0]?.content?.[0]?.json?.label || null;
+                    if (!picked) picked = pickLabelFromResponseData(resp.data, allowed);
+                    picked = picked ? String(picked).toLowerCase() : null;
+                    return { status, inc, picked };
                 };
 
                 try {
-                    let resp = await callOnce(64, 'try1');
-                    if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) {
-                        if (resp.incomplete === 'max_output_tokens' || !resp.picked) {
-                            resp = await callOnce(256, 'try2');
+                    let r1 = await callOnce(96, 'try1');
+                    if (!(r1.status >= 200 && r1.status < 300 && r1.picked)) {
+                        if (r1.inc === 'max_output_tokens' || !r1.picked) {
+                            r1 = await callOnce(192, 'try2');
                         }
                     }
-                    if (resp.status >= 200 && resp.status < 300 && resp.picked) {
-                        classe = resp.picked;
+                    if (r1.status >= 200 && r1.status < 300 && r1.picked) {
+                        classe = r1.picked;
                     } else {
                         console.warn(`[${st.contato}] [LLM][instrucoes] sem label válido — fallback=duvida`);
                     }
@@ -539,7 +533,7 @@ async function sendMessage(contato, texto) {
             try {
                 const c = await getContatoByPhone(contato);
                 subscriberId = c?.manychat_subscriber_id || c?.subscriber_id || null;
-            } catch { }
+            } catch {}
             if (!subscriberId) {
                 const st = ensureEstado(contato);
                 if (st.manychat_subscriber_id) subscriberId = st.manychat_subscriber_id;
