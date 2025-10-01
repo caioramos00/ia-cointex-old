@@ -342,15 +342,24 @@ async function processarMensagensPendentes(contato) {
             const nonDuvida = classes.filter(c => c !== 'duvida');
             classe = nonDuvida.length > 0 ? nonDuvida[nonDuvida.length - 1] : 'duvida'; // Use last non-duvida
 
-            const heur = heuristicAceite(contexto);
-            console.log(`[${st.contato}] [DEBUG][interesse] heuristica=${heur} | llm=${classe}`);
+            let heurClasses = [];
+            for (const msg of st.mensagensDesdeSolicitacao) {
+                const msgHeur = heuristicAceite(msg.trim());
+                heurClasses.push(msgHeur);
+                console.log(`[${st.contato}] [HEUR][interesse] individual heur=${msgHeur} for msg="${msg.trim()}"`);
+            }
+
+            const nonDuvidaHeur = heurClasses.filter(c => c !== 'duvida');
+            const heur = nonDuvidaHeur.length > 0 ? nonDuvidaHeur[nonDuvidaHeur.length - 1] : 'duvida'; // Use last non-duvida from heur
+
+            console.log(`[${st.contato}] [DEBUG][interesse] overall heuristica=${heur} from individual heur=[${heurClasses.join(', ')}] | llm=${classe}`);
             if (classe === 'duvida' && heur === 'aceite') {
                 console.log(`[${st.contato}] [LLM][interesse] usando fallback heurístico: aceite`);
                 classe = 'aceite';
             }
 
             st.classificacaoAceite = classe;
-            console.log(`[${st.contato}] interesse.class=${classe} ctx="${contexto}"`);
+            console.log(`[${st.contato}] interesse.class=${classe} from overall LLM=${classe} and heur=${heur}`);
 
             st.mensagensPendentes = [];
             if (classe === 'aceite') {
@@ -527,14 +536,23 @@ async function processarMensagensPendentes(contato) {
             const nonDuvida = classes.filter(c => c !== 'duvida');
             classe = nonDuvida.length > 0 ? nonDuvida[nonDuvida.length - 1] : 'duvida'; // Use last non-duvida
 
-            const heur = heuristicAceite(contexto);
-            console.log(`[${st.contato}] [DEBUG][instrucoes] heuristica=${heur} | llm=${classe}`);
+            let heurClasses = [];
+            for (const msg of st.mensagensDesdeSolicitacao) {
+                const msgHeur = heuristicAceite(msg.trim());
+                heurClasses.push(msgHeur);
+                console.log(`[${st.contato}] [HEUR][instrucoes] individual heur=${msgHeur} for msg="${msg.trim()}"`);
+            }
+
+            const nonDuvidaHeur = heurClasses.filter(c => c !== 'duvida');
+            const heur = nonDuvidaHeur.length > 0 ? nonDuvidaHeur[nonDuvidaHeur.length - 1] : 'duvida'; // Use last non-duvida from heur
+
+            console.log(`[${st.contato}] [DEBUG][instrucoes] overall heuristica=${heur} from individual heur=[${heurClasses.join(', ')}] | llm=${classe}`);
             if (classe === 'duvida' && heur === 'aceite') {
                 console.log(`[${st.contato}] [LLM][instrucoes] usando fallback heurístico: aceite`);
                 classe = 'aceite';
             }
 
-            console.log(`[${st.contato}] instrucoes.class=${classe} ctx="${contexto}"`);
+            console.log(`[${st.contato}] instrucoes.class=${classe} from overall LLM=${classe} and heur=${heur}`);
             st.mensagensPendentes = [];
             if (classe === 'aceite') {
                 st.mensagensDesdeSolicitacao = [];
