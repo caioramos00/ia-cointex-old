@@ -485,8 +485,29 @@ async function sendMessage(contato, texto) {
                 console.log(`[${contato}] envio=fail provider=manychat reason=no-subscriber-id msg="${msg}"`);
                 return { ok: false, reason: 'no-subscriber-id' };
             }
-            await mod.sendText({ subscriberId, text: msg }, settings);
-            console.log(`[${contato}] envio=ok provider=manychat msg="${msg}"`);
+
+            // >>> FORÇA 1 ÚNICA MENSAGEM, PRESERVANDO QUEBRAS <<<
+            let finalText = msg;
+
+            // normaliza CRLF e excesso de linhas vazias
+            if (finalText.indexOf('\n') !== -1) {
+                finalText = finalText.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+                // se já vier com crases, escapa para não quebrar o bloco
+                const hasBackticks = finalText.includes('```') || finalText.includes('`');
+                if (hasBackticks) {
+                    finalText = finalText.replace(/```/g, 'ʼʼʼ').replace(/`/g, 'ʼ'); // apóstrofo modificado
+                }
+                // empacota em bloco de código para impedir split por \n
+                finalText = '```' + finalText + '```';
+                // limite conservador para evitar auto-chunking
+                if (finalText.length > 3500) {
+                    // compacta mantendo legibilidade
+                    finalText = '```' + finalText.slice(3, 3497).trimEnd() + '…```';
+                }
+            }
+
+            await mod.sendText({ subscriberId, text: finalText }, settings);
+            console.log(`[${contato}] envio=ok provider=manychat msg="${finalText}"`);
             return { ok: true, provider };
         }
 
