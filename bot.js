@@ -354,22 +354,20 @@ async function processarMensagensPendentes(contato) {
                     const parsed = JSON.parse(raw);
                     if (
                         !parsed?.msg1?.grupo1?.length || !parsed?.msg1?.grupo2?.length || !parsed?.msg1?.grupo3?.length ||
-                        !parsed?.pontos?.p1?.g1?.length || !parsed?.pontos?.p1?.g2?.length || !parsed?.pontos?.p1?.g3?.length ||
-                        !parsed?.pontos?.p2?.g1?.length || !parsed?.pontos?.p2?.g2?.length || !parsed?.pontos?.p2?.g3?.length ||
-                        !parsed?.pontos?.p3?.g1?.length || !parsed?.pontos?.p3?.g2?.length || !parsed?.pontos?.p3?.g3?.length ||
-                        !parsed?.pontos?.p4?.g1?.length || !parsed?.pontos?.p4?.g2?.length || !parsed?.pontos?.p4?.g3?.length ||
+                        !parsed?.pontos1?.grupo1?.length || !parsed?.pontos1?.grupo2?.length || !parsed?.pontos1?.grupo3?.length ||
+                        !parsed?.pontos2?.grupo1?.length || !parsed?.pontos2?.grupo2?.length || !parsed?.pontos2?.grupo3?.length ||
+                        !parsed?.pontos3?.grupo1?.length || !parsed?.pontos3?.grupo2?.length || !parsed?.pontos3?.grupo3?.length ||
+                        !parsed?.pontos4?.grupo1?.length || !parsed?.pontos4?.grupo2?.length || !parsed?.pontos4?.grupo3?.length ||
                         !parsed?.msg3?.grupo1?.length || !parsed?.msg3?.grupo2?.length
                     ) throw new Error('content/instrucoes.json incompleto');
                     instrucoesData = parsed;
                 } catch {
                     instrucoesData = {
-                        msg1: { grupo1: ['salvou o contato'], grupo2: ['salva ai que se aparecer outro trampo mais tarde eu te chamo tambem'], grupo3: ['vou te mandar o passo a passo do que precisa pra fazer certinho'] },
-                        pontos: {
-                            p1: { g1: ['você precisa de uma conta com pix ativo pra receber'], g2: ['pode ser qualquer banco'], g3: ['só não dá certo se for o SICOOB'] },
-                            p2: { g1: ['se tiver dados móveis'], g2: ['desliga o wi-fi'], g3: ['mas se não tiver deixa no wi-fi mesmo'] },
-                            p3: { g1: ['vou passar o email e a senha de uma conta pra você acessar'], g2: ['lá vai ter um saldo disponível'], g3: ['é só você transferir pra sua conta, mais nada'] },
-                            p4: { g1: ['você vai receber 2000'], g2: ['o restante você manda pra minha conta logo que cair'], g3: ['eu vou te passar a chave pix depois'] }
-                        },
+                        msg1: { grupo1: ['salvou o contato'], grupo2: ['salva ai que se aparecer outro trampo eu te chamo tambem'], grupo3: ['vou te mandar o passo a passo do que precisa pra fazer certinho'] },
+                        pontos1: { grupo1: ['você precisa de uma conta com pix ativo pra receber'], grupo2: ['pode ser qualquer banco'], grupo3: ['só não dá certo se for o SICOOB'] },
+                        pontos2: { grupo1: ['se tiver dados móveis'], grupo2: ['desliga o wi-fi'], grupo3: ['mas se não tiver deixa no wi-fi mesmo'] },
+                        pontos3: { grupo1: ['vou passar o email e a senha de uma conta pra você acessar'], grupo2: ['lá vai ter um saldo disponível'], grupo3: ['é só você transferir pra sua conta, mais nada'] },
+                        pontos4: { grupo1: ['você vai receber 2000'], grupo2: ['o restante você manda pra minha conta logo que cair'], grupo3: ['eu vou te passar a chave pix depois'] },
                         msg3: { grupo1: ['é tranquilinho'], grupo2: ['a gente vai fazendo parte por parte pra não ter erro blz'] }
                     };
                 }
@@ -387,11 +385,10 @@ async function processarMensagensPendentes(contato) {
             };
             const composeMsg2 = () => {
                 const c = loadInstrucoes();
-                const bullet = '\u200B•';
-                const p1 = `${bullet} ${pick(c.pontos.p1.g1)}, ${pick(c.pontos.p1.g2)}, ${pick(c.pontos.p1.g3)}`;
-                const p2 = `${bullet} ${pick(c.pontos.p2.g1)}, ${pick(c.pontos.p2.g2)}, ${pick(c.pontos.p2.g3)}`;
-                const p3 = `${bullet} ${pick(c.pontos.p3.g1)}, ${pick(c.pontos.p3.g2)}, ${pick(c.pontos.p3.g3)}`;
-                const p4 = `${bullet} ${pick(c.pontos.p4.g1)}, ${pick(c.pontos.p4.g2)}, ${pick(c.pontos.p4.g3)}`;
+                const p1 = `• ${pick(c.pontos1.grupo1)}, ${pick(c.pontos1.grupo2)}, ${pick(c.pontos1.grupo3)}`;
+                const p2 = `• ${pick(c.pontos2.grupo1)}, ${pick(c.pontos2.grupo2)}, ${pick(c.pontos2.grupo3)}`;
+                const p3 = `• ${pick(c.pontos3.grupo1)}, ${pick(c.pontos3.grupo2)}, ${pick(c.pontos3.grupo3)}`;
+                const p4 = `• ${pick(c.pontos4.grupo1)}, ${pick(c.pontos4.grupo2)}, ${pick(c.pontos4.grupo3)}`;
                 return [p1, p2, p3, p4].join('\n');
             };
             const composeMsg3 = () => {
@@ -409,7 +406,6 @@ async function processarMensagensPendentes(contato) {
             if (m1) await sendMessage(st.contato, m1);
 
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-            await delay(10000 + Math.floor(Math.random() * 10000));
             if (m2) await sendMessage(st.contato, m2);
 
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
@@ -451,9 +447,7 @@ async function sendMessage(contato, texto) {
                 console.log(`[${contato}] envio=fail provider=manychat reason=no-subscriber-id msg="${msg}"`);
                 return { ok: false, reason: 'no-subscriber-id' };
             }
-            const prepared = msg.replace(/\r?\n/g, '\n\u200B');
-            await mod.sendText({ subscriberId, text: prepared }, settings);
-            console.log(`[${contato}] envio=ok provider=manychat msg="${prepared}"`);
+            await mod.sendText({ subscriberId, text: msg }, settings);
             console.log(`[${contato}] envio=ok provider=manychat msg="${msg}"`);
             return { ok: true, provider };
         }
