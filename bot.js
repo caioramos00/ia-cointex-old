@@ -387,11 +387,12 @@ async function processarMensagensPendentes(contato) {
             };
             const composeMsg2 = () => {
                 const c = loadInstrucoes();
-                const p1 = `• ${pick(c.pontos.p1.g1)}, ${pick(c.pontos.p1.g2)}, ${pick(c.pontos.p1.g3)}`;
-                const p2 = `• ${pick(c.pontos.p2.g1)}, ${pick(c.pontos.p2.g2)}, ${pick(c.pontos.p2.g3)}`;
-                const p3 = `• ${pick(c.pontos.p3.g1)}, ${pick(c.pontos.p3.g2)}, ${pick(c.pontos.p3.g3)}`;
-                const p4 = `• ${pick(c.pontos.p4.g1)}, ${pick(c.pontos.p4.g2)}, ${pick(c.pontos.p4.g3)}`;
-                return [p1, p2, p3, p4].join('\n\n');
+                const bullet = '\u200B•';
+                const p1 = `${bullet} ${pick(c.pontos.p1.g1)}, ${pick(c.pontos.p1.g2)}, ${pick(c.pontos.p1.g3)}`;
+                const p2 = `${bullet} ${pick(c.pontos.p2.g1)}, ${pick(c.pontos.p2.g2)}, ${pick(c.pontos.p2.g3)}`;
+                const p3 = `${bullet} ${pick(c.pontos.p3.g1)}, ${pick(c.pontos.p3.g2)}, ${pick(c.pontos.p3.g3)}`;
+                const p4 = `${bullet} ${pick(c.pontos.p4.g1)}, ${pick(c.pontos.p4.g2)}, ${pick(c.pontos.p4.g3)}`;
+                return [p1, p2, p3, p4].join('\n');
             };
             const composeMsg3 = () => {
                 const c = loadInstrucoes();
@@ -408,6 +409,7 @@ async function processarMensagensPendentes(contato) {
             if (m1) await sendMessage(st.contato, m1);
 
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+            await delay(10000 + Math.floor(Math.random() * 10000));
             if (m2) await sendMessage(st.contato, m2);
 
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
@@ -449,7 +451,9 @@ async function sendMessage(contato, texto) {
                 console.log(`[${contato}] envio=fail provider=manychat reason=no-subscriber-id msg="${msg}"`);
                 return { ok: false, reason: 'no-subscriber-id' };
             }
-            await mod.sendText({ subscriberId, text: msg }, settings);
+            const prepared = msg.replace(/\r?\n/g, '\n\u200B');
+            await mod.sendText({ subscriberId, text: prepared }, settings);
+            console.log(`[${contato}] envio=ok provider=manychat msg="${prepared}"`);
             console.log(`[${contato}] envio=ok provider=manychat msg="${msg}"`);
             return { ok: true, provider };
         }
