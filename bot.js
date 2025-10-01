@@ -390,13 +390,17 @@ async function processarMensagensPendentes(contato) {
                 return `${g1}? ${g2}… ${g3}:`;
             };
 
+            // >>> AQUI ESTÁ A MONTAGEM MULTILINHA EM UMA ÚNICA MENSAGEM <<<
             const composeMsg2 = () => {
                 const c = loadInstrucoes();
+
                 const p1 = `${pick(c.pontos.p1.g1)}, ${pick(c.pontos.p1.g2)}, ${pick(c.pontos.p1.g3)}`;
                 const p2 = `${pick(c.pontos.p2.g1)}, ${pick(c.pontos.p2.g2)}, ${pick(c.pontos.p2.g3)}`;
                 const p3 = `${pick(c.pontos.p3.g1)}, ${pick(c.pontos.p3.g2)}, ${pick(c.pontos.p3.g3)}`;
                 const p4 = `${pick(c.pontos.p4.g1)}, ${pick(c.pontos.p4.g2)}, ${pick(c.pontos.p4.g3)}`;
-                return [
+
+                // Monta por linhas (com linhas em branco intencionais) e normaliza:
+                let out = [
                     p1,
                     '',
                     p2,
@@ -404,7 +408,12 @@ async function processarMensagensPendentes(contato) {
                     p3,
                     '',
                     p4
-                ].join('\n');
+                ].map(v => safeStr(v)).join('\n').replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n');
+
+                // Hack anti-quebra do conector (não é helper global, fica só aqui):
+                out = '\u2063' + out; // U+2063 não aparece pro usuário
+
+                return out;
             };
 
             const composeMsg3 = () => {
@@ -422,7 +431,7 @@ async function processarMensagensPendentes(contato) {
             if (m1) await sendMessage(st.contato, m1);
 
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-            if (m2) await sendMessage(st.contato, m2);
+            if (m2) await sendMessage(st.contato, m2); // sai em UMA mensagem só, multilinha
 
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
             if (m3) await sendMessage(st.contato, m3);
