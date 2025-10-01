@@ -278,12 +278,13 @@ async function processarMensagensPendentes(contato) {
                             model: 'gpt-5',
                             input: prompt,
                             max_output_tokens: 32,
-                            // <- AQUI é o jeito novo: nada de response_format na raiz
                             text: {
                                 format: {
+                                    // <- estes dois campos aqui resolvem o erro
                                     type: 'json_schema',
+                                    name: 'Label',                 // <= ***AQUI*** (faltava)
                                     json_schema: {
-                                        name: 'Label',
+                                        name: 'Label',               // ok manter aqui também
                                         schema: {
                                             type: 'object',
                                             properties: {
@@ -305,6 +306,7 @@ async function processarMensagensPendentes(contato) {
                             validateStatus: () => true
                         }
                     );
+
 
                     // Log amigável
                     const rawText = extractTextForLog(r.data);
@@ -446,12 +448,13 @@ async function processarMensagensPendentes(contato) {
                             model: 'gpt-5',
                             input: prompt,
                             max_output_tokens: 32,
-                            // <- AQUI é o jeito novo: nada de response_format na raiz
                             text: {
                                 format: {
+                                    // <- estes dois campos aqui resolvem o erro
                                     type: 'json_schema',
+                                    name: 'Label',                 // <= ***AQUI*** (faltava)
                                     json_schema: {
-                                        name: 'Label',
+                                        name: 'Label',               // ok manter aqui também
                                         schema: {
                                             type: 'object',
                                             properties: {
