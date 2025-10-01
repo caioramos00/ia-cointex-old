@@ -390,7 +390,6 @@ async function processarMensagensPendentes(contato) {
                 return `${g1}? ${g2}… ${g3}:`;
             };
 
-            // >>> AQUI ESTÁ A MONTAGEM MULTILINHA EM UMA ÚNICA MENSAGEM <<<
             const composeMsg2 = () => {
                 const c = loadInstrucoes();
 
@@ -399,7 +398,7 @@ async function processarMensagensPendentes(contato) {
                 const p3 = `${pick(c.pontos.p3.g1)}, ${pick(c.pontos.p3.g2)}, ${pick(c.pontos.p3.g3)}`;
                 const p4 = `${pick(c.pontos.p4.g1)}, ${pick(c.pontos.p4.g2)}, ${pick(c.pontos.p4.g3)}`;
 
-                // Monta por linhas (com linhas em branco intencionais) e normaliza:
+                // 1) Montagem em UMA mensagem multilinha (linhas em branco intencionais)
                 let out = [
                     p1,
                     '',
@@ -408,10 +407,35 @@ async function processarMensagensPendentes(contato) {
                     p3,
                     '',
                     p4
-                ].map(v => safeStr(v)).join('\n').replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n');
+                ].map(v => safeStr(v)).join('\n');
 
-                // Hack anti-quebra do conector (não é helper global, fica só aqui):
-                out = '\u2063' + out; // U+2063 não aparece pro usuário
+                // 2) Normalização de quebras e remoção de excesso de linhas vazias
+                out = out.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+
+                // 3) Limite “seguro” pra evitar auto-chunking do provedor
+                //    (ajuste se seu transporte tolerar mais; 900 é conservador)
+                const MAX_SAFE = 900;
+                if (out.length > MAX_SAFE) {
+                    // Compacta: troca linhas vazias por uma só, remove vírgulas desnecessárias,
+                    // e reduz espaços múltiplos.
+                    out = out
+                        .replace(/\n\n/g, '\n')          // derruba linhas em branco duplas
+                        .replace(/,\s+/g, ', ')          // normaliza vírgulas
+                        .replace(/\s{2,}/g, ' ')         // espaços múltiplos
+                        .trim();
+
+                    // Se ainda exceder, usa bullets para juntar tópicos em menos quebras
+                    if (out.length > MAX_SAFE) {
+                        out = `• ${p1}\n• ${p2}\n• ${p3}\n• ${p4}`.trim();
+                        // Último fallback: truncar educadamente
+                        if (out.length > MAX_SAFE) {
+                            out = out.slice(0, MAX_SAFE - 20).trimEnd() + '…';
+                        }
+                    }
+                }
+
+                // 4) Hint invisível pra impedir alguns conectores de dividirem por parágrafos
+                out = '\u2063' + out; // U+2063 (Invisible Separator), não aparece pro usuário
 
                 return out;
             };
