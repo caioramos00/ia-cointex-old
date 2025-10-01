@@ -33,6 +33,38 @@ function pickLabelFromResponseData(data, allowed) {
     return m ? m[1].toLowerCase() : null;
 }
 
+function truncate(s, n = 600) {
+    const str = String(s || '');
+    return str.length > n ? str.slice(0, n) + '…[truncated]' : str;
+}
+
+function extractTextForLog(data) {
+    return (
+        (typeof data?.output_text === 'string' && data.output_text) ||
+        (typeof data?.output?.[0]?.content?.[0]?.text === 'string' && data.output[0].content[0].text) ||
+        (typeof data?.choices?.[0]?.message?.content === 'string' && data.choices[0].message.content) ||
+        (typeof data?.result === 'string' && data.result) ||
+        (typeof data === 'string' ? data : JSON.stringify(data))
+    );
+}
+
+// debug-only: heurística simples para comparar no log (NÃO usada na decisão)
+function heuristicAceite(ctxRaw = '') {
+    const s = String(ctxRaw).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+    const aceite = /(sim|ss+|claro|certo|fechad[oa]|fechou|bora|vamos|vamo|vambora|partiu|pra cima|to on|to dentro|ok(ay|ey)?|blz|beleza|show|suave|firmeza|fmz|pode ser|pdp|demoro(u)?|agora)\b/;
+    const neg = /\b(n[aã]o|nao|n|negativo|nunca|nope?)\b/;
+    if (aceite.test(s)) {
+        // negação a até ~3 tokens de distância
+        const tokens = s.split(/\s+/);
+        const ai = tokens.findIndex(t => aceite.test(' ' + t + ' '));
+        const ni = tokens.findIndex(t => neg.test(' ' + t + ' '));
+        if (ai !== -1 && ni !== -1 && Math.abs(ai - ni) <= 3) return 'recusa';
+        return 'aceite';
+    }
+    if (neg.test(s)) return 'recusa';
+    return 'duvida';
+}
+
 function ensureEstado(contato) {
     const key = safeStr(contato) || 'desconhecido';
     if (!estadoContatos[key]) {
@@ -204,26 +236,47 @@ async function processarMensagensPendentes(contato) {
 
         if (st.etapa === 'interesse:wait') {
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
+
             const contexto = (st.mensagensDesdeSolicitacao || []).join(' | ').trim();
             const apiKey = process.env.OPENAI_API_KEY;
             const prompt = promptClassificaAceite(contexto);
             let classe = 'duvida';
-            if (apiKey) {
+
+            console.log(`[${st.contato}] [LLM][interesse] ctx="${contexto}" prompt=${truncate(prompt, 800)}`);
+
+            if (!apiKey) {
+                console.warn(`[${st.contato}] [LLM][interesse] OPENAI_API_KEY ausente — usando fallback=duvida`);
+            } else {
                 try {
                     const r = await axios.post(
                         'https://api.openai.com/v1/responses',
                         { model: 'gpt-5', input: prompt, max_output_tokens: 24 },
                         { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 15000, validateStatus: () => true }
                     );
+
+                    const rawText = extractTextForLog(r.data);
+                    console.log(`[${st.contato}] [LLM][interesse] http=${r.status} body=${truncate(rawText, 800)}`);
+
                     if (r.status >= 200 && r.status < 300) {
                         const allowed = ['aceite', 'recusa', 'duvida'];
-                        const label = pickLabelFromResponseData(r.data, allowed);
-                        if (label) classe = label;
+                        const picked = pickLabelFromResponseData(r.data, allowed);
+                        console.log(`[${st.contato}] [LLM][interesse] picked=${picked || '(null)'} allowed=${allowed.join(',')}`);
+                        if (picked) classe = picked;
+                        else console.warn(`[${st.contato}] [LLM][interesse] nenhum label reconhecido — fallback=duvida`);
+                    } else {
+                        console.warn(`[${st.contato}] [LLM][interesse] status != 2xx — fallback=duvida`);
                     }
-                } catch { }
+                } catch (e) {
+                    console.warn(`[${st.contato}] [LLM][interesse] erro="${e.message || e}" — fallback=duvida`);
+                }
             }
+
+            const heur = heuristicAceite(contexto);
+            console.log(`[${st.contato}] [DEBUG][interesse] heuristica=${heur} | llm=${classe}`);
+
             st.classificacaoAceite = classe;
             console.log(`[${st.contato}] interesse.class=${classe} ctx="${contexto}"`);
+
             st.mensagensPendentes = [];
             if (classe === 'aceite') {
                 st.mensagensDesdeSolicitacao = [];
@@ -305,24 +358,44 @@ async function processarMensagensPendentes(contato) {
 
         if (st.etapa === 'instrucoes:wait') {
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
+
             const contexto = (st.mensagensDesdeSolicitacao || []).join(' | ').trim();
             const apiKey = process.env.OPENAI_API_KEY;
             const prompt = promptClassificaAceite(contexto);
             let classe = 'duvida';
-            if (apiKey) {
+
+            console.log(`[${st.contato}] [LLM][instrucoes] ctx="${contexto}" prompt=${truncate(prompt, 800)}`);
+
+            if (!apiKey) {
+                console.warn(`[${st.contato}] [LLM][instrucoes] OPENAI_API_KEY ausente — usando fallback=duvida`);
+            } else {
                 try {
                     const r = await axios.post(
                         'https://api.openai.com/v1/responses',
                         { model: 'gpt-5', input: prompt, max_output_tokens: 24 },
                         { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 15000, validateStatus: () => true }
                     );
+
+                    const rawText = extractTextForLog(r.data);
+                    console.log(`[${st.contato}] [LLM][instrucoes] http=${r.status} body=${truncate(rawText, 800)}`);
+
                     if (r.status >= 200 && r.status < 300) {
                         const allowed = ['aceite', 'recusa', 'duvida'];
-                        const label = pickLabelFromResponseData(r.data, allowed);
-                        if (label) classe = label;
+                        const picked = pickLabelFromResponseData(r.data, allowed);
+                        console.log(`[${st.contato}] [LLM][instrucoes] picked=${picked || '(null)'} allowed=${allowed.join(',')}`);
+                        if (picked) classe = picked;
+                        else console.warn(`[${st.contato}] [LLM][instrucoes] nenhum label reconhecido — fallback=duvida`);
+                    } else {
+                        console.warn(`[${st.contato}] [LLM][instrucoes] status != 2xx — fallback=duvida`);
                     }
-                } catch { }
+                } catch (e) {
+                    console.warn(`[${st.contato}] [LLM][instrucoes] erro="${e.message || e}" — fallback=duvida`);
+                }
             }
+
+            const heur = heuristicAceite(contexto);
+            console.log(`[${st.contato}] [DEBUG][instrucoes] heuristica=${heur} | llm=${classe}`);
+
             console.log(`[${st.contato}] instrucoes.class=${classe} ctx="${contexto}"`);
             st.mensagensPendentes = [];
             if (classe === 'aceite') {
@@ -332,7 +405,6 @@ async function processarMensagensPendentes(contato) {
             }
             return { ok: true, classe };
         }
-
 
         st.mensagensPendentes = [];
         return { ok: true };
