@@ -259,7 +259,7 @@ async function processarMensagensPendentes(contato) {
                 console.warn(`[${st.contato}] [LLM][interesse] OPENAI_API_KEY ausente — usando fallback=duvida`);
             } else {
                 const allowed = ['aceite', 'recusa', 'duvida'];
-                const structuredPrompt = `${prompt}\n\nRespond with only the following JSON and nothing else: {"label": "aceite" or "recusa" or "duvida"}`;
+                const structuredPrompt = `${prompt}\n\nOutput only this valid JSON format with double quotes around keys and values, nothing else: {"label": "aceite"} or {"label": "recusa"} or {"label": "duvida"}`;
 
                 const callOnce = async (maxTok, tag) => {
                     let r;
@@ -434,7 +434,7 @@ async function processarMensagensPendentes(contato) {
                 console.warn(`[${st.contato}] [LLM][instrucoes] OPENAI_API_KEY ausente — usando fallback=duvida`);
             } else {
                 const allowed = ['aceite', 'recusa', 'duvida'];
-                const structuredPrompt = `${prompt}\n\nRespond with only the following JSON and nothing else: {"label": "aceite" or "recusa" or "duvida"}`;
+                const structuredPrompt = `${prompt}\n\nOutput only this valid JSON format with double quotes around keys and values, nothing else: {"label": "aceite"} or {"label": "recusa"} or {"label": "duvida"}`;
 
                 const callOnce = async (maxTok, tag) => {
                     let r;
