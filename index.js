@@ -7,9 +7,8 @@ const path = require('path');
 require('dotenv').config();
 
 const { initDatabase } = require('./db.js');
-const { delay, gerarResposta, quebradizarTexto, enviarLinhaPorLinha, inicializarEstado, criarUsuarioDjango, processarMensagensPendentes, sendMessage, gerarSenhaAleatoria, gerarBlocoInstrucoes } = require('./bot.js');
-const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, mensagemImpulso, mensagensIntrodutorias, checklistVariacoes, mensagensPosChecklist, respostasNaoConfirmadoAcesso, respostasNaoConfirmadoConfirmacao, respostasDuvidasComuns } = require('./prompts.js');
-const { checkAuth, setupRoutes } = require('./routes.js');
+const { inicializarEstado, criarUsuarioDjango, processarMensagensPendentes } = require('./bot.js');
+const { setupRoutes } = require('./routes.js');
 
 const app = express();
 app.use(bodyParser.json());

@@ -76,7 +76,6 @@ function onlyDigits(v) {
   return String(v || '').replace(/\D/g, '');
 }
 
-// ---------- util: URLs do texto ----------
 const URL_RX = /https?:\/\/\S+/gi;
 function extractUrlsFromText(text = '') {
   const out = [];
@@ -86,7 +85,6 @@ function extractUrlsFromText(text = '') {
   return Array.from(new Set(out));
 }
 
-// ---------- util: coleta “possíveis” URLs no payload sem classificar ----------
 function harvestUrlsFromPayload(payload = {}) {
   const urls = new Set();
 
@@ -94,7 +92,6 @@ function harvestUrlsFromPayload(payload = {}) {
     if (typeof v === 'string' && /^https?:\/\//i.test(v)) urls.add(v);
   };
 
-  // campos comuns em webhooks
   tryPush(payload.url);
   tryPush(payload.mediaUrl);
   tryPush(payload.image_url);
@@ -102,7 +99,6 @@ function harvestUrlsFromPayload(payload = {}) {
   tryPush(payload?.payload?.url);
   tryPush(payload?.attachment?.payload?.url);
 
-  // ManyChat costuma enviar attachments em vários formatos
   const attachments =
     payload.attachments ||
     payload?.message?.attachments ||
@@ -119,7 +115,6 @@ function harvestUrlsFromPayload(payload = {}) {
     });
   }
 
-  // varrer superficialmente arrays/objetos de 1º nível buscando chaves “url”
   Object.values(payload || {}).forEach(v => {
     if (v && typeof v === 'object') {
       if (Array.isArray(v)) {
@@ -170,16 +165,13 @@ async function bootstrapFromManychat(
     }
   }
 
-  // ✅ criar usuário somente na PRIMEIRA mensagem do contato
   if (wasNew && phone && typeof criarUsuarioDjango === 'function') {
     try {
       await criarUsuarioDjango(idContato);
     } catch (e) {
-      // silencioso para não poluir log simplificado
     }
   }
 
-  // ❌ nada de salvarContato aqui (o handler já salva uma única vez por mensagem)
   return idContato;
 }
 
@@ -203,10 +195,8 @@ function setupRoutes(
   if (typeof criarUsuarioDjango !== 'function') {
     try { criarUsuarioDjango = require('./bot.js').criarUsuarioDjango; } catch { }
   }
-  // static
   app.use('/public', express.static(pathModule.join(__dirname, 'public')));
 
-  // ---- Auth & Admin ----
   app.get('/login', (req, res) => res.sendFile(pathModule.join(__dirname, 'public', 'login.html')));
   app.post('/login', (req, res) => {
     const { username, password } = req.body;
@@ -266,7 +256,6 @@ function setupRoutes(
     }
   });
 
-  // ---- Metrics & Data APIs ----
   app.get('/api/metrics', checkAuth, async (req, res) => {
     const client = await pool.connect();
     try {
@@ -502,7 +491,6 @@ function setupRoutes(
 
     console.log(`[${phone}] Mensagem recebida: ${textIn || '[mídia]'}`);
 
-    // Vincular subscriber_id no DB e no estado in-memory (para o sendMessage)
     if (subscriberId && phone) {
       try {
         await pool.query(

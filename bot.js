@@ -269,64 +269,81 @@ async function processarMensagensPendentes(contato) {
             if (!apiKey) {
                 console.warn(`[${st.contato}] [LLM][interesse] OPENAI_API_KEY ausente — usando fallback=duvida`);
             } else {
-                try {
-                    const allowed = ['aceite', 'recusa', 'duvida'];
+                const allowed = ['aceite', 'recusa', 'duvida'];
 
-                    const r = await axios.post(
-                        'https://api.openai.com/v1/responses',
-                        {
-                            model: 'gpt-5',
-                            input: prompt,
-                            max_output_tokens: 32,
-                            text: {
-                                format: {
-                                    type: 'json_schema',
-                                    name: 'Label',
-                                    schema: {
-                                        type: 'object',
-                                        properties: {
-                                            label: { type: 'string', enum: allowed }
-                                        },
-                                        required: ['label'],
-                                        additionalProperties: false
-                                    }
-                                }
+                const makePayload = (maxTokens) => ({
+                    model: 'gpt-5',
+                    input: prompt,
+                    temperature: 0,
+                    max_output_tokens: maxTokens,
+                    text: {
+                        format: {
+                            type: 'json_schema',
+                            name: 'Label',
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    label: { type: 'string', enum: allowed }
+                                },
+                                required: ['label'],
+                                additionalProperties: false
                             }
-                        },
-                        {
-                            headers: {
-                                Authorization: `Bearer ${apiKey}`,
-                                'Content-Type': 'application/json'
-                            },
-                            timeout: 15000,
-                            validateStatus: () => true
                         }
-                    );
+                    }
+                });
 
-                    const rawText = extractTextForLog(r.data);
-                    console.log(`[${st.contato}] [LLM][${st.etapa.split(':')[0]}] http=${r.status} body=${truncate(rawText, 800)}`);
+                const callOnce = async (maxTok, tag) => {
+                    const r = await axios.post('https://api.openai.com/v1/responses', makePayload(maxTok), {
+                        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                        timeout: 15000,
+                        validateStatus: () => true
+                    });
 
-                    if (r.status >= 200 && r.status < 300) {
-                        // 1) Tenta ler JSON estruturado do output_text
-                        let picked = null;
+                    const status = r.status;
+                    const inc = r.data?.status === 'incomplete' ? (r.data?.incomplete_details?.reason || 'unknown') : null;
+                    const usage = r.data?.usage ? JSON.stringify(r.data.usage) : '';
+                    const preview =
+                        (typeof r.data?.output?.[0]?.content?.[0]?.json !== 'undefined' ? JSON.stringify(r.data.output[0].content[0].json) : '') ||
+                        (typeof r.data?.output_text === 'string' && r.data.output_text) ||
+                        (typeof r.data?.output?.[0]?.content?.[0]?.text === 'string' && r.data.output[0].content[0].text) ||
+                        (typeof r.data?.choices?.[0]?.message?.content === 'string' && r.data.choices[0].message.content) ||
+                        (typeof r.data?.result === 'string' && r.data.result) ||
+                        '';
+
+                    console.log(`[${st.contato}] [LLM][interesse][${tag}] http=${status} incomplete=${inc || 'no'} usage=${usage} body=${truncate(preview, 800)}`);
+
+                    // fonte principal
+                    let picked = r.data?.output?.[0]?.content?.[0]?.json?.label || null;
+
+                    // tenta JSON de preview
+                    if (!picked && preview) {
                         try {
-                            const parsed = JSON.parse(rawText);
-                            if (parsed && typeof parsed.label === 'string') {
-                                picked = parsed.label.toLowerCase();
-                            }
-                        } catch (_) { /* ignora JSON inválido */ }
+                            const parsed = JSON.parse(preview);
+                            if (parsed && typeof parsed.label === 'string') picked = parsed.label;
+                        } catch { /* ignore */ }
+                    }
+                    // regex de segurança
+                    if (!picked) picked = pickLabelFromResponseData(r.data, allowed);
 
-                        // 2) Se não vier JSON legível, cai no parser “solto”
-                        if (!picked) picked = pickLabelFromResponseData(r.data, allowed);
+                    picked = picked ? String(picked).toLowerCase() : null;
+                    return { status, inc, picked };
+                };
 
-                        console.log(`[${st.contato}] [LLM][${st.etapa.split(':')[0]}] picked=${picked || '(null)'} allowed=${allowed.join(',')}`);
-                        if (picked) classe = picked;
-                        else console.warn(`[${st.contato}] [LLM][${st.etapa.split(':')[0]}] nenhum label reconhecido — fallback=duvida`);
+                try {
+                    let resp = await callOnce(128, 'try1');
+                    if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) {
+                        if (resp.inc === 'max_output_tokens' || !resp.picked) {
+                            resp = await callOnce(256, 'try2');
+                        }
+                    }
+
+                    if (resp.status >= 200 && resp.status < 300 && resp.picked) {
+                        classe = resp.picked;
                     } else {
-                        console.warn(`[${st.contato}] [LLM][${st.etapa.split(':')[0]}] status != 2xx — fallback=duvida`);
+                        console.warn(`[${st.contato}] [LLM][interesse] sem label válido — fallback=duvida`);
                     }
                 } catch (e) {
-                    console.warn(`[${st.contato}] [LLM][${st.etapa.split(':')[0]}] erro="${e.message || e}" — fallback=duvida`);
+                    console.warn(`[${st.contato}] [LLM][interesse] erro="${e.message || e}" — fallback=duvida`);
                 }
             }
 
@@ -433,68 +450,80 @@ async function processarMensagensPendentes(contato) {
             if (!apiKey) {
                 console.warn(`[${st.contato}] [LLM][instrucoes] OPENAI_API_KEY ausente — usando fallback=duvida`);
             } else {
-                try {
-                    const allowed = ['aceite', 'recusa', 'duvida'];
+                const allowed = ['aceite', 'recusa', 'duvida'];
 
-                    const r = await axios.post(
-                        'https://api.openai.com/v1/responses',
-                        {
-                            model: 'gpt-5',
-                            input: prompt,
-                            max_output_tokens: 32,
-                            text: {
-                                format: {
-                                    type: 'json_schema',
-                                    name: 'Label',
-                                    schema: {
-                                        type: 'object',
-                                        properties: {
-                                            label: { type: 'string', enum: allowed }
-                                        },
-                                        required: ['label'],
-                                        additionalProperties: false
-                                    }
-                                }
+                const makePayload = (maxTokens) => ({
+                    model: 'gpt-5',
+                    input: prompt,
+                    temperature: 0,
+                    max_output_tokens: maxTokens,
+                    text: {
+                        format: {
+                            type: 'json_schema',
+                            name: 'Label',
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    label: { type: 'string', enum: allowed }
+                                },
+                                required: ['label'],
+                                additionalProperties: false
                             }
-                        },
-                        {
-                            headers: {
-                                Authorization: `Bearer ${apiKey}`,
-                                'Content-Type': 'application/json'
-                            },
-                            timeout: 15000,
-                            validateStatus: () => true
                         }
-                    );
+                    }
+                });
 
-                    const rawText = extractTextForLog(r.data);
-                    console.log(`[${st.contato}] [LLM][${st.etapa.split(':')[0]}] http=${r.status} body=${truncate(rawText, 800)}`);
+                const callOnce = async (maxTok, tag) => {
+                    const r = await axios.post('https://api.openai.com/v1/responses', makePayload(maxTok), {
+                        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                        timeout: 15000,
+                        validateStatus: () => true
+                    });
 
-                    if (r.status >= 200 && r.status < 300) {
-                        // 1) Tenta ler JSON estruturado do output_text
-                        let picked = null;
+                    const status = r.status;
+                    const inc = r.data?.status === 'incomplete' ? (r.data?.incomplete_details?.reason || 'unknown') : null;
+                    const usage = r.data?.usage ? JSON.stringify(r.data.usage) : '';
+                    const preview =
+                        (typeof r.data?.output?.[0]?.content?.[0]?.json !== 'undefined' ? JSON.stringify(r.data.output[0].content[0].json) : '') ||
+                        (typeof r.data?.output_text === 'string' && r.data.output_text) ||
+                        (typeof r.data?.output?.[0]?.content?.[0]?.text === 'string' && r.data.output[0].content[0].text) ||
+                        (typeof r.data?.choices?.[0]?.message?.content === 'string' && r.data.choices[0].message.content) ||
+                        (typeof r.data?.result === 'string' && r.data.result) ||
+                        '';
+
+                    console.log(`[${st.contato}] [LLM][instrucoes][${tag}] http=${status} incomplete=${inc || 'no'} usage=${usage} body=${truncate(preview, 800)}`);
+
+                    let picked = r.data?.output?.[0]?.content?.[0]?.json?.label || null;
+                    if (!picked && preview) {
                         try {
-                            const parsed = JSON.parse(rawText);
-                            if (parsed && typeof parsed.label === 'string') {
-                                picked = parsed.label.toLowerCase();
-                            }
-                        } catch (_) { /* ignora JSON inválido */ }
+                            const parsed = JSON.parse(preview);
+                            if (parsed && typeof parsed.label === 'string') picked = parsed.label;
+                        } catch { /* ignore */ }
+                    }
+                    if (!picked) picked = pickLabelFromResponseData(r.data, allowed);
+                    picked = picked ? String(picked).toLowerCase() : null;
 
-                        // 2) Se não vier JSON legível, cai no parser “solto”
-                        if (!picked) picked = pickLabelFromResponseData(r.data, allowed);
+                    return { status, inc, picked };
+                };
 
-                        console.log(`[${st.contato}] [LLM][${st.etapa.split(':')[0]}] picked=${picked || '(null)'} allowed=${allowed.join(',')}`);
-                        if (picked) classe = picked;
-                        else console.warn(`[${st.contato}] [LLM][${st.etapa.split(':')[0]}] nenhum label reconhecido — fallback=duvida`);
+                try {
+                    let resp = await callOnce(128, 'try1');
+                    if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) {
+                        if (resp.inc === 'max_output_tokens' || !resp.picked) {
+                            resp = await callOnce(256, 'try2');
+                        }
+                    }
+
+                    if (resp.status >= 200 && resp.status < 300 && resp.picked) {
+                        classe = resp.picked;
                     } else {
-                        console.warn(`[${st.contato}] [LLM][${st.etapa.split(':')[0]}] status != 2xx — fallback=duvida`);
+                        console.warn(`[${st.contato}] [LLM][instrucoes] sem label válido — fallback=duvida`);
                     }
                 } catch (e) {
-                    console.warn(`[${st.contato}] [LLM][${st.etapa.split(':')[0]}] erro="${e.message || e}" — fallback=duvida`);
+                    console.warn(`[${st.contato}] [LLM][instrucoes] erro="${e.message || e}" — fallback=duvida`);
                 }
             }
 
-            // Fallback: heurística pode promover "duvida" para "aceite".
             const heur = heuristicAceite(contexto);
             console.log(`[${st.contato}] [DEBUG][instrucoes] heuristica=${heur} | llm=${classe}`);
             if (classe === 'duvida' && heur === 'aceite') {

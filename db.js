@@ -12,7 +12,6 @@ const pool = new Pool({
 async function initDatabase() {
   const client = await pool.connect();
   try {
-    // Cria a tabela se não existir (mantém o original)
     await client.query(`
       CREATE TABLE IF NOT EXISTS contatos (
         id VARCHAR(255) PRIMARY KEY,
@@ -28,7 +27,6 @@ async function initDatabase() {
     `);
     console.log('[DB] Tabela contatos criada ou já existe.');
 
-    // Adiciona colunas novas se não existirem (corrige o erro)
     await client.query(`
       ALTER TABLE contatos
       ADD COLUMN IF NOT EXISTS tid VARCHAR(255) DEFAULT '',
@@ -128,7 +126,6 @@ async function updateBotSettings(payload) {
       manychat_webhook_secret || null
     ]);
 
-    // invalidar cache para refletir imediatamente no app
     _settingsCache = null;
     _settingsCacheTs = 0;
   } finally {
