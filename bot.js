@@ -259,7 +259,7 @@ async function processarMensagensPendentes(contato) {
                 console.warn(`[${st.contato}] [LLM][interesse] OPENAI_API_KEY ausente — usando fallback=duvida`);
             } else {
                 const allowed = ['aceite', 'recusa', 'duvida'];
-                const structuredPrompt = `${prompt}\n\nOutput only the JSON: {"label": "one_of_aceite_recusa_duvida"}`;
+                const structuredPrompt = `${prompt}\n\nRespond with only the following JSON and nothing else: {"label": "aceite" or "recusa" or "duvida"}`;
 
                 const callOnce = async (maxTok, tag) => {
                     let r;
@@ -269,7 +269,8 @@ async function processarMensagensPendentes(contato) {
                             {
                                 model: 'gpt-5',
                                 input: structuredPrompt,
-                                max_output_tokens: maxTok
+                                max_output_tokens: maxTok,
+                                reasoning: { effort: 'low' }
                             },
                             {
                                 headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -304,7 +305,7 @@ async function processarMensagensPendentes(contato) {
                     let resp = await callOnce(64, 'try1');
                     if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) {
                         if (resp.incomplete === 'max_output_tokens' || !resp.picked) {
-                            resp = await callOnce(128, 'try2');
+                            resp = await callOnce(256, 'try2');
                         }
                     }
                     if (resp.status >= 200 && resp.status < 300 && resp.picked) {
@@ -420,7 +421,7 @@ async function processarMensagensPendentes(contato) {
                 console.warn(`[${st.contato}] [LLM][instrucoes] OPENAI_API_KEY ausente — usando fallback=duvida`);
             } else {
                 const allowed = ['aceite', 'recusa', 'duvida'];
-                const structuredPrompt = `${prompt}\n\nOutput only the JSON: {"label": "one_of_aceite_recusa_duvida"}`;
+                const structuredPrompt = `${prompt}\n\nRespond with only the following JSON and nothing else: {"label": "aceite" or "recusa" or "duvida"}`;
 
                 const callOnce = async (maxTok, tag) => {
                     let r;
@@ -430,7 +431,8 @@ async function processarMensagensPendentes(contato) {
                             {
                                 model: 'gpt-5',
                                 input: structuredPrompt,
-                                max_output_tokens: maxTok
+                                max_output_tokens: maxTok,
+                                reasoning: { effort: 'low' }
                             },
                             {
                                 headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -465,7 +467,7 @@ async function processarMensagensPendentes(contato) {
                     let resp = await callOnce(64, 'try1');
                     if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) {
                         if (resp.incomplete === 'max_output_tokens' || !resp.picked) {
-                            resp = await callOnce(128, 'try2');
+                            resp = await callOnce(256, 'try2');
                         }
                     }
                     if (resp.status >= 200 && resp.status < 300 && resp.picked) {
