@@ -2,7 +2,7 @@ const express = require('express');
 const axios = require('axios');
 
 const { pool } = require('./db.js');
-const { delay, sendMessage, retomarEnvio, decidirOptLabel } = require('./bot.js');
+const { delay, sendMessage, retomarEnvio, decidirOptLabel, setEtapa: setEtapaBot } = require('./bot.js');
 const { getBotSettings, updateBotSettings, getContatoByPhone } = require('./db.js');
 
 const LANDING_URL = 'https://grupo-whatsapp-trampos-lara-2025.onrender.com';
@@ -586,5 +586,45 @@ function setupRoutes(
     return res.status(200).json({ ok: true });
   });
 }
+
+app.post('/admin/set-etapa', checkAuth, express.json(), express.urlencoded({ extended: true }), async (req, res) => {
+  try {
+    const contato = (req.body.contato || req.query.contato || '').replace(/\D/g, '');
+    const etapa = (req.body.etapa || req.query.etapa || '').trim();
+
+    if (!contato) return res.status(400).json({ ok: false, error: 'contato obrigatório' });
+    if (!etapa) return res.status(400).json({ ok: false, error: 'etapa obrigatória' });
+
+    const opts = {
+      autoCreateUser: req.body.autoCreateUser === '1' || req.query.autoCreateUser === '1',
+      clearCredenciais: req.body.clearCredenciais === '1' || req.query.clearCredenciais === '1',
+    };
+
+    if (req.body.seedEmail || req.body.seedPassword || req.body.seedLoginUrl) {
+      opts.seedCredenciais = {
+        email: req.body.seedEmail || '',
+        password: req.body.seedPassword || '',
+        login_url: req.body.seedLoginUrl || '',
+      };
+    }
+
+    const out = await setEtapaBot(contato, etapa, opts);
+
+    try {
+      await pool.query('UPDATE contatos SET etapa_atual = $2 WHERE id = $1', [contato, etapa]);
+    } catch (e) {
+      console.warn(`[SetEtapa] falha ao atualizar DB: ${e.message}`);
+    }
+
+    const runNow = req.body.run === '1' || req.query.run === '1';
+    if (runNow && typeof processarMensagensPendentes === 'function') {
+      await processarMensagensPendentes(contato);
+    }
+
+    res.json({ ok: true, ...out });
+  } catch (e) {
+    res.status(400).json({ ok: false, error: e.message || String(e) });
+  }
+});
 
 module.exports = { checkAuth, setupRoutes };
