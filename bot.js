@@ -185,47 +185,47 @@ async function criarUsuarioDjango(contato) {
   }
 }
 
-async function sendImage(contato, imageUrl) {
-    await extraGlobalDelay();
-    const url = safeStr(imageUrl).trim();
-    if (!url) return { ok: false, reason: 'empty-image-url' };
+async function sendImage(contato, imageUrl, caption) {
+  await extraGlobalDelay();
+  const url = safeStr(imageUrl).trim();
+  if (!url) return { ok: false, reason: 'empty-image-url' };
 
-    try {
-        const { mod, settings } = await getActiveTransport();
-        const provider = mod?.name || 'unknown';
+  try {
+    const { mod, settings } = await getActiveTransport();
+    const provider = mod?.name || 'unknown';
 
-        if (provider === 'manychat') {
-            let subscriberId = null;
-            try {
-                const c = await getContatoByPhone(contato);
-                subscriberId = c?.manychat_subscriber_id || c?.subscriber_id || null;
-            } catch { }
+    if (provider === 'manychat') {
+      let subscriberId = null;
+      try {
+        const c = await getContatoByPhone(contato);
+        subscriberId = c?.manychat_subscriber_id || c?.subscriber_id || null;
+      } catch {}
 
-            if (!subscriberId) {
-                const st = ensureEstado(contato);
-                if (st.manychat_subscriber_id) subscriberId = st.manychat_subscriber_id;
-            }
-            if (!subscriberId) {
-                console.log(`[${contato}] envio=fail provider=manychat reason=no-subscriber-id image="${url}"`);
-                return { ok: false, reason: 'no-subscriber-id' };
-            }
+      if (!subscriberId) {
+        const st = ensureEstado(contato);
+        if (st.manychat_subscriber_id) subscriberId = st.manychat_subscriber_id;
+      }
+      if (!subscriberId) {
+        console.log(`[${contato}] envio=fail provider=manychat reason=no-subscriber-id image="${url}"`);
+        return { ok: false, reason: 'no-subscriber-id' };
+      }
 
-            if (typeof mod.sendImage === 'function') {
-                await mod.sendImage({ subscriberId, imageUrl: url }, settings);
-                console.log(`[${contato}] envio=ok provider=manychat image="${url}"`);
-                return { ok: true, provider };
-            } else {
-                console.log(`[${contato}] envio=fail provider=manychat reason=no-sendImage image="${url}"`);
-                return { ok: false, reason: 'no-sendImage' };
-            }
-        }
-
-        console.log(`[${contato}] envio=fail provider=${provider} reason=unsupported image="${url}"`);
-        return { ok: false, reason: 'unsupported' };
-    } catch (e) {
-        console.log(`[${contato}] envio=fail provider=unknown reason="${e.message}" image="${url}"`);
-        return { ok: false, error: e.message };
+      if (typeof mod.sendImage === 'function') {
+        await mod.sendImage({ subscriberId, imageUrl: url, caption }, settings);
+        console.log(`[${contato}] envio=ok provider=manychat image="${url}"`);
+        return { ok: true, provider };
+      } else {
+        console.log(`[${contato}] envio=fail provider=manychat reason=no-sendImage image="${url}"`);
+        return { ok: false, reason: 'no-sendImage' };
+      }
     }
+
+    console.log(`[${contato}] envio=fail provider=${provider} reason=unsupported image="${url}"`);
+    return { ok: false, reason: 'unsupported' };
+  } catch (e) {
+    console.log(`[${contato}] envio=fail provider=unknown reason="${e.message}" image="${url}"`);
+    return { ok: false, error: e.message };
+  }
 }
 
 const sentHashesGlobal = new Set();

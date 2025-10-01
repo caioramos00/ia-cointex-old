@@ -624,6 +624,21 @@ function setupRoutes(
       res.status(400).json({ ok: false, error: e.message || String(e) });
     }
   });
+  app.post('/admin/test-image', checkAuth, express.json(), async (req, res) => {
+    try {
+      const { phone, url, caption } = req.body || {};
+      const id = onlyDigits(phone);
+      if (!id || !url) return res.status(400).json({ ok: false, error: 'Informe phone e url' });
+
+      if (!estado[id]) inicializarEstado(id, '', 'Orgânico');
+
+      const { sendImage } = require('./bot.js');
+      const r = await sendImage(id, url, caption);
+      return res.json({ ok: true, result: r });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  });
 }
 
 module.exports = { checkAuth, setupRoutes };
