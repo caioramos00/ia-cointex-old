@@ -391,7 +391,7 @@ async function processarMensagensPendentes(contato) {
                 const p2 = `• ${pick(c.pontos.p2.g1)}, ${pick(c.pontos.p2.g2)}, ${pick(c.pontos.p2.g3)}`;
                 const p3 = `• ${pick(c.pontos.p3.g1)}, ${pick(c.pontos.p3.g2)}, ${pick(c.pontos.p3.g3)}`;
                 const p4 = `• ${pick(c.pontos.p4.g1)}, ${pick(c.pontos.p4.g2)}, ${pick(c.pontos.p4.g3)}`;
-                return [p1, p2, p3, p4].join('\n');
+                return [p1, p2, p3, p4].join('\u2028');
             };
             const composeMsg3 = () => {
                 const c = loadInstrucoes();
@@ -403,10 +403,11 @@ async function processarMensagensPendentes(contato) {
             const m1 = composeMsg1();
             const m2 = composeMsg2();
             const m3 = composeMsg3();
-            const blocoUnico = [m1, m2, m3].filter(Boolean).join('\n\n');
+            const blocoUnico = [m1, m2, m3].filter(Boolean).join('\u2028\u2028');
 
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-            if (blocoUnico) await sendMessage(st.contato, blocoUnico);
+            const blocoUnicoSingle = blocoUnico.replace(/\r?\n/g, '\u2028');
+            if (blocoUnicoSingle) await sendMessage(st.contato, blocoUnicoSingle);
 
             st.mensagensPendentes = [];
             st.mensagensDesdeSolicitacao = [];
