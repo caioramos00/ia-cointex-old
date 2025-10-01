@@ -293,11 +293,77 @@ async function processarMensagensPendentes(contato) {
                 });
 
                 const callOnce = async (maxTok, tag) => {
-                    const r = await axios.post('https://api.openai.com/v1/responses', makePayload(maxTok), {
-                        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-                        timeout: 15000,
-                        validateStatus: () => true
-                    });
+                    try {
+                        const allowed = ['aceite', 'recusa', 'duvida'];
+
+                        const r = await axios.post(
+                            'https://api.openai.com/v1/responses',
+                            {
+                                model: 'gpt-5',
+                                input: prompt,
+                                max_output_tokens: 32,
+                                // >>> CORREÇÃO AQUI: formato novo direto em text.format <<<
+                                text: {
+                                    format: {
+                                        type: 'json_schema',
+                                        name: 'Label',
+                                        schema: {
+                                            type: 'object',
+                                            properties: {
+                                                label: { type: 'string', enum: allowed }
+                                            },
+                                            required: ['label'],
+                                            additionalProperties: false
+                                        }
+                                    }
+                                }
+                            },
+                            {
+                                headers: {
+                                    Authorization: `Bearer ${apiKey}`,
+                                    'Content-Type': 'application/json'
+                                },
+                                timeout: 15000,
+                                validateStatus: () => true
+                            }
+                        );
+
+                        // Log amigável do corpo (pode não haver output_text quando usar json_schema)
+                        const rawText = extractTextForLog(r.data);
+                        const usage = r.data?.usage ? JSON.stringify(r.data.usage) : '';
+                        const incomplete = r.data?.status === 'incomplete' ? 'yes' : 'no';
+                        console.log(`[${st.contato}] [LLM][interesse] http=${r.status} incomplete=${incomplete} usage=${usage} body=${truncate(rawText, 800)}`);
+
+                        if (r.status >= 200 && r.status < 300) {
+                            // 1) PRIORITÁRIO: ler JSON estruturado do caminho oficial
+                            let picked = r?.data?.output?.[0]?.content?.[0]?.json?.label;
+                            if (typeof picked === 'string') picked = picked.toLowerCase();
+
+                            // 2) Se não vier no content.json, tenta parsear o rawText (caso o provedor serialize o json como texto)
+                            if (!picked) {
+                                try {
+                                    const parsed = JSON.parse(rawText);
+                                    if (parsed && typeof parsed.label === 'string') {
+                                        picked = parsed.label.toLowerCase();
+                                    }
+                                } catch (_) { /* ignora */ }
+                            }
+
+                            // 3) Última tentativa: regex solta em qualquer campo textual
+                            if (!picked) picked = pickLabelFromResponseData(r.data, allowed);
+
+                            console.log(`[${st.contato}] [LLM][interesse] picked=${picked || '(null)'} allowed=${allowed.join(',')}`);
+                            if (picked) classe = picked;
+                            else console.warn(`[${st.contato}] [LLM][interesse] sem label válido — fallback=duvida`);
+                        } else {
+                            const emsg = r?.data?.error?.message || `HTTP ${r.status}`;
+                            console.warn(`[${st.contato}] [LLM][interesse] status != 2xx (${emsg}) — fallback=duvida`);
+                        }
+                    } catch (e) {
+                        console.warn(
+                            `[${st.contato}] [LLM][interesse] erro="${e.message || e}" — fallback=duvida`
+                        );
+                    }
 
                     const status = r.status;
                     const inc = r.data?.status === 'incomplete' ? (r.data?.incomplete_details?.reason || 'unknown') : null;
@@ -474,11 +540,77 @@ async function processarMensagensPendentes(contato) {
                 });
 
                 const callOnce = async (maxTok, tag) => {
-                    const r = await axios.post('https://api.openai.com/v1/responses', makePayload(maxTok), {
-                        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-                        timeout: 15000,
-                        validateStatus: () => true
-                    });
+                    try {
+                        const allowed = ['aceite', 'recusa', 'duvida'];
+
+                        const r = await axios.post(
+                            'https://api.openai.com/v1/responses',
+                            {
+                                model: 'gpt-5',
+                                input: prompt,
+                                max_output_tokens: 32,
+                                // >>> CORREÇÃO AQUI: formato novo direto em text.format <<<
+                                text: {
+                                    format: {
+                                        type: 'json_schema',
+                                        name: 'Label',
+                                        schema: {
+                                            type: 'object',
+                                            properties: {
+                                                label: { type: 'string', enum: allowed }
+                                            },
+                                            required: ['label'],
+                                            additionalProperties: false
+                                        }
+                                    }
+                                }
+                            },
+                            {
+                                headers: {
+                                    Authorization: `Bearer ${apiKey}`,
+                                    'Content-Type': 'application/json'
+                                },
+                                timeout: 15000,
+                                validateStatus: () => true
+                            }
+                        );
+
+                        // Log amigável do corpo (pode não haver output_text quando usar json_schema)
+                        const rawText = extractTextForLog(r.data);
+                        const usage = r.data?.usage ? JSON.stringify(r.data.usage) : '';
+                        const incomplete = r.data?.status === 'incomplete' ? 'yes' : 'no';
+                        console.log(`[${st.contato}] [LLM][interesse] http=${r.status} incomplete=${incomplete} usage=${usage} body=${truncate(rawText, 800)}`);
+
+                        if (r.status >= 200 && r.status < 300) {
+                            // 1) PRIORITÁRIO: ler JSON estruturado do caminho oficial
+                            let picked = r?.data?.output?.[0]?.content?.[0]?.json?.label;
+                            if (typeof picked === 'string') picked = picked.toLowerCase();
+
+                            // 2) Se não vier no content.json, tenta parsear o rawText (caso o provedor serialize o json como texto)
+                            if (!picked) {
+                                try {
+                                    const parsed = JSON.parse(rawText);
+                                    if (parsed && typeof parsed.label === 'string') {
+                                        picked = parsed.label.toLowerCase();
+                                    }
+                                } catch (_) { /* ignora */ }
+                            }
+
+                            // 3) Última tentativa: regex solta em qualquer campo textual
+                            if (!picked) picked = pickLabelFromResponseData(r.data, allowed);
+
+                            console.log(`[${st.contato}] [LLM][interesse] picked=${picked || '(null)'} allowed=${allowed.join(',')}`);
+                            if (picked) classe = picked;
+                            else console.warn(`[${st.contato}] [LLM][interesse] sem label válido — fallback=duvida`);
+                        } else {
+                            const emsg = r?.data?.error?.message || `HTTP ${r.status}`;
+                            console.warn(`[${st.contato}] [LLM][interesse] status != 2xx (${emsg}) — fallback=duvida`);
+                        }
+                    } catch (e) {
+                        console.warn(
+                            `[${st.contato}] [LLM][interesse] erro="${e.message || e}" — fallback=duvida`
+                        );
+                    }
 
                     const status = r.status;
                     const inc = r.data?.status === 'incomplete' ? (r.data?.incomplete_details?.reason || 'unknown') : null;
