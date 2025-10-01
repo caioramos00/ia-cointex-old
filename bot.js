@@ -20,17 +20,39 @@ const BETWEEN_MAX_MS = 16000;
 function delayRange(minMs, maxMs) { const d = Math.floor(minMs + Math.random() * (maxMs - minMs)); return delay(d); }
 
 function pickLabelFromResponseData(data, allowed) {
-    let txt =
-        (typeof data?.output_text === 'string' && data.output_text) ||
-        (typeof data?.output?.[0]?.content?.[0]?.text === 'string' && data.output[0].content[0].text) ||
-        (typeof data?.choices?.[0]?.message?.content === 'string' && data.choices[0].message.content) ||
-        (typeof data?.result === 'string' && data.result) ||
+    const S = new Set((allowed || []).map(s => String(s).toLowerCase()));
+
+    // 1) caminho JSON nativo (Responses API com response_format=json_schema)
+    let label =
+        data?.output?.[0]?.content?.[0]?.json?.label ??
+        data?.output?.[0]?.content?.[0]?.text ??
+        data?.choices?.[0]?.message?.content ??
+        data?.result ??
+        data?.output_text ??
         (typeof data === 'string' ? data : '');
-    if (!txt) txt = JSON.stringify(data || {});
-    const lowered = String(txt).trim().toLowerCase();
-    const rx = new RegExp(`\\b(${allowed.join('|')})\\b`, 'i');
-    const m = rx.exec(lowered);
-    return m ? m[1].toLowerCase() : null;
+
+    // 2) se vier como string, tentar fazer parse de JSON
+    if (typeof label === 'string') {
+        const raw = label.trim();
+        if (raw.startsWith('{') || raw.startsWith('[')) {
+            try {
+                const parsed = JSON.parse(raw);
+                if (parsed && typeof parsed.label === 'string') label = parsed.label;
+            } catch {
+                // segue o baile; vamos tentar regex mais abaixo
+            }
+        }
+    }
+
+    // 3) se ainda for texto livre, extrair a 1ª label permitida por regex
+    if (typeof label === 'string') {
+        const rx = new RegExp(`\\b(${Array.from(S).join('|')})\\b`, 'i');
+        const m = rx.exec(label.toLowerCase());
+        if (m) label = m[1];
+    }
+
+    label = String(label || '').trim().toLowerCase();
+    return S.has(label) ? label : null;
 }
 
 function truncate(s, n = 600) {
@@ -248,17 +270,38 @@ async function processarMensagensPendentes(contato) {
                 console.warn(`[${st.contato}] [LLM][interesse] OPENAI_API_KEY ausente — usando fallback=duvida`);
             } else {
                 try {
+                    const allowed = ['aceite', 'recusa', 'duvida'];
                     const r = await axios.post(
                         'https://api.openai.com/v1/responses',
-                        { model: 'gpt-5', input: prompt, max_output_tokens: 24 },
-                        { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 15000, validateStatus: () => true }
+                        {
+                            model: 'gpt-5',
+                            input: prompt + '\nResponda estritamente como JSON no formato {"label":"<uma das opções>"}',
+                            max_output_tokens: 32,
+                            response_format: {
+                                type: 'json_schema',
+                                json_schema: {
+                                    name: 'Label',
+                                    schema: {
+                                        type: 'object',
+                                        properties: {
+                                            label: { type: 'string', enum: allowed }
+                                        },
+                                        required: ['label'],
+                                        additionalProperties: false
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                            timeout: 15000,
+                            validateStatus: () => true
+                        }
                     );
 
-                    const rawText = extractTextForLog(r.data);
-                    console.log(`[${st.contato}] [LLM][interesse] http=${r.status} body=${truncate(rawText, 800)}`);
+                    console.log(`[${st.contato}] [LLM][interesse] http=${r.status} body=${truncate(JSON.stringify(r.data), 800)}`);
 
                     if (r.status >= 200 && r.status < 300) {
-                        const allowed = ['aceite', 'recusa', 'duvida'];
                         const picked = pickLabelFromResponseData(r.data, allowed);
                         console.log(`[${st.contato}] [LLM][interesse] picked=${picked || '(null)'} allowed=${allowed.join(',')}`);
                         if (picked) classe = picked;
@@ -271,8 +314,13 @@ async function processarMensagensPendentes(contato) {
                 }
             }
 
+            // Fallback: heurística pode promover "duvida" para "aceite" quando claro.
             const heur = heuristicAceite(contexto);
             console.log(`[${st.contato}] [DEBUG][interesse] heuristica=${heur} | llm=${classe}`);
+            if (classe === 'duvida' && heur === 'aceite') {
+                console.log(`[${st.contato}] [LLM][interesse] usando fallback heurístico: aceite`);
+                classe = 'aceite';
+            }
 
             st.classificacaoAceite = classe;
             console.log(`[${st.contato}] interesse.class=${classe} ctx="${contexto}"`);
@@ -370,17 +418,38 @@ async function processarMensagensPendentes(contato) {
                 console.warn(`[${st.contato}] [LLM][instrucoes] OPENAI_API_KEY ausente — usando fallback=duvida`);
             } else {
                 try {
+                    const allowed = ['aceite', 'recusa', 'duvida'];
                     const r = await axios.post(
                         'https://api.openai.com/v1/responses',
-                        { model: 'gpt-5', input: prompt, max_output_tokens: 24 },
-                        { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 15000, validateStatus: () => true }
+                        {
+                            model: 'gpt-5',
+                            input: prompt + '\nResponda estritamente como JSON no formato {"label":"<uma das opções>"}',
+                            max_output_tokens: 32,
+                            response_format: {
+                                type: 'json_schema',
+                                json_schema: {
+                                    name: 'Label',
+                                    schema: {
+                                        type: 'object',
+                                        properties: {
+                                            label: { type: 'string', enum: allowed }
+                                        },
+                                        required: ['label'],
+                                        additionalProperties: false
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                            timeout: 15000,
+                            validateStatus: () => true
+                        }
                     );
 
-                    const rawText = extractTextForLog(r.data);
-                    console.log(`[${st.contato}] [LLM][instrucoes] http=${r.status} body=${truncate(rawText, 800)}`);
+                    console.log(`[${st.contato}] [LLM][instrucoes] http=${r.status} body=${truncate(JSON.stringify(r.data), 800)}`);
 
                     if (r.status >= 200 && r.status < 300) {
-                        const allowed = ['aceite', 'recusa', 'duvida'];
                         const picked = pickLabelFromResponseData(r.data, allowed);
                         console.log(`[${st.contato}] [LLM][instrucoes] picked=${picked || '(null)'} allowed=${allowed.join(',')}`);
                         if (picked) classe = picked;
@@ -393,8 +462,13 @@ async function processarMensagensPendentes(contato) {
                 }
             }
 
+            // Fallback: heurística pode promover "duvida" para "aceite".
             const heur = heuristicAceite(contexto);
             console.log(`[${st.contato}] [DEBUG][instrucoes] heuristica=${heur} | llm=${classe}`);
+            if (classe === 'duvida' && heur === 'aceite') {
+                console.log(`[${st.contato}] [LLM][instrucoes] usando fallback heurístico: aceite`);
+                classe = 'aceite';
+            }
 
             console.log(`[${st.contato}] instrucoes.class=${classe} ctx="${contexto}"`);
             st.mensagensPendentes = [];
