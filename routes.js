@@ -513,7 +513,6 @@ function setupRoutes(
           inicializarEstado(phone, '', 'Orgânico');
         }
         estado[phone].manychat_subscriber_id = Number(subscriberId);
-        console.log(`[${phone}] ManyChat vinculado (subscriber_id=${subscriberId})`);
       } catch (e) {
         console.warn(`[${phone}] Falha ao vincular subscriber_id: ${e.message}`);
       }

@@ -16,10 +16,7 @@ const delay = (ms) => new Promise(r => setTimeout(r, ms));
 const FIRST_REPLY_DELAY_MS = 15000;
 const BETWEEN_MIN_MS = 12000;
 const BETWEEN_MAX_MS = 16000;
-function delayRange(minMs, maxMs) {
-  const d = Math.floor(minMs + Math.random() * (maxMs - minMs));
-  return delay(d);
-}
+function delayRange(minMs, maxMs) { const d = Math.floor(minMs + Math.random() * (maxMs - minMs)); return delay(d); }
 
 function ensureEstado(contato) {
   const key = safeStr(contato) || 'desconhecido';
@@ -35,6 +32,7 @@ function ensureEstado(contato) {
       tid: '',
       click_type: 'Orgânico',
       sentHashes: new Set(),
+      classificacaoAceite: null,
     };
   } else {
     estadoContatos[key].updatedAt = Date.now();
@@ -90,29 +88,52 @@ async function criarUsuarioDjango(contato) {
 }
 
 const sentHashesGlobal = new Set();
-function hashText(s) {
-  let h = 0, i, chr;
-  const str = String(s);
-  if (str.length === 0) return '0';
-  for (i = 0; i < str.length; i++) {
-    chr = str.charCodeAt(i);
-    h = ((h << 5) - h) + chr;
-    h |= 0;
+function hashText(s) { let h = 0, i, chr; const str = String(s); if (str.length === 0) return '0'; for (i = 0; i < str.length; i++) { chr = str.charCodeAt(i); h = ((h << 5) - h) + chr; h |= 0; } return String(h); }
+function chooseUnique(generator, st) { const maxTries = 200; for (let i = 0; i < maxTries; i++) { const text = generator(); const h = hashText(text); if (!sentHashesGlobal.has(h) && !st.sentHashes.has(h)) { sentHashesGlobal.add(h); st.sentHashes.add(h); return text; } } return null; }
+
+function stripDiacritics(s) { return s.normalize('NFD').replace(/\p{Diacritic}/gu, ''); }
+function normalizeText(s) { return stripDiacritics(String(s || '').toLowerCase()).replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim(); }
+function squashRepeats(s) { return s.replace(/(.)\1{2,}/g, '$1$1'); }
+
+function classifyAceiteFromContext(contextoRaw) {
+  const ctx = squashRepeats(normalizeText(contextoRaw || ''));
+  if (!ctx) return 'duvida';
+  const tokens = ctx.split(/\s+/);
+  const has = (rx) => rx.test(ctx);
+
+  const aceiteTerms = [
+    /\bsi+m+\b/, /\bss+\b/, /\bclaro\b/, /\bcerto\b/, /\bfechad[oa]\b/, /\bfechou\b/,
+    /\bbora\b/, /\b(vamo|vamos|vambora)\b/, /\bpartiu\b/, /\bpra cima\b/,
+    /\bto? (dentro|on)\b/, /\bt[oô] dentro\b/, /\bt[oô] on\b/,
+    /\bok(ay|ey)?\b/, /\bblz\b/, /\bbele(z|s)a?\b/, /\bshow\b/, /\bsuave\b/, /\bfirmeza|fmz\b/,
+    /\bpode ser\b/, /\bpode pa\b/, /\bpdp\b/, /\bdemoro(u)?\b/, /\bcuida\b/, /\bagora\b/
+  ];
+  const negTerms = [/\bnao?\b/, /\bn\b/, /\bnegativo\b/, /\bnunca\b/, /\bnop(e)?\b/];
+  const duvidaTerms = [/\bcomo\b/, /\bfunciona\b/, /\bseguro\b/, /\bque trampo\b/, /\bqual\b/, /\bonde\b/, /\bquando\b/, /\blink\b/, /\bajuda\b/, /\bduvida\b/, /\b?\b/];
+
+  const indicesAceite = [];
+  aceiteTerms.forEach(rx => { let m; const r = new RegExp(rx, 'g'); while ((m = r.exec(ctx)) !== null) indicesAceite.push(m.index); });
+
+  if (indicesAceite.length) {
+    let hasNegNear = false;
+    negTerms.forEach(nrx => {
+      let m; const r = new RegExp(nrx, 'g');
+      while ((m = r.exec(ctx)) !== null) {
+        const before = ctx.slice(0, m.index).split(/\s+/).length;
+        indicesAceite.forEach(ai => {
+          const aBefore = ctx.slice(0, ai).split(/\s+/).length;
+          const dist = Math.abs(before - aBefore);
+          if (dist <= 3) hasNegNear = true;
+        });
+      }
+    });
+    if (hasNegNear) return 'recusa';
+    return 'aceite';
   }
-  return String(h);
-}
-function chooseUnique(generator, st) {
-  const maxTries = 200;
-  for (let i = 0; i < maxTries; i++) {
-    const text = generator();
-    const h = hashText(text);
-    if (!sentHashesGlobal.has(h) && !st.sentHashes.has(h)) {
-      sentHashesGlobal.add(h);
-      st.sentHashes.add(h);
-      return text;
-    }
-  }
-  return null;
+
+  if (duvidaTerms.some(rx => has(rx))) return 'duvida';
+  if (negTerms.some(rx => has(rx))) return 'recusa';
+  return 'duvida';
 }
 
 async function handleIncomingNormalizedMessage(normalized) {
@@ -156,29 +177,13 @@ async function processarMensagensPendentes(contato) {
           if (!parsed?.msg2?.grupo1?.length || !parsed?.msg2?.grupo2?.length || !parsed?.msg2?.grupo3?.length) throw new Error('content/abertura.json incompleto: msg2.* ausente');
           aberturaData = parsed;
         } catch {
-          aberturaData = {
-            msg1: { grupo1: ['salve'], grupo2: ['tô precisando de alguém pro trampo agora'], grupo3: ['tá disponível?'] },
-            msg2: { grupo1: ['nem liga pro nome desse whats,'], grupo2: ['número empresarial q usamos pros trampo'], grupo3: ['pode salvar como "Ryan"'] }
-          };
+          aberturaData = { msg1: { grupo1: ['salve'], grupo2: ['tô precisando de alguém pro trampo agora'], grupo3: ['tá disponível?'] }, msg2: { grupo1: ['nem liga pro nome desse whats,'], grupo2: ['número empresarial q usamos pros trampo'], grupo3: ['pode salvar como "Ryan"'] } };
         }
         return aberturaData;
       };
       const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
-      const composeAberturaMsg1 = () => {
-        const c = loadAbertura();
-        const g1 = pick(c.msg1.grupo1);
-        const g2 = pick(c.msg1.grupo2);
-        const g3 = pick(c.msg1.grupo3);
-        return [g1, g2, g3].filter(Boolean).join(', ');
-      };
-      const composeAberturaMsg2 = () => {
-        const c = loadAbertura();
-        const g1 = pick(c.msg2.grupo1);
-        const g2 = pick(c.msg2.grupo2);
-        const g3 = pick(c.msg2.grupo3);
-        const head = [g1, g2].filter(Boolean).join(' ');
-        return [head, g3].filter(Boolean).join(', ');
-      };
+      const composeAberturaMsg1 = () => { const c = loadAbertura(); const g1 = pick(c.msg1.grupo1); const g2 = pick(c.msg1.grupo2); const g3 = pick(c.msg1.grupo3); return [g1, g2, g3].filter(Boolean).join(', '); };
+      const composeAberturaMsg2 = () => { const c = loadAbertura(); const g1 = pick(c.msg2.grupo1); const g2 = pick(c.msg2.grupo2); const g3 = pick(c.msg2.grupo3); const head = [g1, g2].filter(Boolean).join(' '); return [head, g3].filter(Boolean).join(', '); };
 
       await delay(FIRST_REPLY_DELAY_MS);
 
@@ -190,15 +195,14 @@ async function processarMensagensPendentes(contato) {
       if (m2) await sendMessage(st.contato, m2);
 
       st.mensagensPendentes = [];
+      st.mensagensDesdeSolicitacao = [];
       st.etapa = 'abertura:wait';
       console.log(`[${st.contato}] etapa->${st.etapa}`);
       return { ok: true };
     }
 
     if (st.etapa === 'abertura:wait') {
-      if (st.mensagensPendentes.length === 0) {
-        return { ok: true, noop: 'waiting-user' };
-      }
+      if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
 
       const interessePath = path.join(__dirname, 'content', 'interesse.json');
       let interesseData = null;
@@ -215,23 +219,30 @@ async function processarMensagensPendentes(contato) {
         return interesseData;
       };
       const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
-      const composeInteresseMsg = () => {
-        const c = loadInteresse();
-        const g1 = pick(c.msg.g1);
-        const g2 = pick(c.msg.g2);
-        const g3 = pick(c.msg.g3);
-        const g4 = pick(c.msg.g4);
-        const g5 = pick(c.msg.g5);
-        return `${[g1, g2].filter(Boolean).join(', ')}... ${g3}, ${g4}, ${g5}`.replace(/\s+,/g, ',');
-      };
+      const composeInteresseMsg = () => { const c = loadInteresse(); const g1 = pick(c.msg.g1); const g2 = pick(c.msg.g2); const g3 = pick(c.msg.g3); const g4 = pick(c.msg.g4); const g5 = pick(c.msg.g5); return `${[g1, g2].filter(Boolean).join(', ')}... ${g3}, ${g4}, ${g5}`.replace(/\s+,/g, ','); };
 
       const mi = chooseUnique(composeInteresseMsg, st) || composeInteresseMsg();
+      await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
       if (mi) await sendMessage(st.contato, mi);
 
       st.mensagensPendentes = [];
-      st.etapa = 'interesse:done';
+      st.mensagensDesdeSolicitacao = [];
+      st.etapa = 'interesse:wait';
       console.log(`[${st.contato}] etapa->${st.etapa}`);
       return { ok: true };
+    }
+
+    if (st.etapa === 'interesse:wait') {
+      if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
+      const contexto = (st.mensagensDesdeSolicitacao || []).join('\n').trim();
+      const classe = classifyAceiteFromContext(contexto);
+      st.classificacaoAceite = classe;
+      console.log(`[${st.contato}] interesse.class=${classe} ctx="${contexto}"`);
+      st.mensagensPendentes = [];
+      st.mensagensDesdeSolicitacao = [];
+      st.etapa = 'interesse:classified';
+      console.log(`[${st.contato}] etapa->${st.etapa}`);
+      return { ok: true, classe };
     }
 
     st.mensagensPendentes = [];
