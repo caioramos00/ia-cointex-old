@@ -465,7 +465,7 @@ async function processarMensagensPendentes(contato) {
                 const p2 = `${pick(c.pontos.p2.g1)}, ${pick(c.pontos.p2.g2)}, ${pick(c.pontos.p2.g3)}`;
                 const p3 = `${pick(c.pontos.p3.g1)}, ${pick(c.pontos.p3.g2)}, ${pick(c.pontos.p3.g3)}`;
                 const p4 = `${pick(c.pontos.p4.g1)}, ${pick(c.pontos.p4.g2)}, ${pick(c.pontos.p4.g3)}`;
-                return [p1, p2, p3, p4].join('\n\n');
+                return [p1, p2, p3, p4].join('\n');
             };
             const composeMsg3 = () => {
                 const c = loadInstrucoes();
