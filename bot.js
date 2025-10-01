@@ -259,6 +259,7 @@ async function processarMensagensPendentes(contato) {
                 console.warn(`[${st.contato}] [LLM][interesse] OPENAI_API_KEY ausente — usando fallback=duvida`);
             } else {
                 const allowed = ['aceite', 'recusa', 'duvida'];
+                const structuredPrompt = `${prompt}\n\nOutput only the JSON: {"label": "one_of_aceite_recusa_duvida"}`;
 
                 const callOnce = async (maxTok, tag) => {
                     let r;
@@ -267,21 +268,8 @@ async function processarMensagensPendentes(contato) {
                             'https://api.openai.com/v1/responses',
                             {
                                 model: 'gpt-5',
-                                input: prompt,
-                                temperature: 0,
-                                max_output_tokens: maxTok,
-                                text: {
-                                    format: {
-                                        type: 'json_schema',
-                                        name: 'Label',
-                                        schema: {
-                                            type: 'object',
-                                            properties: { label: { type: 'string', enum: allowed } },
-                                            required: ['label'],
-                                            additionalProperties: false
-                                        }
-                                    }
-                                }
+                                input: structuredPrompt,
+                                max_output_tokens: maxTok
                             },
                             {
                                 headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -295,13 +283,13 @@ async function processarMensagensPendentes(contato) {
                     }
 
                     const data = r.data;
-                    const rawText = extractTextForLog(data);
+                    const rawText = data?.output_text || extractTextForLog(data);
                     const incomplete = data?.incomplete_details?.reason || '';
                     const usage = data?.usage ? JSON.stringify(data.usage) : '';
                     console.log(`[${st.contato}] [LLM][interesse][${tag}] http=${r.status} incomplete=${incomplete || 'no'} usage=${usage} body=${truncate(rawText, 800)}`);
 
-                    let picked = data?.output?.[0]?.content?.[0]?.json?.label || null;
-                    if (!picked && rawText) {
+                    let picked = null;
+                    if (rawText) {
                         try {
                             const parsed = JSON.parse(rawText);
                             if (parsed && typeof parsed.label === 'string') picked = parsed.label.toLowerCase();
@@ -432,6 +420,7 @@ async function processarMensagensPendentes(contato) {
                 console.warn(`[${st.contato}] [LLM][instrucoes] OPENAI_API_KEY ausente — usando fallback=duvida`);
             } else {
                 const allowed = ['aceite', 'recusa', 'duvida'];
+                const structuredPrompt = `${prompt}\n\nOutput only the JSON: {"label": "one_of_aceite_recusa_duvida"}`;
 
                 const callOnce = async (maxTok, tag) => {
                     let r;
@@ -440,21 +429,8 @@ async function processarMensagensPendentes(contato) {
                             'https://api.openai.com/v1/responses',
                             {
                                 model: 'gpt-5',
-                                input: prompt,
-                                temperature: 0,
-                                max_output_tokens: maxTok,
-                                text: {
-                                    format: {
-                                        type: 'json_schema',
-                                        name: 'Label',
-                                        schema: {
-                                            type: 'object',
-                                            properties: { label: { type: 'string', enum: allowed } },
-                                            required: ['label'],
-                                            additionalProperties: false
-                                        }
-                                    }
-                                }
+                                input: structuredPrompt,
+                                max_output_tokens: maxTok
                             },
                             {
                                 headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -468,13 +444,13 @@ async function processarMensagensPendentes(contato) {
                     }
 
                     const data = r.data;
-                    const rawText = extractTextForLog(data);
+                    const rawText = data?.output_text || extractTextForLog(data);
                     const incomplete = data?.incomplete_details?.reason || '';
                     const usage = data?.usage ? JSON.stringify(data.usage) : '';
                     console.log(`[${st.contato}] [LLM][instrucoes][${tag}] http=${r.status} incomplete=${incomplete || 'no'} usage=${usage} body=${truncate(rawText, 800)}`);
 
-                    let picked = data?.output?.[0]?.content?.[0]?.json?.label || null;
-                    if (!picked && rawText) {
+                    let picked = null;
+                    if (rawText) {
                         try {
                             const parsed = JSON.parse(rawText);
                             if (parsed && typeof parsed.label === 'string') picked = parsed.label.toLowerCase();
