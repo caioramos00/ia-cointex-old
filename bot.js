@@ -39,6 +39,20 @@ async function classifyWithPrompt(promptFn, contexto) {
     }
 }
 
+function pickLabelFromResponseData(data, allowed) {
+    let txt =
+        (typeof data?.output_text === 'string' && data.output_text) ||
+        (typeof data?.output?.[0]?.content?.[0]?.text === 'string' && data.output[0].content[0].text) ||
+        (typeof data?.choices?.[0]?.message?.content === 'string' && data.choices[0].message.content) ||
+        (typeof data?.result === 'string' && data.result) ||
+        (typeof data === 'string' ? data : '');
+    if (!txt) txt = JSON.stringify(data || {});
+    const lowered = String(txt).trim().toLowerCase();
+    const rx = new RegExp(`\\b(${allowed.join('|')})\\b`, 'i');
+    const m = rx.exec(lowered);
+    return m ? m[1].toLowerCase() : null;
+}
+
 function ensureEstado(contato) {
     const key = safeStr(contato) || 'desconhecido';
     if (!estadoContatos[key]) {
@@ -222,13 +236,14 @@ async function processarMensagensPendentes(contato) {
                         { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 15000, validateStatus: () => true }
                     );
                     if (r.status >= 200 && r.status < 300) {
-                        const raw = r.data?.output_text ?? r.data?.output?.[0]?.content?.[0]?.text ?? r.data?.choices?.[0]?.message?.content ?? r.data;
-                        classe = String(raw || '').trim().toLowerCase();
+                        const allowed = ['aceite', 'recusa', 'duvida'];
+                        const label = pickLabelFromResponseData(r.data, allowed);
+                        if (label) classe = label;
                     }
                 } catch { }
             }
             st.classificacaoAceite = classe;
-            console.log(`[${st.contato}] interesse.rotuloRaw="${classe}" interesse.class=${classe} ctx="${contexto}"`);
+            console.log(`[${st.contato}] interesse.class=${classe} ctx="${contexto}"`);
             st.mensagensPendentes = [];
             if (classe === 'aceite') {
                 st.mensagensDesdeSolicitacao = [];
@@ -252,8 +267,9 @@ async function processarMensagensPendentes(contato) {
                         { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 15000, validateStatus: () => true }
                     );
                     if (r.status >= 200 && r.status < 300) {
-                        const raw = r.data?.output_text ?? r.data?.output?.[0]?.content?.[0]?.text ?? r.data?.choices?.[0]?.message?.content ?? r.data;
-                        classe = String(raw || '').trim().toLowerCase();
+                        const allowed = ['aceite', 'recusa', 'duvida'];
+                        const label = pickLabelFromResponseData(r.data, allowed);
+                        if (label) classe = label;
                     }
                 } catch { }
             }
@@ -267,20 +283,6 @@ async function processarMensagensPendentes(contato) {
             return { ok: true, classe };
         }
 
-        if (st.etapa === 'instrucoes:wait') {
-            if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
-            const contexto = (st.mensagensDesdeSolicitacao || []).join(' | ').trim();
-            const rotulo = await classifyWithPrompt(promptClassificaAceite, contexto);
-            const classe = (rotulo || 'duvida').toLowerCase();
-            console.log(`[${st.contato}] instrucoes.class=${classe} ctx="${contexto}"`);
-            st.mensagensPendentes = [];
-            if (classe === 'aceite') {
-                st.mensagensDesdeSolicitacao = [];
-                st.etapa = 'instrucoes:accepted';
-                console.log(`[${st.contato}] etapa->${st.etapa}`);
-            }
-            return { ok: true, classe };
-        }
 
         st.mensagensPendentes = [];
         return { ok: true };
