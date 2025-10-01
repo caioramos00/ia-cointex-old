@@ -284,7 +284,15 @@ async function processarMensagensPendentes(contato) {
                     }
 
                     const data = r.data;
-                    const rawText = data?.output_text || extractTextForLog(data);
+                    let rawText = '';
+                    if (Array.isArray(data?.output)) {
+                        data.output.forEach(item => {
+                            if (item.type === 'message' && Array.isArray(item.content) && item.content[0]?.text) {
+                                rawText = item.content[0].text;
+                            }
+                        });
+                    }
+                    if (!rawText) rawText = extractTextForLog(data);
                     const incomplete = data?.incomplete_details?.reason || '';
                     const usage = data?.usage ? JSON.stringify(data.usage) : '';
                     console.log(`[${st.contato}] [LLM][interesse][${tag}] http=${r.status} incomplete=${incomplete || 'no'} usage=${usage} body=${truncate(rawText, 800)}`);
@@ -446,7 +454,15 @@ async function processarMensagensPendentes(contato) {
                     }
 
                     const data = r.data;
-                    const rawText = data?.output_text || extractTextForLog(data);
+                    let rawText = '';
+                    if (Array.isArray(data?.output)) {
+                        data.output.forEach(item => {
+                            if (item.type === 'message' && Array.isArray(item.content) && item.content[0]?.text) {
+                                rawText = item.content[0].text;
+                            }
+                        });
+                    }
+                    if (!rawText) rawText = extractTextForLog(data);
                     const incomplete = data?.incomplete_details?.reason || '';
                     const usage = data?.usage ? JSON.stringify(data.usage) : '';
                     console.log(`[${st.contato}] [LLM][instrucoes][${tag}] http=${r.status} incomplete=${incomplete || 'no'} usage=${usage} body=${truncate(rawText, 800)}`);
