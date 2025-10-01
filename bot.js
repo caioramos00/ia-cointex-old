@@ -178,7 +178,8 @@ async function processarMensagensPendentes(contato) {
             const loadAbertura = () => {
                 if (aberturaData) return aberturaData;
                 try {
-                    const raw = fs.readFileSync(aberturaPath, 'utf8');
+                    let raw = fs.readFileSync(aberturaPath, 'utf8');
+                    raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
                     const parsed = JSON.parse(raw);
                     if (!parsed?.msg1?.grupo1?.length || !parsed?.msg1?.grupo2?.length || !parsed?.msg1?.grupo3?.length) throw new Error('content/abertura.json incompleto: msg1.* ausente');
                     if (!parsed?.msg2?.grupo1?.length || !parsed?.msg2?.grupo2?.length || !parsed?.msg2?.grupo3?.length) throw new Error('content/abertura.json incompleto: msg2.* ausente');
@@ -203,7 +204,6 @@ async function processarMensagensPendentes(contato) {
 
             st.mensagensPendentes = [];
             st.mensagensDesdeSolicitacao = [];
-            // reset ponteiro da próxima etapa para não carregar lixo antigo
             st.lastClassifiedIdx.interesse = 0;
 
             st.etapa = 'abertura:wait';
