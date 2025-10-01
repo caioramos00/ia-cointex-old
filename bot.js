@@ -357,11 +357,12 @@ async function processarMensagensPendentes(contato) {
             st.mensagensPendentes = [];
             if (classe === 'aceite') {
                 st.mensagensDesdeSolicitacao = [];
-                st.lastClassifiedIdx.interesse = 0; // reseta para o próximo ciclo de etapa
+                st.lastClassifiedIdx.interesse = 0;
                 st.etapa = 'instrucoes:send';
                 console.log(`[${st.contato}] etapa->${st.etapa}`);
+            } else {
+                return { ok: true, classe };
             }
-            return { ok: true, classe };
         }
 
         if (st.etapa === 'instrucoes:send') {
@@ -420,16 +421,13 @@ async function processarMensagensPendentes(contato) {
             const m1 = composeMsg1();
             const m2 = composeMsg2();
             const m3 = composeMsg3();
+            const blocoUnico = [m1, m2, m3].filter(Boolean).join('\n\n');
 
-            if (m1) await sendMessage(st.contato, m1);
-            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-            if (m2) { const d = Math.floor(20000 + Math.random() * 10000); await delay(d); await sendMessage(st.contato, m2); }
-            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-            if (m3) await sendMessage(st.contato, m3);
+            if (blocoUnico) await sendMessage(st.contato, blocoUnico);
 
             st.mensagensPendentes = [];
             st.mensagensDesdeSolicitacao = [];
-            st.lastClassifiedIdx.acesso = 0; // se for usar classificação em etapas seguintes
+            st.lastClassifiedIdx.acesso = 0;
             st.lastClassifiedIdx.confirmacao = 0;
             st.lastClassifiedIdx.saque = 0;
 
@@ -438,7 +436,6 @@ async function processarMensagensPendentes(contato) {
             return { ok: true };
         }
 
-        // Outras etapas (acesso/confirmacao/saque) ficam inalteradas aqui
         st.mensagensPendentes = [];
         return { ok: true };
     } finally {
