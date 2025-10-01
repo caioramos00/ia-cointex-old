@@ -25,6 +25,10 @@ function extraGlobalDelay() {
 }
 function delayRange(minMs, maxMs) { const d = Math.floor(minMs + Math.random() * (maxMs - minMs)); return delay(d); }
 
+function randomInt(min, max) {
+    return Math.floor(min + Math.random() * (max - min));
+}
+
 function pickLabelFromResponseData(data, allowed) {
     const S = new Set((allowed || []).map(s => String(s).toLowerCase()));
     let label =
@@ -83,8 +87,10 @@ function ensureEstado(contato) {
             sentHashes: new Set(),
             classificacaoAceite: null,
             classesSinceSolicitacao: [],
-            lastClassifiedIdx: { interesse: 0, acesso: 0, confirmacao: 0, saque: 0 },
-            saquePediuPrint: false
+            lastClassifiedIdx: { interesse: 0, acesso: 0, confirmacao: 0, saque: 0, validacao: 0 },
+            saquePediuPrint: false,
+            validacaoAwaitFirstMsg: false,
+            validacaoTimeoutUntil: 0
         };
     } else {
         const st = estadoContatos[key];
@@ -92,11 +98,13 @@ function ensureEstado(contato) {
         if (!Array.isArray(st.mensagensPendentes)) st.mensagensPendentes = [];
         if (!Array.isArray(st.mensagensDesdeSolicitacao)) st.mensagensDesdeSolicitacao = [];
         if (!(st.sentHashes instanceof Set)) st.sentHashes = new Set(Array.isArray(st.sentHashes) ? st.sentHashes : []);
-        if (!st.lastClassifiedIdx) st.lastClassifiedIdx = { interesse: 0, acesso: 0, confirmacao: 0, saque: 0 };
-        for (const k of ['interesse', 'acesso', 'confirmacao', 'saque']) {
+        if (!st.lastClassifiedIdx) st.lastClassifiedIdx = { interesse: 0, acesso: 0, confirmacao: 0, saque: 0, validacao: 0 };
+        for (const k of ['interesse', 'acesso', 'confirmacao', 'saque', 'validacao']) {
             if (typeof st.lastClassifiedIdx[k] !== 'number' || st.lastClassifiedIdx[k] < 0) st.lastClassifiedIdx[k] = 0;
         }
         if (typeof st.saquePediuPrint !== 'boolean') st.saquePediuPrint = false;
+        if (typeof st.validacaoAwaitFirstMsg !== 'boolean') st.validacaoAwaitFirstMsg = false;
+        if (typeof st.validacaoTimeoutUntil !== 'number') st.validacaoTimeoutUntil = 0;
     }
     return estadoContatos[key];
 }
@@ -1127,6 +1135,120 @@ async function processarMensagensPendentes(contato) {
         return { ok: true, classe: 'irrelevante' };
     }
 
+    if (st.etapa === 'validacao:send') {
+        const validacaoPath = path.join(__dirname, 'content', 'validacao.json');
+        let validacaoData = null;
+
+        const loadValidacao = () => {
+            if (validacaoData) return validacaoData;
+            try {
+                let raw = fs.readFileSync(validacaoPath, 'utf8');
+                raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
+                const parsed = JSON.parse(raw);
+                if (
+                    !parsed?.msg1?.msg1b1?.length ||
+                    !parsed?.msg1?.msg1b2?.length ||
+                    !parsed?.msg1?.msg1b3?.length ||
+                    !parsed?.msg2?.msg2b1?.length ||
+                    !parsed?.msg2?.msg2b2?.length ||
+                    !parsed?.msg2?.msg2b3?.length ||
+                    !parsed?.msg2?.msg2b4?.length
+                ) throw new Error('content/validacao.json incompleto');
+                validacaoData = parsed;
+            } catch {
+                validacaoData = {
+                    msg1: {
+                        msg1b1: ['ok', 'certo', 'beleza'],
+                        msg1b2: ['precisou de validação'],
+                        msg1b3: ['confirme na tela e avance pelo botão PRÓXIMO']
+                    },
+                    msg2: {
+                        msg2b1: ['vou acionar o suporte'],
+                        msg2b2: ['tenho contato direto e sabem o procedimento'],
+                        msg2b3: ['em poucos minutos resolvemos'],
+                        msg2b4: ['aguarda um instante que já retorno']
+                    }
+                };
+            }
+            return validacaoData;
+        };
+
+        const pick = (arr) => Array.isArray(arr) && arr.length
+            ? arr[Math.floor(Math.random() * arr.length)]
+            : '';
+
+        const composeMsg1 = () => {
+            const c = loadValidacao();
+            return `${pick(c.msg1.msg1b1)}, ${pick(c.msg1.msg1b2)}. ${pick(c.msg1.msg1b3)}`;
+        };
+
+        const composeMsg2 = () => {
+            const c = loadValidacao();
+            return `${pick(c.msg2.msg2b1)}, ${pick(c.msg2.msg2b2)}. ${pick(c.msg2.msg2b3)}, ${pick(c.msg2.msg2b4)}?`;
+        };
+
+        const m1 = chooseUnique(composeMsg1, st) || composeMsg1();
+        const m2 = chooseUnique(composeMsg2, st) || composeMsg2();
+
+        await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+        if (m1) await sendMessage(st.contato, m1);
+
+        await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+        if (m2) await sendMessage(st.contato, m2);
+
+        st.mensagensPendentes = [];
+        st.mensagensDesdeSolicitacao = [];
+        st.lastClassifiedIdx.validacao = 0;
+
+        st.validacaoAwaitFirstMsg = true;
+        st.validacaoTimeoutUntil = 0;
+
+        st.etapa = 'validacao:wait';
+        console.log(`[${st.contato}] etapa->${st.etapa}`);
+        return { ok: true };
+    }
+
+    if (st.etapa === 'validacao:wait') {
+        if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
+
+        if (st.validacaoAwaitFirstMsg && st.validacaoTimeoutUntil === 0) {
+            const FOUR = 4 * 60 * 1000;
+            const SIX = 6 * 60 * 1000;
+            const rnd = randomInt(FOUR, SIX + 1);
+            st.validacaoTimeoutUntil = Date.now() + rnd;
+            st.validacaoAwaitFirstMsg = false;
+
+            st.mensagensPendentes = [];
+            st.mensagensDesdeSolicitacao = [];
+            st.etapa = 'validacao:cooldown';
+            console.log(`[${st.contato}] etapa->${st.etapa} t+${Math.round(rnd / 1000)}s`);
+            return { ok: true, started: rnd };
+        }
+
+        st.mensagensPendentes = [];
+        return { ok: true, noop: 'await-first-message' };
+    }
+    if (st.etapa === 'validacao:cooldown') {
+        const now = Date.now();
+
+        if (st.validacaoTimeoutUntil > 0 && now < st.validacaoTimeoutUntil) {
+            if (st.mensagensPendentes.length > 0) {
+                st.mensagensPendentes = [];
+                st.mensagensDesdeSolicitacao = [];
+            }
+            return { ok: true, noop: 'cooldown' };
+        }
+
+        st.validacaoTimeoutUntil = 0;
+        st.validacaoAwaitFirstMsg = false;
+        st.mensagensPendentes = [];
+        st.mensagensDesdeSolicitacao = [];
+        st.lastClassifiedIdx.validacao = 0;
+
+        st.etapa = 'posvalidacao:send';
+        console.log(`[${st.contato}] etapa->${st.etapa}`);
+        return { ok: true, advanced: 'posvalidacao:send' };
+    }
 }
 
 async function sendMessage(contato, texto) {

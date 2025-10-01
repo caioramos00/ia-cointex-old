@@ -2739,16 +2739,33 @@ async function processarMensagensPendentes(contato) {
                     'tô por aqui te esperando',
                 ];
 
-                const msgprint = [
-                    'o que aconteceu aí? me manda um PRINT ou uma foto da tela',
-                    'oq aconteceu aí? me manda um PRINT ou uma foto da tela',
-                    'o que deu aí? me manda um PRINT ou uma foto da tela',
-                    'oq deu aí? me manda um PRINT ou uma foto da tela',
-                    'o que aconteceu aí? manda um PRINT ou foto da tela',
-                    'oq aconteceu aí? manda um PRINT ou foto da tela',
-                    'o que deu aí? manda um PRINT ou foto da tela',
-                    'oq deu aí? manda um PRINT ou foto da tela',
-                ];
+const msgprint = [
+  'o que aconteceu aí? me manda um PRINT ou uma foto da tela',
+  'oq aconteceu aí? me manda um PRINT ou uma foto da tela',
+  'o que deu aí? me manda um PRINT ou uma foto da tela',
+  'oq deu aí? me manda um PRINT ou uma foto da tela',
+  'o que aconteceu aí? manda um PRINT ou foto da tela',
+  'oq aconteceu aí? manda um PRINT ou foto da tela',
+  'o que deu aí? manda um PRINT ou foto da tela',
+  'oq deu aí? manda um PRINT ou foto da tela',
+
+  'o que apareceu aí? me manda um PRINT ou foto da tela',
+  'o que apareceu na tela? me manda um PRINT',
+  'o que apareceu aí na tela? manda um PRINT',
+  'qual erro deu aí? me manda um PRINT',
+  'qual erro apareceu aí? manda um PRINT',
+  'deu erro aí? me manda um PRINT',
+  'apareceu alguma mensagem? me manda um PRINT',
+  'o que deu aí? envia um PRINT ou foto da tela',
+  'o que aconteceu aí? envia um PRINT',
+  'o que aconteceu aí? tira um PRINT e me manda',
+  'o que deu aí? me manda um PRINT da tela',
+  'oq deu aí? me manda um PRINT da tela',
+  'o que aconteceu aí? manda um PRINT da tela',
+  'oq aconteceu aí? manda um PRINT da tela',
+  'o que apareceu na tela? manda um PRINT ou foto',
+];
+
 
                 const msg3 = `${pick(m3b1)}, ${pick(m3b2)}… ${pick(m3b3)}! ${pick(m3b4)}, ${pick(m3b5)}, ${pick(m3b6)}`;
                 // disparamos as 3 mensagens com dedupe/retomada
@@ -2814,6 +2831,173 @@ async function processarMensagensPendentes(contato) {
             estado.mensagensPendentes = [];
             return;
         }
+
+    agora vamos construir o 'validacao:send', seguindo o mesmo padrão dos outros 'send', evitando duplicar mensagens enviadas e etc. assim que o 'saque:wait' avançar a etapa para a nova etapa 'validation:send', iremos disparar duas mensagens para o usuário. essas mensagens serão criadas com blocos com variaveis, seguindo o mesmo padrão das outras mensagens enviadas nas outras etapas. essas variações ficarão salvas no 'content/validacao.json', que vai seguir o mesmo padrão que você já conhece. as mensagens enviadas serão montadas como está abaixo (e você já pega todas as variações e cria o arquivo 'validacao.json'):
+MENSAGEM 1 = 
+
+const msg1b1 = [
+  'ah',
+  'entendi',
+  'certo',
+  'beleza',
+  'calma',
+  'calma aí',
+  'espera aí',
+  'blz',
+  'demoro',
+  'dmr',
+
+  'ok',
+  'fechou',
+  'suave',
+  'de boa',
+  'tranquilo',
+  'ah tá',
+  'tá',
+  'tá bom',
+
+  'pera',
+  'pera aí',
+  'segura aí',
+  'aguenta aí',
+];
+
+
+const msg1b2 = [
+  'pediu validação',
+  'caiu na validação',
+  'pediu pra validar',
+  'pediu a validação',
+  'o saque caiu na validação',
+
+  'tá pedindo validação',
+  'tá pedindo pra validar',
+  'tá pedindo pra validar o saque',
+  'pediu validação do saque',
+  'pediu pra validar o saque',
+  'pediu pra validar a conta',
+  'pediu validação de conta',
+  'caiu na tela de validação',
+  'caiu na etapa de validação',
+  'parou na validação',
+  'travou na validação',
+  'foi pra validação',
+  'tá na validação',
+  'solicitou validação',
+  'acionou validação',
+  'entrou em verificação',
+  'pediu verificação',
+  'pediu pra verificar',
+  'pediu verificação do saque'
+];
+
+
+const msg1b3 = [
+  'pode confirmar ai na tela e vai clicando em PRÓXIMO',
+  'confirma ai na tela e vai clicando em PRÓXIMO',
+  'confirma ai e vai clicando em PRÓXIMO',
+  'confirma ai e vai clicando no PRÓXIMO',
+  'pode confirmar ai e vai clicando no PRÓXIMO',
+  'confirma ai na tela e vai clicando no PRÓXIMO',
+  'confirma ai e vai clicando em PRÓXIMO até o final',
+  'confirma ai na tela e fica clicando no PRÓXIMO',
+  'pode confirmar ai e fica clicando no PRÓXIMO',
+  'depois confirma ai e vai clicando em PRÓXIMO',
+  'pode confirmar ai e vai clicando em PRÓXIMO',
+  'clica em PRÓXIMO e vai avançando ai',
+  'vai clicando em PRÓXIMO e vai avançando ai',
+  'vai clicando em PRÓXIMO e avançando ai',
+  'só ir clicando em PRÓXIMO e avançando ai',
+  'clica em PRÓXIMO e vai passando as telas',
+  'vai clicando em PRÓXIMO até avançar tudo',
+  'clica em PRÓXIMO até avançar tudo',
+  'clica em PRÓXIMO e vai avançando aí',
+];
+
+
+
+
+msg1 = "{msg1b1}, {msg1b2}. {msg1b3}"
+
+const msg2b1 = [
+  'vou falar com a menina que trabalha la',
+  'vou falar com a menina q trampa lá',
+  'vou mandar mensagem pra menina q trampa lá',
+  'vou avisar pra menina q trampa lá dentro',
+  'vou chamar a menina que trabalha lá',
+  'vou falar com a menina lá',
+  'vou falar com a menina de lá',
+  'vou falar com a menina lá dentro',
+  'vou chamar a menina lá de dentro',
+  'vou avisar a menina de lá',
+  'vou avisar a menina lá dentro',
+  'vou mandar msg pra menina de lá',
+  'vou mandar msg pra menina lá dentro',
+  'vou pedir pra menina olhar isso lá',
+  'vou pedir pra menina ver isso lá',
+  'vou pedir pra menina conferir lá',
+  'vou pedir pra menina checar lá',
+  'vou pedir pra menina resolver lá',
+  'tô chamando a menina lá',
+  'vou falar com a moça do suporte lá',
+  'vou chamar a moça do suporte',
+  'vou avisar o suporte lá',
+
+  'vou acionar a menina de lá',
+  'vou chamar a menina do suporte lá',
+  'vou falar com a menina do atendimento lá',
+  'vou falar com a menina da equipe lá',
+  'vou falar com a menina responsável lá',
+  'vou pedir pra menina liberar lá',
+  'vou pedir pra menina agilizar lá',
+  'vou pedir pra menina dar uma olhada lá',
+  'vou pedir pra menina verificar isso lá',
+  'vou encaminhar pra menina de lá',
+  'vou passar isso pra menina lá',
+];
+
+const msg2b2 = [
+  'tenho contato direto com ela e ela sabe como resolver',
+  'tenho contato direto com ela e ela vai saber como faz',
+  'tenho contato direto com ela e ela vai saber como resolve',
+  'tenho o contato direto com ela e ela vai saber como resolve',
+  'to com o contato direto com ela e ela vai saber resolver isso',
+
+  'tenho contato direto com ela e ela resolve isso',
+  'tenho contato direto com ela e ela sabe resolver',
+  'tenho contato direto com ela e ela sabe o procedimento',
+  'tenho contato direto com ela e ela sabe o passo a passo',
+  'tenho contato direto com ela e ela destrava isso rápido',
+
+  'tenho o contato direto dela e ela sabe como resolver',
+  'tenho o número direto dela e ela resolve',
+  'tenho acesso direto a ela e ela resolve pra gente',
+  'tenho acesso direto com ela e ela vai resolver',
+  'tenho canal direto com ela e ela resolve',
+
+  'tô com contato direto com ela e ela sabe como faz',
+  'to com contato direto com ela e ela resolve isso',
+  'tô com o contato dela direto e ela sabe resolver',
+  'to com o contato dela direto e ela resolve',
+
+  'falo direto com ela e ela resolve',
+  'falo direto com ela e ela sabe o caminho',
+  'consigo falar direto com ela e ela resolve',
+  'consigo acionar ela direto e ela resolve',
+];
+
+
+const msg2b3 = [
+    'em 5 min já resolvo',
+]
+
+const msg2b4 = [
+    'me espera aí blz?',
+]
+
+msg 2 = "{msg2b1}, {msg2b2}. {msg2b3}, {msg2b4}"
+
+
         else if (estado.etapa === 'validacao') {
             console.log("[" + contato + "] Etapa 7: validacao");
             if (estado.acompanhamentoTimeout) {
