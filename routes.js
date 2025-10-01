@@ -465,121 +465,138 @@ function setupRoutes(
 
   const processingDebounce = new Map();
 
-  app.post('/webhook/manychat', express.json(), async (req, res) => {
-    const settings = await getBotSettings().catch(() => ({}));
-    const secretConfigured = process.env.MANYCHAT_WEBHOOK_SECRET || settings.manychat_webhook_secret || '';
-    const headerSecret = req.get('X-MC-Secret') || '';
-    if (secretConfigured && headerSecret !== secretConfigured) {
-      return res.sendStatus(401);
-    }
+app.post('/webhook/manychat', express.json(), async (req, res) => {
+  const settings = await getBotSettings().catch(() => ({}));
+  const secretConfigured = process.env.MANYCHAT_WEBHOOK_SECRET || settings.manychat_webhook_secret || '';
+  const headerSecret = req.get('X-MC-Secret') || '';
+  if (secretConfigured && headerSecret !== secretConfigured) {
+    return res.sendStatus(401);
+  }
 
-    const payload = req.body || {};
-    const subscriberId = payload.subscriber_id || payload?.contact?.id || null;
-    const textInRaw = payload.text || payload.last_text_input || '';
-    const textIn = typeof textInRaw === 'string' ? textInRaw.trim() : '';
+  const payload = req.body || {};
+  const subscriberId = payload.subscriber_id || payload?.contact?.id || null;
+  const textInRaw = payload.text || payload.last_text_input || '';
+  const textIn = typeof textInRaw === 'string' ? textInRaw.trim() : '';
 
-    const full = payload.full_contact || {};
-    let rawPhone = '';
-    const phoneCandidates = [
-      payload?.user?.phone,
-      payload?.contact?.phone,
-      payload?.contact?.wa_id,
-      (full?.whatsapp && full.whatsapp.id),
-      full?.phone,
-      payload?.phone,
-    ].filter(Boolean);
-    rawPhone = phoneCandidates[0] || '';
-    const phone = onlyDigits(rawPhone);
-    const declaredType =
-      payload.last_reply_type ||
-      payload.last_input_type ||
-      payload?.message?.type ||
-      payload?.last_message?.type ||
-      '';
-    if (!phone) return res.status(200).json({ ok: true, ignored: 'no-phone' });
+  const full = payload.full_contact || {};
+  let rawPhone = '';
+  const phoneCandidates = [
+    payload?.user?.phone,
+    payload?.contact?.phone,
+    payload?.contact?.wa_id,
+    (full?.whatsapp && full.whatsapp.id),
+    full?.phone,
+    payload?.phone,
+  ].filter(Boolean);
+  rawPhone = phoneCandidates[0] || '';
+  const phone = onlyDigits(rawPhone);
 
-    console.log(`[${phone}] ${textIn || '[mídia]'}`);
+  const declaredType =
+    payload.last_reply_type ||
+    payload.last_input_type ||
+    payload?.message?.type ||
+    payload?.last_message?.type ||
+    '';
 
-    let detectedTid = '';
-    let detectedClickType = 'Orgânico';
-    const tidMatch = (textIn || '').match(/\[TID:\s*([A-Za-z0-9_-]{6,64})\]/i);
-    if (tidMatch && tidMatch[1]) { detectedTid = tidMatch[1]; detectedClickType = 'Landing'; }
-    if (!detectedTid && textIn) {
-      const stripInvis = (s) => String(s || '').normalize('NFKC').replace(/[\u200B-\u200F\uFEFF\u202A-\u202E]/g, '');
-      const t = stripInvis(textIn);
-      const firstLine = (t.split(/\r?\n/)[0] || '').trim();
-      const m2 = /^[a-f0-9]{16}$/i.exec(firstLine);
-      if (m2) { detectedTid = m2[0]; detectedClickType = 'Landing'; }
-    }
+  if (!phone) return res.status(200).json({ ok: true, ignored: 'no-phone' });
 
-    let finalTid = detectedTid;
-    let finalClickType = detectedClickType;
+  console.log(`[${phone}] Mensagem recebida: ${textIn || '[mídia]'}`);
+
+  // Vincular subscriber_id no DB e no estado in-memory (para o sendMessage)
+  if (subscriberId && phone) {
     try {
-      const existing = await getContatoByPhone(phone);
-      if (existing) {
-        if (existing.tid) finalTid = existing.tid;
-        if (existing.click_type && existing.click_type !== 'Orgânico') finalClickType = existing.click_type;
-        else finalClickType = finalTid ? 'Landing' : 'Orgânico';
-      }
-    } catch {}
-
-    let idContato = '';
-    try {
-      idContato = await bootstrapFromManychat(
-        phone,
-        subscriberId,
-        inicializarEstado,
-        salvarContato,
-        criarUsuarioDjango,
-        estado,
-        finalTid,
-        finalClickType
+      await pool.query(
+        'UPDATE contatos SET manychat_subscriber_id = $2 WHERE id = $1',
+        [phone, subscriberId]
       );
-    } catch {}
-    if (!idContato) {
-      idContato = phone;
-      if (idContato && !estado[idContato]) {
-        if (typeof inicializarEstado === 'function') inicializarEstado(idContato, finalTid, finalClickType);
-        else estado[idContato] = { contato: idContato, tid: finalTid || '', click_type: finalClickType || 'Orgânico', mensagensPendentes: [], mensagensDesdeSolicitacao: [] };
-      }
+      if (!estado[phone]) estado[phone] = { mensagensPendentes: [], mensagensDesdeSolicitacao: [] };
+      estado[phone].manychat_subscriber_id = Number(subscriberId);
+      console.log(`[${phone}] ManyChat vinculado (subscriber_id=${subscriberId})`);
+    } catch (e) {
+      console.warn(`[${phone}] Falha ao vincular subscriber_id: ${e.message}`);
     }
+  }
 
-    const textoRecebido = textIn || '';
-    const st = estado[idContato] || {};
-    try {
-      await salvarContato(
-        idContato,
-        null,
-        textoRecebido,
-        st.tid || finalTid || '',
-        st.click_type || finalClickType || 'Orgânico'
-      );
-    } catch {}
+  let detectedTid = '';
+  let detectedClickType = 'Orgânico';
+  const tidMatch = (textIn || '').match(/\[TID:\s*([A-Za-z0-9_-]{6,64})\]/i);
+  if (tidMatch && tidMatch[1]) { detectedTid = tidMatch[1]; detectedClickType = 'Landing'; }
+  if (!detectedTid && textIn) {
+    const stripInvis = (s) => String(s || '').normalize('NFKC').replace(/[\u200B-\u200F\uFEFF\u202A-\u202E]/g, '');
+    const t = stripInvis(textIn);
+    const firstLine = (t.split(/\r?\n/)[0] || '').trim();
+    const m2 = /^[a-f0-9]{16}$/i.exec(firstLine);
+    if (m2) { detectedTid = m2[0]; detectedClickType = 'Landing'; }
+  }
 
-    const urlsFromText = extractUrlsFromText(textoRecebido);
-    const urlsFromPayload = harvestUrlsFromPayload(payload);
-    const allUrls = Array.from(new Set([...urlsFromText, ...urlsFromPayload]));
+  let finalTid = detectedTid;
+  let finalClickType = detectedClickType;
+  try {
+    const existing = await getContatoByPhone(phone);
+    if (existing) {
+      if (existing.tid) finalTid = existing.tid;
+      if (existing.click_type && existing.click_type !== 'Orgânico') finalClickType = existing.click_type;
+      else finalClickType = finalTid ? 'Landing' : 'Orgânico';
+    }
+  } catch {}
 
-    if (!estado[idContato]) estado[idContato] = { mensagensPendentes: [], mensagensDesdeSolicitacao: [] };
-    const stNow = estado[idContato];
-    stNow.mensagensPendentes.push({
-      texto: textoRecebido,
-      temMidia: false,
-      hasMedia: false,
-      type: declaredType || (textoRecebido ? 'text' : ''),
-      urls: allUrls,
-    });
-    if (textoRecebido && !stNow.mensagensDesdeSolicitacao.includes(textoRecebido)) stNow.mensagensDesdeSolicitacao.push(textoRecebido);
-    stNow.ultimaMensagem = Date.now();
+  let idContato = '';
+  try {
+    idContato = await bootstrapFromManychat(
+      phone,
+      subscriberId,
+      inicializarEstado,
+      salvarContato,
+      criarUsuarioDjango,
+      estado,
+      finalTid,
+      finalClickType
+    );
+  } catch {}
+  if (!idContato) {
+    idContato = phone;
+    if (idContato && !estado[idContato]) {
+      if (typeof inicializarEstado === 'function') inicializarEstado(idContato, finalTid, finalClickType);
+      else estado[idContato] = { contato: idContato, tid: finalTid || '', click_type: finalClickType || 'Orgânico', mensagensPendentes: [], mensagensDesdeSolicitacao: [] };
+    }
+  }
 
-    if (processingDebounce.has(idContato)) { clearTimeout(processingDebounce.get(idContato)); }
-    const timer = setTimeout(async () => {
-      try { await processarMensagensPendentes(idContato); } catch {} finally { processingDebounce.delete(idContato); }
-    }, 5000);
-    processingDebounce.set(idContato, timer);
+  const textoRecebido = textIn || '';
+  const st = estado[idContato] || {};
+  try {
+    await salvarContato(
+      idContato,
+      null,
+      textoRecebido,
+      st.tid || finalTid || '',
+      st.click_type || finalClickType || 'Orgânico'
+    );
+  } catch {}
 
-    return res.status(200).json({ ok: true });
+  const urlsFromText = extractUrlsFromText(textoRecebido);
+  const urlsFromPayload = harvestUrlsFromPayload(payload);
+  const allUrls = Array.from(new Set([...urlsFromText, ...urlsFromPayload]));
+
+  if (!estado[idContato]) estado[idContato] = { mensagensPendentes: [], mensagensDesdeSolicitacao: [] };
+  const stNow = estado[idContato];
+  stNow.mensagensPendentes.push({
+    texto: textoRecebido,
+    temMidia: false,
+    hasMedia: false,
+    type: declaredType || (textoRecebido ? 'text' : ''),
+    urls: allUrls,
   });
+  if (textoRecebido && !stNow.mensagensDesdeSolicitacao.includes(textoRecebido)) stNow.mensagensDesdeSolicitacao.push(textoRecebido);
+  stNow.ultimaMensagem = Date.now();
+
+  if (processingDebounce.has(idContato)) { clearTimeout(processingDebounce.get(idContato)); }
+  const timer = setTimeout(async () => {
+    try { await processarMensagensPendentes(idContato); } catch {} finally { processingDebounce.delete(idContato); }
+  }, 5000);
+  processingDebounce.set(idContato, timer);
+
+  return res.status(200).json({ ok: true });
+});
 }
 
 module.exports = { checkAuth, setupRoutes };

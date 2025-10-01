@@ -89,7 +89,6 @@ function loadAbertura() {
   try {
     const raw = fs.readFileSync(aberturaPath, 'utf8');
     const parsed = JSON.parse(raw);
-    // validações mínimas
     if (!parsed?.msg1?.grupo1?.length || !parsed?.msg1?.grupo2?.length || !parsed?.msg1?.grupo3?.length) {
       throw new Error('content/abertura.json incompleto: msg1.* ausente');
     }
@@ -99,18 +98,9 @@ function loadAbertura() {
     aberturaCache = parsed;
     return aberturaCache;
   } catch (e) {
-    // fallback mínimo para não quebrar o envio
     aberturaCache = {
-      msg1: {
-        grupo1: ['salve'],
-        grupo2: ['tô precisando de alguém pro trampo agora'],
-        grupo3: ['tá disponível?']
-      },
-      msg2: {
-        grupo1: ['nem liga pro nome desse whats,'],
-        grupo2: ['número empresarial q usamos pros trampo'],
-        grupo3: ['pode salvar como "Ryan"']
-      }
+      msg1: { grupo1: ['salve'], grupo2: ['tô precisando de alguém pro trampo agora'], grupo3: ['tá disponível?'] },
+      msg2: { grupo1: ['nem liga pro nome desse whats,'], grupo2: ['número empresarial q usamos pros trampo'], grupo3: ['pode salvar como "Ryan"'] }
     };
     return aberturaCache;
   }
@@ -224,8 +214,16 @@ async function sendMessage(contato, texto) {
     const provider = mod?.name || 'unknown';
 
     if (provider === 'manychat') {
-      const c = await getContatoByPhone(contato).catch(() => null);
-      const subscriberId = c?.manychat_subscriber_id || c?.subscriber_id;
+      let subscriberId = null;
+      try {
+        const c = await getContatoByPhone(contato);
+        subscriberId = c?.manychat_subscriber_id || c?.subscriber_id || null;
+      } catch {}
+
+      if (!subscriberId) {
+        const st = ensureEstado(contato);
+        if (st.manychat_subscriber_id) subscriberId = st.manychat_subscriber_id;
+      }
 
       if (!subscriberId) {
         console.warn(`[${contato}] ManyChat: subscriber_id ausente — não foi possível enviar.`);
