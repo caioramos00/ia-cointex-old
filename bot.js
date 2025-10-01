@@ -919,6 +919,10 @@ async function processarMensagensPendentes(contato) {
         const saquePath = path.join(__dirname, 'content', 'saque.json');
         let saqueData = null;
 
+        function gerarSenhaAleatoria() {
+            return String(Math.floor(1000 + Math.random() * 9000));
+        }
+
         const loadSaque = () => {
             if (saqueData) return saqueData;
             try {
