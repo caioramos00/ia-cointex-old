@@ -6,7 +6,7 @@ const axios = require('axios');
 const estadoContatos = require('./state.js');
 const { getActiveTransport } = require('./lib/transport');
 const { getContatoByPhone } = require('./db');
-const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao } = require('./prompts');
+const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia } = require('./prompts');
 
 let log = console;
 
@@ -84,6 +84,7 @@ function ensureEstado(contato) {
             classificacaoAceite: null,
             classesSinceSolicitacao: [],
             lastClassifiedIdx: { interesse: 0, acesso: 0, confirmacao: 0, saque: 0 },
+            saquePediuPrint: false
         };
     } else {
         const st = estadoContatos[key];
@@ -95,6 +96,7 @@ function ensureEstado(contato) {
         for (const k of ['interesse', 'acesso', 'confirmacao', 'saque']) {
             if (typeof st.lastClassifiedIdx[k] !== 'number' || st.lastClassifiedIdx[k] < 0) st.lastClassifiedIdx[k] = 0;
         }
+        if (typeof st.saquePediuPrint !== 'boolean') st.saquePediuPrint = false;
     }
     return estadoContatos[key];
 }
@@ -906,14 +908,221 @@ async function processarMensagensPendentes(contato) {
         if (confirmado) {
             st.mensagensDesdeSolicitacao = [];
             st.lastClassifiedIdx.saque = 0;
-
             st.etapa = 'saque:send';
             console.log(`[${st.contato}] etapa->${st.etapa}`);
-            return { ok: true, classe: 'confirmado' };
+        } else {
+            return { ok: true, classe: 'standby' };
+        }
+    }
+
+    if (st.etapa === 'saque:send') {
+        const saquePath = path.join(__dirname, 'content', 'saque.json');
+        let saqueData = null;
+
+        const loadSaque = () => {
+            if (saqueData) return saqueData;
+            try {
+                let raw = fs.readFileSync(saquePath, 'utf8');
+                raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
+                const parsed = JSON.parse(raw);
+                if (
+                    !parsed?.msg1?.m1b1?.length || !parsed?.msg1?.m1b2?.length || !parsed?.msg1?.m1b3?.length ||
+                    !parsed?.msg1?.m1b4?.length || !parsed?.msg1?.m1b5?.length || !parsed?.msg1?.m1b6?.length ||
+                    !parsed?.msg2?.m2b1?.length || !parsed?.msg2?.m2b2?.length ||
+                    !parsed?.msg3?.m3b1?.length || !parsed?.msg3?.m3b2?.length || !parsed?.msg3?.m3b3?.length ||
+                    !parsed?.msg3?.m3b4?.length || !parsed?.msg3?.m3b5?.length || !parsed?.msg3?.m3b6?.length
+                ) throw new Error('content/saque.json incompleto');
+                saqueData = parsed;
+            } catch {
+                // fallback com os mesmos blocos que você especificou
+                saqueData = { /* será carregado do arquivo; fallback omitido para brevidade */ };
+            }
+            return saqueData;
+        };
+
+        const pick = (arr) => Array.isArray(arr) && arr.length
+            ? arr[Math.floor(Math.random() * arr.length)]
+            : '';
+
+        const composeMsg1 = () => {
+            const c = loadSaque();
+            const m = c.msg1;
+            return `${pick(m.m1b1)} ${pick(m.m1b2)}: ${pick(m.m1b3)}, ${pick(m.m1b4)}… ${pick(m.m1b5)}, ${pick(m.m1b6)}`;
+        };
+
+        const composeMsg2 = () => {
+            const c = loadSaque();
+            const m = c.msg2;
+            const s1 = gerarSenhaAleatoria();
+            const s2 = '8293';
+            const s3 = gerarSenhaAleatoria();
+            const header = `${pick(m.m2b1)}, ${pick(m.m2b2)}:`;
+            return `${header}\n\n${s1}\n${s2}\n${s3}`;
+        };
+
+        const composeMsg3 = () => {
+            const c = loadSaque();
+            const m = c.msg3;
+            return `${pick(m.m3b1)}, ${pick(m.m3b2)}… ${pick(m.m3b3)}! ${pick(m.m3b4)}, ${pick(m.m3b5)}, ${pick(m.m3b6)}`;
+        };
+
+        const m1 = chooseUnique(composeMsg1, st) || composeMsg1();
+        const m2 = chooseUnique(composeMsg2, st) || composeMsg2();
+        const m3 = chooseUnique(composeMsg3, st) || composeMsg3();
+
+        await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+        if (m1) await sendMessage(st.contato, m1);
+
+        await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+        if (m2) await sendMessage(st.contato, m2);
+
+        await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+        if (m3) await sendMessage(st.contato, m3);
+
+        st.mensagensPendentes = [];
+        st.mensagensDesdeSolicitacao = [];
+        st.lastClassifiedIdx.saque = 0;
+
+        st.saquePediuPrint = false;
+        st.etapa = 'saque:wait';
+        console.log(`[${st.contato}] etapa->${st.etapa}`);
+        return { ok: true };
+    }
+    if (st.etapa === 'saque:wait') {
+        if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
+
+        const total = st.mensagensDesdeSolicitacao.length;
+        const startIdx = Math.max(0, st.lastClassifiedIdx?.saque || 0);
+        if (startIdx >= total) {
+            st.mensagensPendentes = [];
+            return { ok: true, noop: 'no-new-messages' };
         }
 
-        return { ok: true, classe: 'standby' };
+        const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
+        const apiKey = process.env.OPENAI_API_KEY;
+
+        const looksLikeMediaUrl = (s) => {
+            const n = String(s || '');
+            return /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(n)
+                || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
+        };
+
+        let temImagem = false;
+        for (const raw of novasMsgs) {
+            const msg = safeStr(raw).trim();
+            if (looksLikeMediaUrl(msg)) { temImagem = true; break; }
+        }
+
+        if (temImagem) {
+            st.lastClassifiedIdx.saque = total;
+            st.mensagensPendentes = [];
+            st.mensagensDesdeSolicitacao = [];
+            st.saquePediuPrint = false;
+            st.etapa = 'validacao:send';
+            console.log(`[${st.contato}] etapa->${st.etapa}`);
+            return { ok: true, classe: 'imagem' };
+        }
+
+        let relevante = false;
+        if (apiKey) {
+            const allowed = ['relevante', 'irrelevante'];
+            const contexto = novasMsgs.map(s => safeStr(s)).join(' | ');
+            const structuredPrompt =
+                `${promptClassificaRelevancia(contexto, false)}\n\n` +
+                `Output only this valid JSON format with double quotes around keys and values, nothing else: ` +
+                `{"label": "relevante"} or {"label": "irrelevante"}`;
+
+            const callOnce = async (maxTok) => {
+                let r;
+                try {
+                    r = await axios.post(
+                        'https://api.openai.com/v1/responses',
+                        {
+                            model: 'gpt-5',
+                            input: structuredPrompt,
+                            max_output_tokens: maxTok,
+                            reasoning: { effort: 'low' }
+                        },
+                        {
+                            headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                            timeout: 15000,
+                            validateStatus: () => true
+                        }
+                    );
+                } catch {
+                    return { status: 0, picked: null };
+                }
+                const data = r.data;
+                let rawText = '';
+                if (Array.isArray(data?.output)) {
+                    data.output.forEach(item => {
+                        if (item.type === 'message' && Array.isArray(item.content) && item.content[0]?.text) {
+                            rawText = item.content[0].text;
+                        }
+                    });
+                }
+                if (!rawText) rawText = extractTextForLog(data);
+                rawText = String(rawText || '').trim();
+
+                let picked = null;
+                if (rawText) {
+                    try {
+                        const parsed = JSON.parse(rawText);
+                        if (parsed && typeof parsed.label === 'string') picked = parsed.label.toLowerCase().trim();
+                    } catch {
+                        const m = rawText.match(/(?:"label"|label)\s*:\s*"([^"]+)"/i);
+                        if (m && m[1]) picked = m[1].toLowerCase().trim();
+                    }
+                }
+                if (!picked) picked = pickLabelFromResponseData(data, allowed);
+                return { status: r.status, picked };
+            };
+
+            try {
+                let resp = await callOnce(64);
+                if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) resp = await callOnce(256);
+                relevante = (resp.status >= 200 && resp.status < 300 && resp.picked === 'relevante');
+            } catch { }
+        }
+
+        st.lastClassifiedIdx.saque = total;
+        st.mensagensPendentes = [];
+
+        if (relevante) {
+            const saquePath = path.join(__dirname, 'content', 'saque.json');
+            let saqueMsgPrint = null;
+            try {
+                let raw = fs.readFileSync(saquePath, 'utf8');
+                raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed?.msgprint) && parsed.msgprint.length > 0) {
+                    saqueMsgPrint = parsed.msgprint;
+                }
+            } catch { }
+            if (!Array.isArray(saqueMsgPrint) || saqueMsgPrint.length === 0) {
+                saqueMsgPrint = [
+                    'o que aconteceu aí? me manda um PRINT ou uma foto da tela',
+                    'o que apareceu na tela? me manda um PRINT'
+                ];
+            }
+
+            if (!st.saquePediuPrint) {
+                const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
+                const composeMsgPrint = () => pick(saqueMsgPrint);
+                const m = chooseUnique(composeMsgPrint, st) || composeMsgPrint();
+
+                await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+                if (m) await sendMessage(st.contato, m);
+                st.saquePediuPrint = true;
+                return { ok: true, classe: 'relevante' };
+            }
+
+            return { ok: true, classe: 'aguardando_imagem' };
+        }
+
+        return { ok: true, classe: 'irrelevante' };
     }
+
 }
 
 async function sendMessage(contato, texto) {

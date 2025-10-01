@@ -2002,7 +2002,7 @@ async function processarMensagensPendentes(contato) {
             const toNumberToken = (raw = '') => {
                 let s = normalizeMoneyStr(raw);
 
-                // 1) "2k", "2.5k"
+                // 1) "2k", "2.5 mil"
                 const k = s.match(/^(\d+(?:[.,]\d+)?)\s*k\b/);
                 if (k) return parseFloat(k[1].replace(',', '.')) * 1000;
 
@@ -2044,7 +2044,7 @@ async function processarMensagensPendentes(contato) {
                 let m;
                 while ((m = rxMoney.exec(t)) !== null) tokens.push(m[0]);
 
-                // "2k", "2,5k"
+                // "2k", "2,5 mil"
                 const rxK = /\b\d+(?:[.,]\d+)?\s*k\b/gi;
                 let k;
                 while ((k = rxK.exec(t)) !== null) tokens.push(k[0]);
@@ -2218,28 +2218,538 @@ async function processarMensagensPendentes(contato) {
                 estado.saqueMsg3Enviada = !!estado.saqueMsg3Enviada;
                 const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
                 // ---------- MSG 1: "{b1}, {b2}, {b3}, {b4}… {b5}, {b6}" ----------
-                const m1b1 = ['beleza', 'certo', 'tranquilo', 'fechou', 'show'];
-                const m1b2 = ['segue o saque agora', 'vamos pro saque agora', 'faz o saque agora', 'pode iniciar o saque'];
-                const m1b3 = ['do jeitinho que te falei', 'conforme te passei', 'igual expliquei', 'como combinamos'];
-                const m1b4 = ['vai cair certinho depois', 'vai certinho depois', 'fica tudo certo no final', 'sem erro no final'];
-                const m1b5 = ['nessa mesma conta', 'na conta que te passei', 'na conta aí', 'na conta de agora'];
-                const m1b6 = ['agora', 'já agora', 'de uma vez', 'nesse instante'];
-                const msg1 = `${pick(m1b1)}, ${pick(m1b2)}, ${pick(m1b3)}, ${pick(m1b4)}… ${pick(m1b5)}, ${pick(m1b6)}`;
+                const m1b1 = [
+                    'essa aí tá recheada kkkk',
+                    'essa conta aí tá recheada kkk',
+                    'essa aí veio recheada kkkkk',
+                    'essa conta tá recheada kkkkkk',
+                    'essa aí veio logo premiada kk',
+                    'essa conta aí tá premiada kkkkkk',
+                    'essa aí tá forrada kkk',
+                    'essa conta tá forrada kkkkk',
+                    'essa aí veio forrada kkkkkk',
+                    'essa conta aí veio forrada kk',
+                    'essa aí veio logo forrada kkkk',
+                    'essa aí tá pesada kkk',
+                    'essa conta aí veio pesada kkkkk',
+                    'essa aí tá transbordando kkkk',
+                    'essa conta tá transbordando kk',
+                    'essa aí veio carregada kkkk',
+                    'essa conta tá carregada kkkkk',
+                    'essa aí tá é premiada kk',
+                    'essa conta aí tá premiada kkkkk',
+                    'essa aí tá caprichada kkkk',
+                    'essa conta veio caprichada kk',
+                    'essa aí veio no luxo kkkk',
+                    'essa conta tá luxo kk',
+                    'essa aí tá bala kkkkk',
+                    'essa conta veio bala kk',
+                    'essa aí tá estralando kkkkkk',
+                    'essa conta tá estralando kkk',
+                    'essa aí tá estourada kk',
+                    'essa conta veio estourada kkkkk',
+                    'essa aí tá monstruosa kkkk',
+                    'essa conta aí veio monstruosa kk',
+
+                    'sua conta tá recheada kkk',
+                    'sua conta aí tá forrada kkkkk',
+                    'sua conta veio premiada kkkkk',
+                    'sua conta tá pesada kk',
+                    'sua conta tá transbordando kkkkk',
+                    'sua conta veio carregada kkkk',
+                    'sua conta tá caprichada kkk',
+                    'sua conta tá luxo kkkkk',
+                    'sua conta veio bala kk',
+                    'sua conta tá estralando kkkk',
+                    'sua conta tá estourada kk',
+                    'sua conta veio monstruosa kkkkk',
+
+                    'tua conta tá recheada kkkk',
+                    'tua conta veio forrada kkkkk',
+                    'tua conta tá premiada kk',
+                    'tua conta tá bala kkk',
+                    'tua conta tá transbordando kkkkkk',
+                    'tua conta veio carregada kk',
+                    'tua conta tá estralando kkk',
+                    'tua conta tá estourada kkkkk',
+                ];
+
+                const m1b2 = [
+                    'mas agora é o seguinte',
+                    'agora é o seguinte',
+                    'mas agora presta atenção',
+                    'agora presta atenção',
+                    'mas agora presta muita atenção',
+                    'agora presta muita atenção',
+                    'agora presta atenção aqui',
+                    'se liga agora',
+                    'agora se liga',
+                    'mas se liga agora',
+                    'mas agr é o seguinte',
+                    'mas agr presta atenção',
+                    'mas muita atenção agora',
+                    'mas mta atenção agora',
+                    'mas muita atenção agr',
+                    'presta atenção agora',
+                    'muita atenção agora',
+                    'mta atenção agr',
+                    'presta atenção agr',
+                    'se liga agr',
+                    'mas presta atenção agora',
+                    'mas presta atenção aqui',
+                    'atenção agora',
+                    'atenção total agora',
+                    'mas atenção total agora',
+                    'mas se liga agr',
+                    'presta muita atenção agora',
+                ];
+
+                const m1b3 = [
+                    'vc só vai sacar 5 mil porque assim não dá errado',
+                    'vc só vai sacar 5 mil porque assim não dá ruim',
+                    'vc só vai sacar 5000 porque assim não dá errado',
+                    'vc só vai sacar 5000 porque assim não dá ruim',
+                    'vc só vai sacar cinco mil porque assim não dá errado',
+                    'vc só vai sacar cinco mil porque assim não dá ruim',
+
+                    'você só vai sacar 5 mil porque assim não dá errado',
+                    'você só vai sacar 5 mil porque assim não dá ruim',
+                    'você só vai sacar 5000 porque assim não dá errado',
+                    'você só vai sacar 5000 porque assim não dá ruim',
+                    'você só vai sacar cinco mil porque assim não dá errado',
+                    'você só vai sacar cinco mil porque assim não dá ruim',
+
+                    'você saca só 5 mil porque assim não dá erro',
+                    'você saca só 5 mil porque assim não dá ruim',
+                    'você saca só 5000 porque assim não dá erro',
+                    'você saca só 5000 porque assim não dá ruim',
+                    'você saca só cinco mil porque assim não dá erro',
+                    'você saca só cinco mil porque assim não dá ruim',
+
+                    'só vai sacar 5 mil pra não dar erro',
+                    'só vai sacar 5 mil pra não dar ruim',
+                    'só vai sacar 5000 pra não dar erro',
+                    'só vai sacar 5000 pra não dar ruim',
+                    'só vai sacar cinco mil pra não dar erro',
+                    'só vai sacar cinco mil pra não dar ruim',
+
+                    'saca só 5 mil que aí não tem erro',
+                    'saca só 5 mil que aí não dá ruim',
+                    'saca só 5000 que aí não tem erro',
+                    'saca só 5000 que aí não dá ruim',
+                    'saca só cinco mil que aí não tem erro',
+                    'saca só cinco mil que aí não dá ruim',
+
+                    'vai sacar só 5 mil pra não ter erro',
+                    'vai sacar só 5000 pra não ter erro',
+                    'vai sacar só cinco mil pra não ter erro',
+                    'saca 5 mil apenas pra não dar erro',
+                    'saca 5000 apenas pra não dar erro',
+                    'saca cinco mil apenas pra não dar erro',
+                ];
+
+                const m1b4 = [
+                    'não saca mais que isso',
+                    'não saca mais que 5 mil',
+                    'não saca mais que 5000',
+                    'não saca mais que 5.000',
+                    'não saca mais que cinco mil',
+
+                    'não passa de 5 mil',
+                    'não passa de 5000',
+                    'não passa de 5.000',
+                    'não passa de cinco mil',
+
+                    'só até 5 mil',
+                    'só até 5000',
+                    'só até 5.000',
+                    'só até cinco mil',
+
+                    'vc não saca mais que 5 mil',
+                    'vc não saca mais que 5000',
+                    'você não saca mais que 5 mil',
+                    'você não saca mais que 5000',
+
+                    'não tira mais que 5 mil',
+                    'não tira mais que 5000',
+                    'não passa disso, 5 mil no máximo',
+
+                    'n saca mais que isso',
+                    'n passa disso',
+                    'só até isso',
+                    'não tira mais que isso',
+                    'vc não saca mais que isso',
+                    'você não saca mais que isso',
+
+                    'n passa de 5 mil',
+                    'n passa de 5000',
+                    'n passa de 5.000',
+                    'n passa de cinco mil',
+                    'n tira mais que 5 mil',
+                    'n tira mais que 5000',
+
+                    'no máximo 5 mil',
+                    'só até isso'
+                ];
+
+
+                const m1b5 = [
+                    'acho que a plataforma vai ficar com uns 5% do valor',
+                    'a plataforma vai ficar com uns 5% do valor',
+                    'a plataforma fica com uns 5% do valor',
+                    'a plataforma fica com 5% do valor',
+                    'a plataforma fica com mais ou menos 5% do valor',
+                    'a plataforma fica com mais ou menos 5% disso',
+                    'a plataforma deve ficar com cerca de 5% do valor',
+                    'a plataforma deve ficar com ~5% do valor',
+                    'a plataforma desconta uns 5% do valor',
+                    'a plataforma desconta 5% disso',
+                    'a plataforma pega uns 5% do valor',
+                    'a plataforma pega 5% do total',
+                    'a plataforma leva uns 5% do valor',
+                    'a plataforma leva 5% disso',
+
+                    'acho que o site vai ficar com uns 5% desse valor',
+                    'o site vai ficar com uns 5% desse valor',
+                    'o site fica com uns 5% desse valor',
+                    'o site fica com 5% desse valor',
+                    'o site fica com mais ou menos 5% desse valor',
+                    'o site fica com mais ou menos 5% nisso',
+                    'o site deve ficar com cerca de 5% desse valor',
+                    'o site deve ficar com ~5% desse valor',
+                    'o site desconta uns 5% desse valor',
+                    'o site desconta 5% nisso',
+                    'o site pega uns 5% desse valor',
+                    'o site pega 5% desse total',
+
+                    'a plataforma vai ficar com uns 5% desse valor',
+                    'a plataforma fica com 5% desse valor',
+                    'a plataforma desconta uns 5% desse valor',
+                    'a plataforma pega 5% desse total',
+                ];
+
+                const m1b6 = [
+                    'nao tem problema',
+                    'n tem problema',
+                    'mas não tem problema',
+                    'mas n tem problema nenhum',
+                    'mas relaxa q não tem problema',
+
+                    'mas não tem erro',
+                    'mas n tem erro',
+
+                    'relaxa q n tem problema',
+                    'fica tranquilo q n tem problema',
+                    'fica suave q não tem erro',
+
+                    'mas tá de boa',
+                    'mas tá suave',
+                    'mas sem problema',
+                    'mas sem problemas',
+                    'mas tá tudo certo',
+
+                    'mas de boa',
+                    'mas relaxa q tá tudo certo',
+
+                    'mas n tem problema',
+                    'mas relaxa q n tem erro',
+                    'relaxa q tá de boa',
+                    'relaxa q tá suave',
+                    'relaxa q tá tudo certo',
+                    'fica tranquilo q tá tudo certo',
+                    'fica suave q tá tudo certo',
+                    'fica de boa q n tem erro',
+                    'fica de boa q n tem problema',
+                    'mas tá safe',
+                    'mas rlx q tá tudo certo',
+                ];
+
+
+                const msg1 = `${pick(m1b1)} ${pick(m1b2)}: ${pick(m1b3)}, ${pick(m1b4)}… ${pick(m1b5)}, ${pick(m1b6)}`;
                 // ---------- MSG 2 (preserva QUEBRAS DE LINHA):
                 // "{b1}, {b2}:\n\n{senha aleatória 1}\n8293\n{senha aleatória 2}" ----------
-                const m2b1 = ['vai pedir uma senha de saque', 'vai pedir a senha de saque', 'ele pede a senha de saque'];
-                const m2b2 = ['usa uma dessas', 'vai ser uma dessas', 'pode usar uma dessas'];
+                const m2b1 = [
+                    'vai pedir um código',
+                    'vai pedir uma senha',
+                    'vai precisar de um código',
+                    'vai precisar de uma senha',
+                    'aí vai pedir um código',
+                    'aí vai pedir uma senha',
+                    'aí vai precisar de um código',
+                    'aí vai precisar de uma senha',
+                    'aí vai pedir o código',
+                    'aí vai pedir a senha',
+                    'aí vai precisar do código',
+                    'aí vai precisar da senha',
+
+                    'na hora vai pedir um código',
+                    'na hora vai pedir a senha',
+                    'na tela vai pedir um código',
+                    'na tela vai pedir a senha',
+
+                    'o sistema vai pedir um código',
+                    'o sistema vai pedir a senha',
+                    'o sistema vai precisar do código',
+                    'o sistema vai precisar da senha',
+
+                    'vai pedir código',
+                    'vai pedir senha',
+                    'vai precisar de código',
+                    'vai precisar de senha',
+
+                    'a plataforma vai pedir um código',
+                    'a plataforma vai pedir a senha',
+                    'a plataforma vai precisar do código',
+                    'a plataforma vai precisar da senha',
+                ];
+
+                const m2b2 = [
+                    'tenta esses 3 aí',
+                    'tenta todos esses 3',
+                    'tenta todos esses 3 aí',
+                    'tenta com esses 3 aí',
+                    'tenta com todos esses 3',
+                    'tenta com todos esses 3 aí',
+                    'testa esses 3 aí',
+                    'testa todos esses 3',
+                    'testa todos esses 3 aí',
+                    'testa com esses 3 aí',
+                    'testa com todos esses 3',
+                    'testa com todos esses 3 aí',
+
+                    'tenta esses três',
+                    'tenta com esses três',
+                    'tenta com todos os 3',
+                    'tenta com todos os três',
+                    'testa esses três',
+                    'testa com esses três',
+                    'testa com todos os 3',
+                    'testa com todos os três',
+
+                    'vai ser um desses',
+                    'vai ser um desses 3',
+                    'vai ser um desses três',
+                    'vai ser um desses 3 aí',
+                    'vai ser um desses três aí',
+
+                    'é um desses',
+                    'é um desses 3',
+                    'é um desses três',
+                    'é um desses 3 aí',
+                    'é um desses três aí',
+
+                    'deve ser um desses',
+                    'deve ser um desses 3',
+                    'deve ser um desses três',
+
+                    'um desses 3 vai',
+                    'um desses três vai',
+                    'um desses 3 funciona',
+                    'um desses três funciona',
+                ];
+
+
                 const s1 = gerarSenhaAleatoria();
                 const s2 = '8293';
                 const s3 = gerarSenhaAleatoria();
                 const msg2 = `${pick(m2b1)}, ${pick(m2b2)}:\n\n${s1}\n${s2}\n${s3}`;
                 // ---------- MSG 3: "{b1}, {b2}… {b3}! {b4}, {b5}, {b6}" ----------
-                const m3b1 = ['tua parte é 2000', 'sua parte é de 2000', 'tua parte no trampo é de 2000', 'sua parte é de R$ 2000'];
-                const m3b2 = ['assim que cair me avisa', 'quando cair me chama aqui', 'me avisa na hora que cair', 'me dá um toque quando cair'];
-                const m3b3 = ['pra eu te passar como vai mandar minha parte', 'pra te explicar como mandar minha parte', 'pra te passar o jeito de mandar minha parte'];
-                const m3b4 = ['faz direitinho', 'certo pelo certo', 'sem gracinha', 'vai certinho'];
-                const m3b5 = ['se travar manda um PRINT', 'qualquer erro me manda PRINT', 'deu problema, manda PRINT', 'se der algo, manda PRINT'];
-                const m3b6 = ['vai na calma', 'faz com calma', 'vai clicando certinho', 'sem pressa'];
+                const m3b1 = [
+                    'assim que cair me avisa',
+                    'assim q cair avisa',
+                    'assim que cair aí me avisa',
+                    'na hora que cair avisa',
+                    'caindo aí já me avisa',
+
+                    'quando cair me avisa',
+                    'quando cair aí me chama',
+                    'caiu me avisa',
+                    'caiu aí me chama',
+                    'pingou aí me chama',
+
+                    'assim que pingar me chama',
+                    'na hora q cair me chama',
+
+                    'cair aí já me chama',
+                    'cair já me avisa',
+
+                    'na hora que cair me chama',
+                    'na mesma hora que cair me avisa',
+                    'na mesma hora que cair me chama',
+                    'assim que ver que caiu me avisa',
+                    'assim que ver que caiu me chama',
+                    'assim q ver que caiu me chama',
+                    'assim que confirmar que caiu me avisa',
+                    'assim que confirmar que caiu me chama',
+                    'na hora que você ver que caiu me chama',
+                    'na hora q tu ver que caiu me chama',
+                ];
+
+
+                const m3b2 = [
+                    'to confiando na sua palavra',
+                    'tô confiando em você',
+                    'to na confiança em vc',
+                    'vou confiar em você',
+                    'vou confiar em você hein',
+
+                    'tô confiando em vc',
+                    'to confiando em vc',
+                    'tô acreditando em você',
+                    'to acreditando em vc',
+                    'tô contando contigo',
+                    'tô dando o voto de confiança',
+
+                    'vou confiar esse trampo em vc',
+                    'vou confiar esse trampo em vc hein',
+                    'vou confiar esse trampo em você',
+                    'vou confiar esse trampo em você hein',
+
+                    'não dá mancada comigo',
+                    'não inventa de dar mancada comigo',
+                    'nem pensa em vacilar comigo',
+                    'não vacila comigo',
+
+                    'nem pensa em vacilar',
+                    'nem pensa em sumir com o dinheiro',
+                    'nem pensa em sumir com o saldo',
+                ];
+
+
+
+                const m3b3 = [
+                    'fazendo certinho sempre tem mais',
+                    'se fazer certinho sempre tem mais',
+                    'fazendo certinho sempre vai ter mais',
+                    'se fazer certinho sempre vai ter mais',
+                    'fazendo o trampo certinho sempre tem mais',
+                    'se fazer o trampo certinho sempre tem mais',
+                    'fazendo o trampo certinho sempre vai ter mais',
+                    'se fazer o trampo certinho sempre vai ter mais',
+                    'fazendo certinho sempre te arrumo mais',
+                    'se fazer certo o trampo vou te arrumar mais',
+                    'fazendo certo o trampo te arrumo outros',
+
+                    'fazendo certo sempre tem mais',
+                    'se fizer certo sempre tem mais',
+                    'fazendo certo sempre vai ter mais',
+                    'se fizer certo sempre vai ter mais',
+                    'fazendo direitinho sempre tem mais',
+                    'se fizer direitinho sempre tem mais',
+                    'cumprindo certinho sempre tem mais',
+                    'se cumprir certinho sempre tem mais',
+                    'fazendo o trampo certinho sempre tem mais',
+                    'se fizer o trampo certinho sempre tem mais',
+                    'fazendo tudo certo te arrumo mais',
+                    'faz tudo certo que eu te arrumo mais',
+
+                    'fazendo sem vacilar sempre tem mais',
+                    'se fizer sem vacilar sempre vai ter mais',
+                    'entregando certo sempre tem mais',
+                    'se entregar certo sempre vai ter mais',
+                    'fazendo tudo certinho eu te arrumo mais',
+                    'faz tudo certinho que eu te arrumo mais',
+                    'fazendo certinho eu te passo outro',
+                    'se fizer certinho eu te passo outros',
+                    'fazendo certo eu te passo mais trampo',
+                    'se fizer certo eu te passo mais trampo',
+                ];
+
+
+                const m3b4 = [
+                    'se aparecer qualquer erro aí',
+                    'se der qualquer BO aí',
+                    'e se acontecer qualquer problema',
+                    'e se der ruim aí em alguma coisa',
+
+                    'se aparecer algum erro aí',
+                    'se der algum problema aí',
+                    'se der algum BO na hora',
+                    'se surgir algum BO aí',
+                    'se surgir problema aí',
+                    'se acontecer alguma coisa errada',
+                    'caso dê erro aí',
+                    'caso dê problema aí',
+                    'e se der algum erro',
+
+                    'se rolar algum problema aí',
+                    'se rolar BO aí',
+                    'se der ruim na hora',
+                    'caso role algum BO',
+                    'caso role algum problema',
+                    'e se aparecer problema aí',
+                    'se surgir qualquer erro na hora',
+                    'se tiver qualquer erro aí',
+                ];
+
+
+                const m3b5 = [
+                    'manda um PRINT da tela pra eu olhar aqui',
+                    'me manda um PRINT da tela pra eu olhar aqui',
+                    'me manda um PRINT da tela pra eu ver',
+                    'me manda um PRINT da tela pra eu ver aqui',
+                    'manda PRINT da tela pra eu ver aqui',
+
+                    'manda um PRINT da tela pra eu conferir',
+                    'manda PRINT da tela pra eu dar uma olhada',
+                    'manda o PRINT aí pra eu ver',
+                    'manda o PRINT agora pra eu ver',
+                    'faz o PRINT e me manda',
+
+                    'manda o PRINT da tela aqui pra eu olhar',
+                    'me manda o PRINT aí pra eu conferir',
+                    'manda um PRINT aí que eu vejo',
+                    'faz um PRINT da tela e manda aqui',
+                    'tira um PRINT da tela e me manda',
+
+                    'manda um PRINT agora pra eu olhar',
+                    'manda o PRINT da tela pra eu ver aqui',
+                    'faz o PRINT da tela e manda pra mim',
+                    'tira o PRINT e manda aqui pra eu ver',
+                ];
+
+
+                const m3b6 = [
+                    'to no aguardo',
+                    'tô no aguardo aqui',
+                    'vou esperar vc aqui',
+                    'to esperando vc aqui',
+                    'vou ficar esperando vc',
+                    'vou esperar vc',
+                    'vou ficar no aguardo aqui',
+                    'vou ficar no aguardo aq',
+
+                    'tô no aguardo',
+                    'to no aguardo aq',
+                    'tô aguardando aqui',
+                    'to aguardando aqui',
+                    'tô te aguardando aqui',
+                    'to te aguardando aqui',
+                    'tô esperando vc',
+                    'to esperando você',
+                    'tô esperando você',
+                    'tô por aqui no aguardo',
+                    'to por aqui no aguardo',
+                    'fico no aguardo aqui',
+                    'fico no aguardo aq',
+                    'vou ficar te esperando',
+                    'vou ficar te esperando aqui',
+                    'vou te esperar aqui',
+                    'te espero aqui',
+                    'tô por aqui te esperando',
+                ];
+
+                const msgprint = [
+                    'o que aconteceu aí? me manda um PRINT ou uma foto da tela',
+                    'oq aconteceu aí? me manda um PRINT ou uma foto da tela',
+                    'o que deu aí? me manda um PRINT ou uma foto da tela',
+                    'oq deu aí? me manda um PRINT ou uma foto da tela',
+                    'o que aconteceu aí? manda um PRINT ou foto da tela',
+                    'oq aconteceu aí? manda um PRINT ou foto da tela',
+                    'o que deu aí? manda um PRINT ou foto da tela',
+                    'oq deu aí? manda um PRINT ou foto da tela',
+                ];
+
                 const msg3 = `${pick(m3b1)}, ${pick(m3b2)}… ${pick(m3b3)}! ${pick(m3b4)}, ${pick(m3b5)}, ${pick(m3b6)}`;
                 // disparamos as 3 mensagens com dedupe/retomada
                 try {
