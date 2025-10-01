@@ -349,7 +349,8 @@ async function processarMensagensPendentes(contato) {
             const loadInstrucoes = () => {
                 if (instrucoesData) return instrucoesData;
                 try {
-                    const raw = fs.readFileSync(instrucoesPath, 'utf8');
+                    let raw = fs.readFileSync(instrucoesPath, 'utf8');
+                    raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
                     const parsed = JSON.parse(raw);
                     if (
                         !parsed?.msg1?.grupo1?.length || !parsed?.msg1?.grupo2?.length || !parsed?.msg1?.grupo3?.length ||
@@ -374,6 +375,7 @@ async function processarMensagensPendentes(contato) {
                 }
                 return instrucoesData;
             };
+
             const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
 
             const composeMsg1 = () => {
@@ -389,7 +391,7 @@ async function processarMensagensPendentes(contato) {
                 const p2 = `• ${pick(c.pontos.p2.g1)}, ${pick(c.pontos.p2.g2)}, ${pick(c.pontos.p2.g3)}`;
                 const p3 = `• ${pick(c.pontos.p3.g1)}, ${pick(c.pontos.p3.g2)}, ${pick(c.pontos.p3.g3)}`;
                 const p4 = `• ${pick(c.pontos.p4.g1)}, ${pick(c.pontos.p4.g2)}, ${pick(c.pontos.p4.g3)}`;
-                return [p1, p2, p3, p4].join('\n\n');
+                return [p1, p2, p3, p4].join('\n');
             };
             const composeMsg3 = () => {
                 const c = loadInstrucoes();
@@ -397,10 +399,13 @@ async function processarMensagensPendentes(contato) {
                 const g2 = pick(c.msg3.grupo2);
                 return `${g1}… ${g2}?`;
             };
-
             const m1 = composeMsg1();
             const m2 = composeMsg2();
             const m3 = composeMsg3();
+            const blocoUnico = [m1, m2, m3].filter(Boolean).join('\n\n');
+
+            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+            if (blocoUnico) await sendMessage(st.contato, blocoUnico);
 
             if (m1) await sendMessage(st.contato, m1);
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
