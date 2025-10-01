@@ -6,7 +6,7 @@ const axios = require('axios');
 const estadoContatos = require('./state.js');
 const { getActiveTransport } = require('./lib/transport');
 const { getContatoByPhone } = require('./db');
-const { promptClassificaAceite } = require('./prompts');
+const { promptClassificaAceite, promptClassificaAcesso } = require('./prompts');
 
 let log = console;
 
@@ -526,7 +526,7 @@ async function processarMensagensPendentes(contato) {
             if (classe === 'aceite') {
                 st.mensagensDesdeSolicitacao = [];
                 st.lastClassifiedIdx.acesso = 0;
-                st.etapa = 'acesso:wait';
+                st.etapa = 'acesso:send';
                 console.log(`[${st.contato}] etapa->${st.etapa}`);
                 return { ok: true, classe: 'aceite' };
             } else {
@@ -534,9 +534,193 @@ async function processarMensagensPendentes(contato) {
             }
         }
 
-
     } finally {
         st.enviandoMensagens = false;
+    }
+
+    if (st.etapa === 'acesso:send') {
+        const acessoPath = path.join(__dirname, 'content', 'acesso.json');
+        let acessoData = null;
+
+        const loadAcesso = () => {
+            if (acessoData) return acessoData;
+            try {
+                let raw = fs.readFileSync(acessoPath, 'utf8');
+                raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
+                const parsed = JSON.parse(raw);
+                if (
+                    !parsed?.msg1?.bloco1A?.length ||
+                    !parsed?.msg1?.bloco2A?.length ||
+                    !parsed?.msg1?.bloco3A?.length ||
+                    !parsed?.msg3?.bloco1C?.length ||
+                    !parsed?.msg3?.bloco2C?.length ||
+                    !parsed?.msg3?.bloco3C?.length
+                ) throw new Error('content/acesso.json incompleto');
+                acessoData = parsed;
+            } catch {
+                acessoData = {
+                    msg1: {
+                        bloco1A: ["vou mandar o e-mail e a senha da conta"],
+                        bloco2A: ["só copia e cola pra não errar"],
+                        bloco3A: ["E-mail"]
+                    },
+                    msg3: {
+                        bloco1C: ["entra nesse link"],
+                        bloco2C: ["entra na conta mas nao mexe em nada ainda"],
+                        bloco3C: ["assim que conseguir acessar me manda um \"ENTREI\""]
+                    }
+                };
+            }
+            return acessoData;
+        };
+
+        const pick = (arr) => Array.isArray(arr) && arr.length
+            ? arr[Math.floor(Math.random() * arr.length)]
+            : '';
+
+        const cred = st.credenciais || {};
+        const email = cred.email || `usuario.treino+${(st.tid || '000000').toString().slice(0, 6)}@example.test`;
+        const senha = cred.password || 'SENHA-DE-TREINO';
+        const link = cred.login_url || process.env.TREINAMENTO_LOGIN_URL || 'https://example.test/login';
+
+        const c = loadAcesso();
+
+        const msg1 = [
+            `${pick(c.msg1.bloco1A)}, ${pick(c.msg1.bloco2A)}:`,
+            '',
+            `${pick(c.msg1.bloco3A)}:`,
+            email,
+            '',
+            'Senha:'
+        ].join('\n');
+
+        const msg2 = String(senha);
+
+        const msg3 = [
+            `${pick(c.msg3.bloco1C)}:`,
+            '',
+            link,
+            '',
+            `${pick(c.msg3.bloco2C)}, ${pick(c.msg3.bloco3C)}`
+        ].join('\n');
+
+        await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+        if (msg1) await sendMessage(st.contato, msg1);
+
+        await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+        if (msg2) await sendMessage(st.contato, msg2);
+
+        await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+        if (msg3) await sendMessage(st.contato, msg3);
+
+        st.mensagensPendentes = [];
+        st.mensagensDesdeSolicitacao = [];
+        st.lastClassifiedIdx.acesso = 0;
+
+        st.etapa = 'acesso:wait';
+        console.log(`[${st.contato}] etapa->${st.etapa}`);
+        return { ok: true };
+    }
+
+    if (st.etapa === 'acesso:wait') {
+        if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
+
+        const total = st.mensagensDesdeSolicitacao.length;
+        const startIdx = Math.max(0, st.lastClassifiedIdx?.acesso || 0);
+        if (startIdx >= total) {
+            st.mensagensPendentes = [];
+            return { ok: true, noop: 'no-new-messages' };
+        }
+
+        const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
+        const apiKey = process.env.OPENAI_API_KEY;
+
+        const allowed = ['confirmado', 'nao_confirmado', 'duvida', 'neutro'];
+        let classes = [];
+
+        for (const raw of novasMsgs) {
+            const msg = safeStr(raw).trim();
+            let msgClass = 'neutro';
+
+            if (apiKey) {
+                const structuredPrompt =
+                    `${promptClassificaAcesso(msg)}\n\n` +
+                    `Output only this valid JSON format with double quotes around keys and values, nothing else: ` +
+                    `{"label": "confirmado"} or {"label": "nao_confirmado"} or {"label": "duvida"} or {"label": "neutro"}`;
+
+                const callOnce = async (maxTok) => {
+                    let r;
+                    try {
+                        r = await axios.post(
+                            'https://api.openai.com/v1/responses',
+                            {
+                                model: 'gpt-5',
+                                input: structuredPrompt,
+                                max_output_tokens: maxTok,
+                                reasoning: { effort: 'low' }
+                            },
+                            {
+                                headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                                timeout: 15000,
+                                validateStatus: () => true
+                            }
+                        );
+                    } catch {
+                        return { status: 0, picked: null };
+                    }
+                    const data = r.data;
+                    let rawText = '';
+                    if (Array.isArray(data?.output)) {
+                        data.output.forEach(item => {
+                            if (item.type === 'message' && Array.isArray(item.content) && item.content[0]?.text) {
+                                rawText = item.content[0].text;
+                            }
+                        });
+                    }
+                    if (!rawText) rawText = extractTextForLog(data);
+                    rawText = String(rawText || '').trim();
+
+                    let picked = null;
+                    if (rawText) {
+                        try {
+                            const parsed = JSON.parse(rawText);
+                            if (parsed && typeof parsed.label === 'string') picked = parsed.label.toLowerCase().trim();
+                        } catch {
+                            const m = rawText.match(/(?:"label"|label)\s*:\s*"([^"]+)"/i);
+                            if (m && m[1]) picked = m[1].toLowerCase().trim();
+                        }
+                    }
+                    if (!picked) picked = pickLabelFromResponseData(data, allowed);
+                    return { status: r.status, picked };
+                };
+
+                try {
+                    let resp = await callOnce(64);
+                    if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) {
+                        resp = await callOnce(256);
+                    }
+                    if (resp.status >= 200 && resp.status < 300 && resp.picked) {
+                        msgClass = resp.picked;
+                    }
+                } catch { }
+            }
+
+            classes.push(msgClass);
+        }
+
+        st.lastClassifiedIdx.acesso = total;
+        st.mensagensPendentes = [];
+
+        if (classes.includes('confirmado')) {
+            st.mensagensDesdeSolicitacao = [];
+            st.lastClassifiedIdx.acesso = 0;
+            st.etapa = 'confirmacao:wait';
+            console.log(`[${st.contato}] etapa->${st.etapa}`);
+            return { ok: true, classe: 'confirmado' };
+        }
+
+        const ultima = classes[classes.length - 1] || 'neutro';
+        return { ok: true, classe: ultima };
     }
 }
 
