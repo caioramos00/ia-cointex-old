@@ -21,8 +21,6 @@ function delayRange(minMs, maxMs) { const d = Math.floor(minMs + Math.random() *
 
 function pickLabelFromResponseData(data, allowed) {
     const S = new Set((allowed || []).map(s => String(s).toLowerCase()));
-
-    // 1) caminho JSON nativo (Responses API com response_format=json_schema)
     let label =
         data?.output?.[0]?.content?.[0]?.json?.label ??
         data?.output?.[0]?.content?.[0]?.text ??
@@ -30,27 +28,20 @@ function pickLabelFromResponseData(data, allowed) {
         data?.result ??
         data?.output_text ??
         (typeof data === 'string' ? data : '');
-
-    // 2) se vier como string, tentar fazer parse de JSON
     if (typeof label === 'string') {
         const raw = label.trim();
         if (raw.startsWith('{') || raw.startsWith('[')) {
             try {
                 const parsed = JSON.parse(raw);
                 if (parsed && typeof parsed.label === 'string') label = parsed.label;
-            } catch {
-                // segue o baile; vamos tentar regex mais abaixo
-            }
+            } catch {}
         }
     }
-
-    // 3) se ainda for texto livre, extrair a 1ª label permitida por regex
     if (typeof label === 'string') {
         const rx = new RegExp(`\\b(${Array.from(S).join('|')})\\b`, 'i');
         const m = rx.exec(label.toLowerCase());
         if (m) label = m[1];
     }
-
     label = String(label || '').trim().toLowerCase();
     return S.has(label) ? label : null;
 }
@@ -70,13 +61,11 @@ function extractTextForLog(data) {
     );
 }
 
-// debug-only: heurística simples para comparar no log (NÃO usada na decisão)
 function heuristicAceite(ctxRaw = '') {
     const s = String(ctxRaw).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
     const aceite = /(sim|ss+|claro|certo|fechad[oa]|fechou|bora|vamos|vamo|vambora|partiu|pra cima|to on|to dentro|ok(ay|ey)?|blz|beleza|show|suave|firmeza|fmz|pode ser|pdp|demoro(u)?|agora)\b/;
     const neg = /\b(n[aã]o|nao|n|negativo|nunca|nope?)\b/;
     if (aceite.test(s)) {
-        // negação a até ~3 tokens de distância
         const tokens = s.split(/\s+/);
         const ai = tokens.findIndex(t => aceite.test(' ' + t + ' '));
         const ni = tokens.findIndex(t => neg.test(' ' + t + ' '));
@@ -271,47 +260,24 @@ async function processarMensagensPendentes(contato) {
             } else {
                 const allowed = ['aceite', 'recusa', 'duvida'];
 
-                const makePayload = (maxTokens) => ({
-                    model: 'gpt-5',
-                    input: prompt,
-                    temperature: 0,
-                    max_output_tokens: maxTokens,
-                    text: {
-                        format: {
-                            type: 'json_schema',
-                            name: 'Label',
-                            schema: {
-                                type: 'object',
-                                properties: {
-                                    label: { type: 'string', enum: allowed }
-                                },
-                                required: ['label'],
-                                additionalProperties: false
-                            }
-                        }
-                    }
-                });
-
                 const callOnce = async (maxTok, tag) => {
+                    let r;
                     try {
-                        const allowed = ['aceite', 'recusa', 'duvida'];
-
-                        const r = await axios.post(
-                            'https://api.openai.com/v1/responses',
+                        r = await axios.post(
+                            'https://api.openai.com/v1/chat/completions',
                             {
                                 model: 'gpt-5',
-                                input: prompt,
-                                max_output_tokens: 32,
-                                // >>> CORREÇÃO AQUI: formato novo direto em text.format <<<
-                                text: {
-                                    format: {
-                                        type: 'json_schema',
+                                messages: [{ role: 'user', content: prompt }],
+                                temperature: 0,
+                                max_tokens: maxTok,
+                                response_format: {
+                                    type: 'json_schema',
+                                    json_schema: {
                                         name: 'Label',
+                                        strict: true,
                                         schema: {
                                             type: 'object',
-                                            properties: {
-                                                label: { type: 'string', enum: allowed }
-                                            },
+                                            properties: { label: { type: 'string', enum: allowed } },
                                             required: ['label'],
                                             additionalProperties: false
                                         }
@@ -319,90 +285,41 @@ async function processarMensagensPendentes(contato) {
                                 }
                             },
                             {
-                                headers: {
-                                    Authorization: `Bearer ${apiKey}`,
-                                    'Content-Type': 'application/json'
-                                },
+                                headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
                                 timeout: 15000,
                                 validateStatus: () => true
                             }
                         );
-
-                        // Log amigável do corpo (pode não haver output_text quando usar json_schema)
-                        const rawText = extractTextForLog(r.data);
-                        const usage = r.data?.usage ? JSON.stringify(r.data.usage) : '';
-                        const incomplete = r.data?.status === 'incomplete' ? 'yes' : 'no';
-                        console.log(`[${st.contato}] [LLM][interesse] http=${r.status} incomplete=${incomplete} usage=${usage} body=${truncate(rawText, 800)}`);
-
-                        if (r.status >= 200 && r.status < 300) {
-                            // 1) PRIORITÁRIO: ler JSON estruturado do caminho oficial
-                            let picked = r?.data?.output?.[0]?.content?.[0]?.json?.label;
-                            if (typeof picked === 'string') picked = picked.toLowerCase();
-
-                            // 2) Se não vier no content.json, tenta parsear o rawText (caso o provedor serialize o json como texto)
-                            if (!picked) {
-                                try {
-                                    const parsed = JSON.parse(rawText);
-                                    if (parsed && typeof parsed.label === 'string') {
-                                        picked = parsed.label.toLowerCase();
-                                    }
-                                } catch (_) { /* ignora */ }
-                            }
-
-                            // 3) Última tentativa: regex solta em qualquer campo textual
-                            if (!picked) picked = pickLabelFromResponseData(r.data, allowed);
-
-                            console.log(`[${st.contato}] [LLM][interesse] picked=${picked || '(null)'} allowed=${allowed.join(',')}`);
-                            if (picked) classe = picked;
-                            else console.warn(`[${st.contato}] [LLM][interesse] sem label válido — fallback=duvida`);
-                        } else {
-                            const emsg = r?.data?.error?.message || `HTTP ${r.status}`;
-                            console.warn(`[${st.contato}] [LLM][interesse] status != 2xx (${emsg}) — fallback=duvida`);
-                        }
                     } catch (e) {
-                        console.warn(
-                            `[${st.contato}] [LLM][interesse] erro="${e.message || e}" — fallback=duvida`
-                        );
+                        console.warn(`[${st.contato}] [LLM][interesse][${tag}] erro="${e.message || e}"`);
+                        return { status: 0, finish_reason: null, picked: null };
                     }
 
-                    const status = r.status;
-                    const inc = r.data?.status === 'incomplete' ? (r.data?.incomplete_details?.reason || 'unknown') : null;
-                    const usage = r.data?.usage ? JSON.stringify(r.data.usage) : '';
-                    const preview =
-                        (typeof r.data?.output?.[0]?.content?.[0]?.json !== 'undefined' ? JSON.stringify(r.data.output[0].content[0].json) : '') ||
-                        (typeof r.data?.output_text === 'string' && r.data.output_text) ||
-                        (typeof r.data?.output?.[0]?.content?.[0]?.text === 'string' && r.data.output[0].content[0].text) ||
-                        (typeof r.data?.choices?.[0]?.message?.content === 'string' && r.data.choices[0].message.content) ||
-                        (typeof r.data?.result === 'string' && r.data.result) ||
-                        '';
+                    const data = r.data;
+                    const rawText = data?.choices?.[0]?.message?.content || '';
+                    const finish_reason = data?.choices?.[0]?.finish_reason || '';
+                    const usage = data?.usage ? JSON.stringify(data.usage) : '';
+                    console.log(`[${st.contato}] [LLM][interesse][${tag}] http=${r.status} finish_reason=${finish_reason} usage=${usage} body=${truncate(rawText, 800)}`);
 
-                    console.log(`[${st.contato}] [LLM][interesse][${tag}] http=${status} incomplete=${inc || 'no'} usage=${usage} body=${truncate(preview, 800)}`);
-
-                    // fonte principal
-                    let picked = r.data?.output?.[0]?.content?.[0]?.json?.label || null;
-
-                    // tenta JSON de preview
-                    if (!picked && preview) {
+                    let picked = null;
+                    if (rawText) {
                         try {
-                            const parsed = JSON.parse(preview);
-                            if (parsed && typeof parsed.label === 'string') picked = parsed.label;
-                        } catch { /* ignore */ }
+                            const parsed = JSON.parse(rawText);
+                            if (parsed && typeof parsed.label === 'string') picked = parsed.label.toLowerCase();
+                        } catch {}
                     }
-                    // regex de segurança
-                    if (!picked) picked = pickLabelFromResponseData(r.data, allowed);
+                    if (!picked) picked = pickLabelFromResponseData(data, allowed);
 
-                    picked = picked ? String(picked).toLowerCase() : null;
-                    return { status, inc, picked };
+                    return { status: r.status, finish_reason, picked };
                 };
 
                 try {
-                    let resp = await callOnce(128, 'try1');
+                    let resp = await callOnce(64, 'try1');
                     if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) {
-                        if (resp.inc === 'max_output_tokens' || !resp.picked) {
-                            resp = await callOnce(256, 'try2');
+                        if (resp.finish_reason === 'length' || !resp.picked) {
+                            resp = await callOnce(128, 'try2');
                         }
                     }
-
                     if (resp.status >= 200 && resp.status < 300 && resp.picked) {
                         classe = resp.picked;
                     } else {
@@ -413,7 +330,6 @@ async function processarMensagensPendentes(contato) {
                 }
             }
 
-            // Fallback: heurística pode promover "duvida" para "aceite" quando claro.
             const heur = heuristicAceite(contexto);
             console.log(`[${st.contato}] [DEBUG][interesse] heuristica=${heur} | llm=${classe}`);
             if (classe === 'duvida' && heur === 'aceite') {
@@ -518,47 +434,24 @@ async function processarMensagensPendentes(contato) {
             } else {
                 const allowed = ['aceite', 'recusa', 'duvida'];
 
-                const makePayload = (maxTokens) => ({
-                    model: 'gpt-5',
-                    input: prompt,
-                    temperature: 0,
-                    max_output_tokens: maxTokens,
-                    text: {
-                        format: {
-                            type: 'json_schema',
-                            name: 'Label',
-                            schema: {
-                                type: 'object',
-                                properties: {
-                                    label: { type: 'string', enum: allowed }
-                                },
-                                required: ['label'],
-                                additionalProperties: false
-                            }
-                        }
-                    }
-                });
-
                 const callOnce = async (maxTok, tag) => {
+                    let r;
                     try {
-                        const allowed = ['aceite', 'recusa', 'duvida'];
-
-                        const r = await axios.post(
-                            'https://api.openai.com/v1/responses',
+                        r = await axios.post(
+                            'https://api.openai.com/v1/chat/completions',
                             {
                                 model: 'gpt-5',
-                                input: prompt,
-                                max_output_tokens: 32,
-                                // >>> CORREÇÃO AQUI: formato novo direto em text.format <<<
-                                text: {
-                                    format: {
-                                        type: 'json_schema',
+                                messages: [{ role: 'user', content: prompt }],
+                                temperature: 0,
+                                max_tokens: maxTok,
+                                response_format: {
+                                    type: 'json_schema',
+                                    json_schema: {
                                         name: 'Label',
+                                        strict: true,
                                         schema: {
                                             type: 'object',
-                                            properties: {
-                                                label: { type: 'string', enum: allowed }
-                                            },
+                                            properties: { label: { type: 'string', enum: allowed } },
                                             required: ['label'],
                                             additionalProperties: false
                                         }
@@ -566,86 +459,41 @@ async function processarMensagensPendentes(contato) {
                                 }
                             },
                             {
-                                headers: {
-                                    Authorization: `Bearer ${apiKey}`,
-                                    'Content-Type': 'application/json'
-                                },
+                                headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
                                 timeout: 15000,
                                 validateStatus: () => true
                             }
                         );
-
-                        // Log amigável do corpo (pode não haver output_text quando usar json_schema)
-                        const rawText = extractTextForLog(r.data);
-                        const usage = r.data?.usage ? JSON.stringify(r.data.usage) : '';
-                        const incomplete = r.data?.status === 'incomplete' ? 'yes' : 'no';
-                        console.log(`[${st.contato}] [LLM][interesse] http=${r.status} incomplete=${incomplete} usage=${usage} body=${truncate(rawText, 800)}`);
-
-                        if (r.status >= 200 && r.status < 300) {
-                            // 1) PRIORITÁRIO: ler JSON estruturado do caminho oficial
-                            let picked = r?.data?.output?.[0]?.content?.[0]?.json?.label;
-                            if (typeof picked === 'string') picked = picked.toLowerCase();
-
-                            // 2) Se não vier no content.json, tenta parsear o rawText (caso o provedor serialize o json como texto)
-                            if (!picked) {
-                                try {
-                                    const parsed = JSON.parse(rawText);
-                                    if (parsed && typeof parsed.label === 'string') {
-                                        picked = parsed.label.toLowerCase();
-                                    }
-                                } catch (_) { /* ignora */ }
-                            }
-
-                            // 3) Última tentativa: regex solta em qualquer campo textual
-                            if (!picked) picked = pickLabelFromResponseData(r.data, allowed);
-
-                            console.log(`[${st.contato}] [LLM][interesse] picked=${picked || '(null)'} allowed=${allowed.join(',')}`);
-                            if (picked) classe = picked;
-                            else console.warn(`[${st.contato}] [LLM][interesse] sem label válido — fallback=duvida`);
-                        } else {
-                            const emsg = r?.data?.error?.message || `HTTP ${r.status}`;
-                            console.warn(`[${st.contato}] [LLM][interesse] status != 2xx (${emsg}) — fallback=duvida`);
-                        }
                     } catch (e) {
-                        console.warn(
-                            `[${st.contato}] [LLM][interesse] erro="${e.message || e}" — fallback=duvida`
-                        );
+                        console.warn(`[${st.contato}] [LLM][instrucoes][${tag}] erro="${e.message || e}"`);
+                        return { status: 0, finish_reason: null, picked: null };
                     }
 
-                    const status = r.status;
-                    const inc = r.data?.status === 'incomplete' ? (r.data?.incomplete_details?.reason || 'unknown') : null;
-                    const usage = r.data?.usage ? JSON.stringify(r.data.usage) : '';
-                    const preview =
-                        (typeof r.data?.output?.[0]?.content?.[0]?.json !== 'undefined' ? JSON.stringify(r.data.output[0].content[0].json) : '') ||
-                        (typeof r.data?.output_text === 'string' && r.data.output_text) ||
-                        (typeof r.data?.output?.[0]?.content?.[0]?.text === 'string' && r.data.output[0].content[0].text) ||
-                        (typeof r.data?.choices?.[0]?.message?.content === 'string' && r.data.choices[0].message.content) ||
-                        (typeof r.data?.result === 'string' && r.data.result) ||
-                        '';
+                    const data = r.data;
+                    const rawText = data?.choices?.[0]?.message?.content || '';
+                    const finish_reason = data?.choices?.[0]?.finish_reason || '';
+                    const usage = data?.usage ? JSON.stringify(data.usage) : '';
+                    console.log(`[${st.contato}] [LLM][instrucoes][${tag}] http=${r.status} finish_reason=${finish_reason} usage=${usage} body=${truncate(rawText, 800)}`);
 
-                    console.log(`[${st.contato}] [LLM][instrucoes][${tag}] http=${status} incomplete=${inc || 'no'} usage=${usage} body=${truncate(preview, 800)}`);
-
-                    let picked = r.data?.output?.[0]?.content?.[0]?.json?.label || null;
-                    if (!picked && preview) {
+                    let picked = null;
+                    if (rawText) {
                         try {
-                            const parsed = JSON.parse(preview);
-                            if (parsed && typeof parsed.label === 'string') picked = parsed.label;
-                        } catch { /* ignore */ }
+                            const parsed = JSON.parse(rawText);
+                            if (parsed && typeof parsed.label === 'string') picked = parsed.label.toLowerCase();
+                        } catch {}
                     }
-                    if (!picked) picked = pickLabelFromResponseData(r.data, allowed);
-                    picked = picked ? String(picked).toLowerCase() : null;
+                    if (!picked) picked = pickLabelFromResponseData(data, allowed);
 
-                    return { status, inc, picked };
+                    return { status: r.status, finish_reason, picked };
                 };
 
                 try {
-                    let resp = await callOnce(128, 'try1');
+                    let resp = await callOnce(64, 'try1');
                     if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) {
-                        if (resp.inc === 'max_output_tokens' || !resp.picked) {
-                            resp = await callOnce(256, 'try2');
+                        if (resp.finish_reason === 'length' || !resp.picked) {
+                            resp = await callOnce(128, 'try2');
                         }
                     }
-
                     if (resp.status >= 200 && resp.status < 300 && resp.picked) {
                         classe = resp.picked;
                     } else {
@@ -691,7 +539,7 @@ async function sendMessage(contato, texto) {
             try {
                 const c = await getContatoByPhone(contato);
                 subscriberId = c?.manychat_subscriber_id || c?.subscriber_id || null;
-            } catch { }
+            } catch {}
             if (!subscriberId) {
                 const st = ensureEstado(contato);
                 if (st.manychat_subscriber_id) subscriberId = st.manychat_subscriber_id;
