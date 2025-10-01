@@ -6,7 +6,7 @@ const axios = require('axios');
 const estadoContatos = require('./state.js');
 const { getActiveTransport } = require('./lib/transport');
 const { getContatoByPhone } = require('./db');
-const { promptClassificaAceite, promptClassificaAcesso } = require('./prompts');
+const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao } = require('./prompts');
 
 let log = console;
 
@@ -738,13 +738,181 @@ async function processarMensagensPendentes(contato) {
         if (classes.includes('confirmado')) {
             st.mensagensDesdeSolicitacao = [];
             st.lastClassifiedIdx.acesso = 0;
-            st.etapa = 'confirmacao:wait';
+
+            st.etapa = 'confirmacao:send';
+            console.log(`[${st.contato}] etapa->${st.etapa}`);
+        } else {
+            const ultima = classes[classes.length - 1] || 'neutro';
+            return { ok: true, classe: ultima };
+        }
+    }
+    if (st.etapa === 'confirmacao:send') {
+        const confirmacaoPath = path.join(__dirname, 'content', 'confirmacao.json');
+        let confirmacaoData = null;
+
+        const loadConfirmacao = () => {
+            if (confirmacaoData) return confirmacaoData;
+            try {
+                let raw = fs.readFileSync(confirmacaoPath, 'utf8');
+                raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
+                const parsed = JSON.parse(raw);
+                if (
+                    !parsed?.msg1?.bloco1?.length ||
+                    !parsed?.msg1?.bloco2?.length ||
+                    !parsed?.msg1?.bloco3?.length
+                ) throw new Error('content/confirmacao.json incompleto');
+                confirmacaoData = parsed;
+            } catch {
+                confirmacaoData = {
+                    msg1: {
+                        bloco1: ['boa', 'boaa', 'boaaa', 'beleza', 'belezaa', 'belezaaa', 'tranquilo', 'isso aí'],
+                        bloco2: [
+                            'agora manda um PRINT mostrando o saldo disponível',
+                            'agora manda um PRINT mostrando o saldo disponível aí',
+                            'agora me manda um PRINT mostrando o saldo disponível nessa conta',
+                            'agora me manda um PRINT mostrando o saldo'
+                        ],
+                        bloco3: [
+                            'ou escreve aqui quanto que tem disponível',
+                            'ou me escreve o valor',
+                            'ou manda o valor em escrito',
+                            'ou me fala o valor disponível'
+                        ]
+                    }
+                };
+            }
+            return confirmacaoData;
+        };
+
+        const pick = (arr) => Array.isArray(arr) && arr.length
+            ? arr[Math.floor(Math.random() * arr.length)]
+            : '';
+
+        const composeConfirmacaoMsg = () => {
+            const c = loadConfirmacao();
+            const b1 = pick(c.msg1.bloco1);
+            const b2 = pick(c.msg1.bloco2);
+            const b3 = pick(c.msg1.bloco3);
+            return `${b1}, ${b2}, ${b3}`;
+        };
+
+        const m = chooseUnique(composeConfirmacaoMsg, st) || composeConfirmacaoMsg();
+
+        await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+        if (m) await sendMessage(st.contato, m);
+
+        st.mensagensPendentes = [];
+        st.mensagensDesdeSolicitacao = [];
+        st.lastClassifiedIdx.confirmacao = 0;
+
+        st.etapa = 'confirmacao:wait';
+        console.log(`[${st.contato}] etapa->${st.etapa}`);
+        return { ok: true };
+    }
+
+    if (st.etapa === 'confirmacao:wait') {
+        if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
+
+        const total = st.mensagensDesdeSolicitacao.length;
+        const startIdx = Math.max(0, st.lastClassifiedIdx?.confirmacao || 0);
+        if (startIdx >= total) {
+            st.mensagensPendentes = [];
+            return { ok: true, noop: 'no-new-messages' };
+        }
+
+        const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
+        const apiKey = process.env.OPENAI_API_KEY;
+
+        const looksLikeMediaUrl = (s) => {
+            const n = String(s || '');
+            return /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(n)
+                || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
+        };
+
+        let confirmado = false;
+
+        for (const raw of novasMsgs) {
+            const msg = safeStr(raw).trim();
+            if (looksLikeMediaUrl(msg)) { confirmado = true; break; }
+        }
+
+        if (!confirmado && apiKey) {
+            const allowed = ['confirmado', 'nao_confirmado', 'duvida', 'neutro'];
+
+            const contexto = novasMsgs.map(s => safeStr(s)).join(' | ');
+            const structuredPrompt =
+                `${promptClassificaConfirmacao(contexto)}\n\n` +
+                `Output only this valid JSON format with double quotes around keys and values, nothing else: ` +
+                `{"label": "confirmado"} or {"label": "nao_confirmado"} or {"label": "duvida"} or {"label": "neutro"}`;
+
+            const callOnce = async (maxTok) => {
+                let r;
+                try {
+                    r = await axios.post(
+                        'https://api.openai.com/v1/responses',
+                        {
+                            model: 'gpt-5',
+                            input: structuredPrompt,
+                            max_output_tokens: maxTok,
+                            reasoning: { effort: 'low' }
+                        },
+                        {
+                            headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                            timeout: 15000,
+                            validateStatus: () => true
+                        }
+                    );
+                } catch {
+                    return { status: 0, picked: null };
+                }
+                const data = r.data;
+                let rawText = '';
+                if (Array.isArray(data?.output)) {
+                    data.output.forEach(item => {
+                        if (item.type === 'message' && Array.isArray(item.content) && item.content[0]?.text) {
+                            rawText = item.content[0].text;
+                        }
+                    });
+                }
+                if (!rawText) rawText = extractTextForLog(data);
+                rawText = String(rawText || '').trim();
+
+                let picked = null;
+                if (rawText) {
+                    try {
+                        const parsed = JSON.parse(rawText);
+                        if (parsed && typeof parsed.label === 'string') picked = parsed.label.toLowerCase().trim();
+                    } catch {
+                        const m = rawText.match(/(?:"label"|label)\s*:\s*"([^"]+)"/i);
+                        if (m && m[1]) picked = m[1].toLowerCase().trim();
+                    }
+                }
+                if (!picked) picked = pickLabelFromResponseData(data, allowed);
+                return { status: r.status, picked };
+            };
+
+            try {
+                let resp = await callOnce(64);
+                if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) {
+                    resp = await callOnce(256);
+                }
+                confirmado = (resp.status >= 200 && resp.status < 300 && resp.picked === 'confirmado');
+            } catch { }
+        }
+
+        st.lastClassifiedIdx.confirmacao = total;
+        st.mensagensPendentes = [];
+
+        if (confirmado) {
+            st.mensagensDesdeSolicitacao = [];
+            st.lastClassifiedIdx.saque = 0;
+
+            st.etapa = 'saque:send';
             console.log(`[${st.contato}] etapa->${st.etapa}`);
             return { ok: true, classe: 'confirmado' };
         }
 
-        const ultima = classes[classes.length - 1] || 'neutro';
-        return { ok: true, classe: ultima };
+        return { ok: true, classe: 'standby' };
     }
 }
 
