@@ -538,10 +538,10 @@ async function processarMensagensPendentes(contato) {
 
                 st.etapa = 'acesso:send';
                 console.log(`[${st.contato}] etapa->${st.etapa}`);
-                return { ok: true, classe: 'aceite' };
+            } else {
+                st.mensagensPendentes = [];
+                return { ok: true, classe };
             }
-            st.mensagensPendentes = [];
-            return { ok: true, classe };
         }
 
     } finally {
@@ -588,9 +588,7 @@ async function processarMensagensPendentes(contato) {
             ? arr[Math.floor(Math.random() * arr.length)]
             : '';
 
-        const cred = st.credenciais || {};
-
-        if (!cred.email || !cred.password) {
+        if (!st.credenciais?.email || !st.credenciais?.password || !st.credenciais?.login_url) {
             try {
                 await criarUsuarioDjango(st.contato);
             } catch (e) {
@@ -598,16 +596,16 @@ async function processarMensagensPendentes(contato) {
             }
         }
 
-        const c2 = st.credenciais || {};
-        if (!c2.email || !c2.password) {
-            console.warn(`[${st.contato}] Sem credenciais válidas; abortando acesso:send.`);
-            st.mensagensPendentes = [];
-            return { ok: false, reason: 'no-credentials' };
-        }
+        const cred = (st.credenciais && typeof st.credenciais === 'object') ? st.credenciais : {};
+        const email = safeStr(cred.email).trim();
+        const senha = safeStr(cred.password).trim();
+        const link = safeStr(cred.login_url).trim();
 
-        const email = cred.email;
-        const senha = cred.password;
-        const link = cred.login_url;
+        if (!email || !senha || !link) {
+            console.warn(`[${st.contato}] Credenciais incompletas; abortando acesso:send. email=${!!email} senha=${!!senha} link=${!!link}`);
+            st.mensagensPendentes = [];
+            return { ok: false, reason: 'missing-credentials' };
+        }
 
         const c = loadAcesso();
 
