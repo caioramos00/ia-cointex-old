@@ -354,21 +354,97 @@ async function processarMensagensPendentes(contato) {
                     const parsed = JSON.parse(raw);
                     if (
                         !parsed?.msg1?.grupo1?.length || !parsed?.msg1?.grupo2?.length || !parsed?.msg1?.grupo3?.length ||
-                        !parsed?.pontos1?.grupo1?.length || !parsed?.pontos1?.grupo2?.length || !parsed?.pontos1?.grupo3?.length ||
-                        !parsed?.pontos2?.grupo1?.length || !parsed?.pontos2?.grupo2?.length || !parsed?.pontos2?.grupo3?.length ||
-                        !parsed?.pontos3?.grupo1?.length || !parsed?.pontos3?.grupo2?.length || !parsed?.pontos3?.grupo3?.length ||
-                        !parsed?.pontos4?.grupo1?.length || !parsed?.pontos4?.grupo2?.length || !parsed?.pontos4?.grupo3?.length ||
+                        !parsed?.pontos?.p1?.g1?.length || !parsed?.pontos?.p1?.g2?.length || !parsed?.pontos?.p1?.g3?.length ||
+                        !parsed?.pontos?.p2?.g1?.length || !parsed?.pontos?.p2?.g2?.length || !parsed?.pontos?.p2?.g3?.length ||
+                        !parsed?.pontos?.p3?.g1?.length || !parsed?.pontos?.p3?.g2?.length || !parsed?.pontos?.p3?.g3?.length ||
+                        !parsed?.pontos?.p4?.g1?.length || !parsed?.pontos?.p4?.g2?.length || !parsed?.pontos?.p4?.g3?.length ||
                         !parsed?.msg3?.grupo1?.length || !parsed?.msg3?.grupo2?.length
                     ) throw new Error('content/instrucoes.json incompleto');
                     instrucoesData = parsed;
                 } catch {
                     instrucoesData = {
-                        msg1: { grupo1: ['salvou o contato'], grupo2: ['salva ai que se aparecer outro trampo eu te chamo tambem'], grupo3: ['vou te mandar o passo a passo do que precisa pra fazer certinho'] },
-                        pontos1: { grupo1: ['você precisa de uma conta com pix ativo pra receber'], grupo2: ['pode ser qualquer banco'], grupo3: ['só não dá certo se for o SICOOB'] },
-                        pontos2: { grupo1: ['se tiver dados móveis'], grupo2: ['desliga o wi-fi'], grupo3: ['mas se não tiver deixa no wi-fi mesmo'] },
-                        pontos3: { grupo1: ['vou passar o email e a senha de uma conta pra você acessar'], grupo2: ['lá vai ter um saldo disponível'], grupo3: ['é só você transferir pra sua conta, mais nada'] },
-                        pontos4: { grupo1: ['você vai receber 2000'], grupo2: ['o restante você manda pra minha conta logo que cair'], grupo3: ['eu vou te passar a chave pix depois'] },
-                        msg3: { grupo1: ['é tranquilinho'], grupo2: ['a gente vai fazendo parte por parte pra não ter erro blz'] }
+                        msg1: {
+                            grupo1: [
+                                "salvou o contato",
+                                "salvou o número"
+                            ],
+                            grupo2: [
+                                "salva ai que se aparecer outro trampo eu te chamo tambem",
+                                "salva aí que se aparecer outro trampo eu te chamo também"
+                            ],
+                            grupo3: [
+                                "vou te mandar o passo a passo do que precisa pra fazer certinho",
+                                "vou te mandar o passo a passo do que precisa pra fazer direitinho"
+                            ]
+                        },
+                        pontos: {
+                            p1: {
+                                g1: [
+                                    "você precisa de uma conta com pix ativo pra receber",
+                                    "você precisa ter uma conta com pix ativo pra receber"
+                                ],
+                                g2: [
+                                    "pode ser qualquer banco",
+                                    "pode ser qlqr banco"
+                                ],
+                                g3: [
+                                    "so nao da certo se for o SICOOB",
+                                    "só não dá certo se for o SICOOB"
+                                ]
+                            },
+                            p2: {
+                                g1: [
+                                    "se tiver dados moveis",
+                                    "se tiver dados móveis"
+                                ],
+                                g2: [
+                                    "desativa o wi-fi",
+                                    "desliga o wi-fi"
+                                ],
+                                g3: [
+                                    "mas se nao tiver deixa no wifi mesmo",
+                                    "mas se não tiver deixa no wifi mesmo"
+                                ]
+                            },
+                            p3: {
+                                g1: [
+                                    "vou passar o email e a senha de uma conta pra você acessar",
+                                    "vou passar o e-mail e a senha de uma conta pra você acessar"
+                                ],
+                                g2: [
+                                    "lá vai ter um saldo disponível",
+                                    "lá vai ter um saldo disponivel"
+                                ],
+                                g3: [
+                                    "é só você transferir pra sua conta, mais nada",
+                                    "é só vc transferir pra sua conta, mais nada"
+                                ]
+                            },
+                            p4: {
+                                g1: [
+                                    "sua parte vai ser 2000",
+                                    "você vai receber 2000"
+                                ],
+                                g2: [
+                                    "o restante manda pra minha conta logo que cair",
+                                    "o restante você manda pra minha conta logo que cair"
+                                ],
+                                g3: [
+                                    "eu vou te passar a chave pix depois",
+                                    "depois eu te passo a chave pix"
+                                ]
+                            }
+                        },
+                        msg3: {
+                            grupo1: [
+                                "é tranquilinho",
+                                "é tranquilo"
+                            ],
+                            grupo2: [
+                                "a gente vai fazendo parte por parte pra nao ter erro blz",
+                                "a gente vai fazendo parte por parte pra não ter erro blz"
+                            ]
+                        }
                     };
                 }
                 return instrucoesData;
@@ -385,11 +461,11 @@ async function processarMensagensPendentes(contato) {
             };
             const composeMsg2 = () => {
                 const c = loadInstrucoes();
-                const p1 = `• ${pick(c.pontos1.grupo1)}, ${pick(c.pontos1.grupo2)}, ${pick(c.pontos1.grupo3)}`;
-                const p2 = `• ${pick(c.pontos2.grupo1)}, ${pick(c.pontos2.grupo2)}, ${pick(c.pontos2.grupo3)}`;
-                const p3 = `• ${pick(c.pontos3.grupo1)}, ${pick(c.pontos3.grupo2)}, ${pick(c.pontos3.grupo3)}`;
-                const p4 = `• ${pick(c.pontos4.grupo1)}, ${pick(c.pontos4.grupo2)}, ${pick(c.pontos4.grupo3)}`;
-                return [p1, p2, p3, p4].join('\n');
+                const p1 = `- ${pick(c.pontos.p1.g1)}, ${pick(c.pontos.p1.g2)}, ${pick(c.pontos.p1.g3)}`;
+                const p2 = `- ${pick(c.pontos.p2.g1)}, ${pick(c.pontos.p2.g2)}, ${pick(c.pontos.p2.g3)}`;
+                const p3 = `- ${pick(c.pontos.p3.g1)}, ${pick(c.pontos.p3.g2)}, ${pick(c.pontos.p3.g3)}`;
+                const p4 = `- ${pick(c.pontos.p4.g1)}, ${pick(c.pontos.p4.g2)}, ${pick(c.pontos.p4.g3)}`;
+                return [p1, p2, p3, p4].join('\n\n');
             };
             const composeMsg3 = () => {
                 const c = loadInstrucoes();
