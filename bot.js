@@ -61,21 +61,6 @@ function extractTextForLog(data) {
     );
 }
 
-function heuristicAceite(ctxRaw = '') {
-    const s = String(ctxRaw).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
-    const aceite = /(sim|ss+|claro|certo|fechad[oa]|fechou|bora|vamos|vamo|vambora|partiu|pra cima|to on|to dentro|ok(ay|ey)?|blz|beleza|show|suave|firmeza|fmz|pode ser|pdp|demoro(u)?|agora)\b/;
-    const neg = /\b(n[aã]o|nao|n|negativo|nunca|nope?)\b/;
-    if (aceite.test(s)) {
-        const tokens = s.split(/\s+/);
-        const ai = tokens.findIndex(t => aceite.test(' ' + t + ' '));
-        const ni = tokens.findIndex(t => neg.test(' ' + t + ' '));
-        if (ai !== -1 && ni !== -1 && Math.abs(ai - ni) <= 3) return 'recusa';
-        return 'aceite';
-    }
-    if (neg.test(s)) return 'recusa';
-    return 'duvida';
-}
-
 function ensureEstado(contato) {
     const key = safeStr(contato) || 'desconhecido';
     if (!estadoContatos[key]) {
@@ -92,13 +77,20 @@ function ensureEstado(contato) {
             sentHashes: new Set(),
             classificacaoAceite: null,
             classesSinceSolicitacao: [],
-            heurClassesSinceSolicitacao: [],
+            // Removido: heurClassesSinceSolicitacao (não usamos mais heurística)
+            lastClassifiedIdx: { interesse: 0, acesso: 0, confirmacao: 0, saque: 0 }, // ponteiros por etapa
         };
     } else {
-        estadoContatos[key].updatedAt = Date.now();
-        if (!Array.isArray(estadoContatos[key].mensagensPendentes)) estadoContatos[key].mensagensPendentes = [];
-        if (!Array.isArray(estadoContatos[key].mensagensDesdeSolicitacao)) estadoContatos[key].mensagensDesdeSolicitacao = [];
-        if (!(estadoContatos[key].sentHashes instanceof Set)) estadoContatos[key].sentHashes = new Set(Array.isArray(estadoContatos[key].sentHashes) ? estadoContatos[key].sentHashes : []);
+        const st = estadoContatos[key];
+        st.updatedAt = Date.now();
+        if (!Array.isArray(st.mensagensPendentes)) st.mensagensPendentes = [];
+        if (!Array.isArray(st.mensagensDesdeSolicitacao)) st.mensagensDesdeSolicitacao = [];
+        if (!(st.sentHashes instanceof Set)) st.sentHashes = new Set(Array.isArray(st.sentHashes) ? st.sentHashes : []);
+        if (!st.lastClassifiedIdx) st.lastClassifiedIdx = { interesse: 0, acesso: 0, confirmacao: 0, saque: 0 };
+        // garantir todas as chaves do ponteiro
+        for (const k of ['interesse', 'acesso', 'confirmacao', 'saque']) {
+            if (typeof st.lastClassifiedIdx[k] !== 'number' || st.lastClassifiedIdx[k] < 0) st.lastClassifiedIdx[k] = 0;
+        }
     }
     return estadoContatos[key];
 }
@@ -211,6 +203,9 @@ async function processarMensagensPendentes(contato) {
 
             st.mensagensPendentes = [];
             st.mensagensDesdeSolicitacao = [];
+            // reset ponteiro da próxima etapa para não carregar lixo antigo
+            st.lastClassifiedIdx.interesse = 0;
+
             st.etapa = 'abertura:wait';
             console.log(`[${st.contato}] etapa->${st.etapa}`);
             return { ok: true };
@@ -242,6 +237,7 @@ async function processarMensagensPendentes(contato) {
 
             st.mensagensPendentes = [];
             st.mensagensDesdeSolicitacao = [];
+            st.lastClassifiedIdx.interesse = 0; // novo ciclo de classificação para a etapa
             st.etapa = 'interesse:wait';
             console.log(`[${st.contato}] etapa->${st.etapa}`);
             return { ok: true };
@@ -250,18 +246,27 @@ async function processarMensagensPendentes(contato) {
         if (st.etapa === 'interesse:wait') {
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
 
+            // === NOVO: classificar apenas o "lote novo" desde o último índice classificado ===
+            const total = st.mensagensDesdeSolicitacao.length;
+            const startIdx = Math.max(0, st.lastClassifiedIdx?.interesse || 0);
+            if (startIdx >= total) {
+                // nada novo para classificar
+                st.mensagensPendentes = [];
+                return { ok: true, noop: 'no-new-messages' };
+            }
+            const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
             const apiKey = process.env.OPENAI_API_KEY;
-            let classe = 'duvida';
+
             let classes = [];
+            for (const raw of novasMsgs) {
+                const msg = safeStr(raw).trim();
+                const prompt = promptClassificaAceite(msg);
 
-            for (const msg of st.mensagensDesdeSolicitacao) {
-                const prompt = promptClassificaAceite(msg.trim());
-
-                console.log(`[${st.contato}] [LLM][interesse] msg="${msg.trim()}" prompt=${truncate(prompt, 800)}`);
+                console.log(`[${st.contato}] [LLM][interesse] msg="${msg}" prompt=${truncate(prompt, 800)}`);
 
                 let msgClass = 'duvida';
                 if (!apiKey) {
-                    console.warn(`[${st.contato}] [LLM][interesse] OPENAI_API_KEY ausente — usando fallback=duvida for msg="${msg.trim()}"`);
+                    console.warn(`[${st.contato}] [LLM][interesse] OPENAI_API_KEY ausente — usando fallback=duvida for msg="${msg}"`);
                 } else {
                     const allowed = ['aceite', 'recusa', 'duvida'];
                     const structuredPrompt = `${prompt}\n\nOutput only this valid JSON format with double quotes around keys and values, nothing else: {"label": "aceite"} or {"label": "recusa"} or {"label": "duvida"}`;
@@ -303,13 +308,12 @@ async function processarMensagensPendentes(contato) {
                         console.log(`[${st.contato}] [LLM][interesse][${tag}] http=${r.status} incomplete=${incomplete || 'no'} usage=${usage} body=${truncate(rawText, 800)}`);
 
                         let picked = null;
-                        rawText = rawText.trim(); // Remove any leading/trailing whitespace or newlines
+                        rawText = rawText.trim();
                         if (rawText) {
                             try {
                                 const parsed = JSON.parse(rawText);
                                 if (parsed && typeof parsed.label === 'string') picked = parsed.label.toLowerCase().trim();
                             } catch {
-                                // Fallback regex handling both quoted and unquoted keys
                                 const m = rawText.match(/(?:"label"|label)\s*:\s*"([^"]+)"/i);
                                 if (m && m[1]) picked = m[1].toLowerCase().trim();
                             }
@@ -329,42 +333,31 @@ async function processarMensagensPendentes(contato) {
                         if (resp.status >= 200 && resp.status < 300 && resp.picked) {
                             msgClass = resp.picked;
                         } else {
-                            console.warn(`[${st.contato}] [LLM][interesse] sem label válido for msg="${msg.trim()}" — fallback=duvida`);
+                            console.warn(`[${st.contato}] [LLM][interesse] sem label válido for msg="${msg}" — fallback=duvida`);
                         }
                     } catch (e) {
-                        console.warn(`[${st.contato}] [LLM][interesse] erro="${e.message || e}" for msg="${msg.trim()}" — fallback=duvida`);
+                        console.warn(`[${st.contato}] [LLM][interesse] erro="${e.message || e}" for msg="${msg}" — fallback=duvida`);
                     }
                 }
                 classes.push(msgClass);
-                console.log(`[${st.contato}] [LLM][interesse] individual class=${msgClass} for msg="${msg.trim()}"`);
+                console.log(`[${st.contato}] [LLM][interesse] individual class=${msgClass} for msg="${msg}"`);
             }
 
-            // Decide overall class based on individual classes, e.g., last non-duvida or majority
+            // Atualiza o ponteiro para "mensagens já classificadas" (evita reclassificar no futuro)
+            st.lastClassifiedIdx.interesse = total;
+
+            // Decisão **apenas** com base no LOTE NOVO
+            let classe = 'duvida';
             const nonDuvida = classes.filter(c => c !== 'duvida');
-            classe = nonDuvida.length > 0 ? nonDuvida[nonDuvida.length - 1] : 'duvida'; // Use last non-duvida
-
-            let heurClasses = [];
-            for (const msg of st.mensagensDesdeSolicitacao) {
-                const msgHeur = heuristicAceite(msg.trim());
-                heurClasses.push(msgHeur);
-                console.log(`[${st.contato}] [HEUR][interesse] individual heur=${msgHeur} for msg="${msg.trim()}"`);
-            }
-
-            const nonDuvidaHeur = heurClasses.filter(c => c !== 'duvida');
-            const heur = nonDuvidaHeur.length > 0 ? nonDuvidaHeur[nonDuvidaHeur.length - 1] : 'duvida'; // Use last non-duvida from heur
-
-            console.log(`[${st.contato}] [DEBUG][interesse] overall heuristica=${heur} from individual heur=[${heurClasses.join(', ')}] | llm=${classe}`);
-            if (classe === 'duvida' && heur === 'aceite') {
-                console.log(`[${st.contato}] [LLM][interesse] usando fallback heurístico: aceite`);
-                classe = 'aceite';
-            }
+            classe = nonDuvida.length > 0 ? nonDuvida[nonDuvida.length - 1] : 'duvida'; // mantém a tua regra dentro do lote novo
 
             st.classificacaoAceite = classe;
-            console.log(`[${st.contato}] interesse.class=${classe} from overall LLM=${classe} and heur=${heur}`);
+            console.log(`[${st.contato}] interesse.class=${classe} (baseado apenas no lote novo)`);
 
             st.mensagensPendentes = [];
             if (classe === 'aceite') {
                 st.mensagensDesdeSolicitacao = [];
+                st.lastClassifiedIdx.interesse = 0; // reseta para o próximo ciclo de etapa
                 st.etapa = 'instrucoes:send';
                 console.log(`[${st.contato}] etapa->${st.etapa}`);
             }
@@ -436,11 +429,16 @@ async function processarMensagensPendentes(contato) {
 
             st.mensagensPendentes = [];
             st.mensagensDesdeSolicitacao = [];
+            st.lastClassifiedIdx.acesso = 0; // se for usar classificação em etapas seguintes
+            st.lastClassifiedIdx.confirmacao = 0;
+            st.lastClassifiedIdx.saque = 0;
+
             st.etapa = 'instrucoes:wait';
             console.log(`[${st.contato}] etapa->${st.etapa}`);
             return { ok: true };
         }
 
+        // Outras etapas (acesso/confirmacao/saque) ficam inalteradas aqui
         st.mensagensPendentes = [];
         return { ok: true };
     } finally {
