@@ -34,7 +34,7 @@ function pickLabelFromResponseData(data, allowed) {
             try {
                 const parsed = JSON.parse(raw);
                 if (parsed && typeof parsed.label === 'string') label = parsed.label;
-            } catch {}
+            } catch { }
         }
     }
     if (typeof label === 'string') {
@@ -264,17 +264,16 @@ async function processarMensagensPendentes(contato) {
                     let r;
                     try {
                         r = await axios.post(
-                            'https://api.openai.com/v1/chat/completions',
+                            'https://api.openai.com/v1/responses',
                             {
                                 model: 'gpt-5',
-                                messages: [{ role: 'user', content: prompt }],
+                                input: prompt,
                                 temperature: 0,
-                                max_tokens: maxTok,
-                                response_format: {
-                                    type: 'json_schema',
-                                    json_schema: {
+                                max_output_tokens: maxTok,
+                                text: {
+                                    format: {
+                                        type: 'json_schema',
                                         name: 'Label',
-                                        strict: true,
                                         schema: {
                                             type: 'object',
                                             properties: { label: { type: 'string', enum: allowed } },
@@ -292,31 +291,31 @@ async function processarMensagensPendentes(contato) {
                         );
                     } catch (e) {
                         console.warn(`[${st.contato}] [LLM][interesse][${tag}] erro="${e.message || e}"`);
-                        return { status: 0, finish_reason: null, picked: null };
+                        return { status: 0, incomplete: null, picked: null };
                     }
 
                     const data = r.data;
-                    const rawText = data?.choices?.[0]?.message?.content || '';
-                    const finish_reason = data?.choices?.[0]?.finish_reason || '';
+                    const rawText = extractTextForLog(data);
+                    const incomplete = data?.incomplete_details?.reason || '';
                     const usage = data?.usage ? JSON.stringify(data.usage) : '';
-                    console.log(`[${st.contato}] [LLM][interesse][${tag}] http=${r.status} finish_reason=${finish_reason} usage=${usage} body=${truncate(rawText, 800)}`);
+                    console.log(`[${st.contato}] [LLM][interesse][${tag}] http=${r.status} incomplete=${incomplete || 'no'} usage=${usage} body=${truncate(rawText, 800)}`);
 
-                    let picked = null;
-                    if (rawText) {
+                    let picked = data?.output?.[0]?.content?.[0]?.json?.label || null;
+                    if (!picked && rawText) {
                         try {
                             const parsed = JSON.parse(rawText);
                             if (parsed && typeof parsed.label === 'string') picked = parsed.label.toLowerCase();
-                        } catch {}
+                        } catch { }
                     }
                     if (!picked) picked = pickLabelFromResponseData(data, allowed);
 
-                    return { status: r.status, finish_reason, picked };
+                    return { status: r.status, incomplete, picked };
                 };
 
                 try {
                     let resp = await callOnce(64, 'try1');
                     if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) {
-                        if (resp.finish_reason === 'length' || !resp.picked) {
+                        if (resp.incomplete === 'max_output_tokens' || !resp.picked) {
                             resp = await callOnce(128, 'try2');
                         }
                     }
@@ -438,17 +437,16 @@ async function processarMensagensPendentes(contato) {
                     let r;
                     try {
                         r = await axios.post(
-                            'https://api.openai.com/v1/chat/completions',
+                            'https://api.openai.com/v1/responses',
                             {
                                 model: 'gpt-5',
-                                messages: [{ role: 'user', content: prompt }],
+                                input: prompt,
                                 temperature: 0,
-                                max_tokens: maxTok,
-                                response_format: {
-                                    type: 'json_schema',
-                                    json_schema: {
+                                max_output_tokens: maxTok,
+                                text: {
+                                    format: {
+                                        type: 'json_schema',
                                         name: 'Label',
-                                        strict: true,
                                         schema: {
                                             type: 'object',
                                             properties: { label: { type: 'string', enum: allowed } },
@@ -466,31 +464,31 @@ async function processarMensagensPendentes(contato) {
                         );
                     } catch (e) {
                         console.warn(`[${st.contato}] [LLM][instrucoes][${tag}] erro="${e.message || e}"`);
-                        return { status: 0, finish_reason: null, picked: null };
+                        return { status: 0, incomplete: null, picked: null };
                     }
 
                     const data = r.data;
-                    const rawText = data?.choices?.[0]?.message?.content || '';
-                    const finish_reason = data?.choices?.[0]?.finish_reason || '';
+                    const rawText = extractTextForLog(data);
+                    const incomplete = data?.incomplete_details?.reason || '';
                     const usage = data?.usage ? JSON.stringify(data.usage) : '';
-                    console.log(`[${st.contato}] [LLM][instrucoes][${tag}] http=${r.status} finish_reason=${finish_reason} usage=${usage} body=${truncate(rawText, 800)}`);
+                    console.log(`[${st.contato}] [LLM][instrucoes][${tag}] http=${r.status} incomplete=${incomplete || 'no'} usage=${usage} body=${truncate(rawText, 800)}`);
 
-                    let picked = null;
-                    if (rawText) {
+                    let picked = data?.output?.[0]?.content?.[0]?.json?.label || null;
+                    if (!picked && rawText) {
                         try {
                             const parsed = JSON.parse(rawText);
                             if (parsed && typeof parsed.label === 'string') picked = parsed.label.toLowerCase();
-                        } catch {}
+                        } catch { }
                     }
                     if (!picked) picked = pickLabelFromResponseData(data, allowed);
 
-                    return { status: r.status, finish_reason, picked };
+                    return { status: r.status, incomplete, picked };
                 };
 
                 try {
                     let resp = await callOnce(64, 'try1');
                     if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) {
-                        if (resp.finish_reason === 'length' || !resp.picked) {
+                        if (resp.incomplete === 'max_output_tokens' || !resp.picked) {
                             resp = await callOnce(128, 'try2');
                         }
                     }
@@ -539,7 +537,7 @@ async function sendMessage(contato, texto) {
             try {
                 const c = await getContatoByPhone(contato);
                 subscriberId = c?.manychat_subscriber_id || c?.subscriber_id || null;
-            } catch {}
+            } catch { }
             if (!subscriberId) {
                 const st = ensureEstado(contato);
                 if (st.manychat_subscriber_id) subscriberId = st.manychat_subscriber_id;
