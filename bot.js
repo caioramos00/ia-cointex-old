@@ -391,7 +391,7 @@ async function processarMensagensPendentes(contato) {
                 const p2 = `• ${pick(c.pontos.p2.g1)}, ${pick(c.pontos.p2.g2)}, ${pick(c.pontos.p2.g3)}`;
                 const p3 = `• ${pick(c.pontos.p3.g1)}, ${pick(c.pontos.p3.g2)}, ${pick(c.pontos.p3.g3)}`;
                 const p4 = `• ${pick(c.pontos.p4.g1)}, ${pick(c.pontos.p4.g2)}, ${pick(c.pontos.p4.g3)}`;
-                return [p1, p2, p3, p4].join('\u2028');
+                return [p1, p2, p3, p4].join('\n\n');
             };
             const composeMsg3 = () => {
                 const c = loadInstrucoes();
@@ -403,11 +403,16 @@ async function processarMensagensPendentes(contato) {
             const m1 = composeMsg1();
             const m2 = composeMsg2();
             const m3 = composeMsg3();
-            const blocoUnico = [m1, m2, m3].filter(Boolean).join('\u2028\u2028');
 
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-            const blocoUnicoSingle = blocoUnico.replace(/\r?\n/g, '\u2028');
-            if (blocoUnicoSingle) await sendMessage(st.contato, blocoUnicoSingle);
+            if (m1) await sendMessage(st.contato, m1);
+
+            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+            await delay(10000 + Math.floor(Math.random() * 10000));
+            if (m2) await sendMessage(st.contato, m2);
+
+            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+            if (m3) await sendMessage(st.contato, m3);
 
             st.mensagensPendentes = [];
             st.mensagensDesdeSolicitacao = [];
