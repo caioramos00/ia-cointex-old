@@ -262,16 +262,12 @@ async function processarMensagensPendentes(contato) {
                 const msg = safeStr(raw).trim();
                 const prompt = promptClassificaAceite(msg);
 
-                console.log(`[${st.contato}] [LLM][interesse] msg="${msg}" prompt=${truncate(prompt, 800)}`);
-
                 let msgClass = 'duvida';
-                if (!apiKey) {
-                    console.warn(`[${st.contato}] [LLM][interesse] OPENAI_API_KEY ausente — usando fallback=duvida for msg="${msg}"`);
-                } else {
+                if (apiKey) {
                     const allowed = ['aceite', 'recusa', 'duvida'];
                     const structuredPrompt = `${prompt}\n\nOutput only this valid JSON format with double quotes around keys and values, nothing else: {"label": "aceite"} or {"label": "recusa"} or {"label": "duvida"}`;
 
-                    const callOnce = async (maxTok, tag) => {
+                    const callOnce = async (maxTok) => {
                         let r;
                         try {
                             r = await axios.post(
@@ -288,11 +284,9 @@ async function processarMensagensPendentes(contato) {
                                     validateStatus: () => true
                                 }
                             );
-                        } catch (e) {
-                            console.warn(`[${st.contato}] [LLM][interesse][${tag}] erro="${e.message || e}"`);
-                            return { status: 0, incomplete: null, picked: null };
+                        } catch {
+                            return { status: 0, picked: null };
                         }
-
                         const data = r.data;
                         let rawText = '';
                         if (Array.isArray(data?.output)) {
@@ -303,12 +297,8 @@ async function processarMensagensPendentes(contato) {
                             });
                         }
                         if (!rawText) rawText = extractTextForLog(data);
-                        const incomplete = data?.incomplete_details?.reason || '';
-                        const usage = data?.usage ? JSON.stringify(data.usage) : '';
-                        console.log(`[${st.contato}] [LLM][interesse][${tag}] http=${r.status} incomplete=${incomplete || 'no'} usage=${usage} body=${truncate(rawText, 800)}`);
-
+                        rawText = String(rawText || '').trim();
                         let picked = null;
-                        rawText = rawText.trim();
                         if (rawText) {
                             try {
                                 const parsed = JSON.parse(rawText);
@@ -319,50 +309,38 @@ async function processarMensagensPendentes(contato) {
                             }
                         }
                         if (!picked) picked = pickLabelFromResponseData(data, allowed);
-
-                        return { status: r.status, incomplete, picked };
+                        return { status: r.status, picked };
                     };
 
                     try {
-                        let resp = await callOnce(64, 'try1');
+                        let resp = await callOnce(64);
                         if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) {
-                            if (resp.incomplete === 'max_output_tokens' || !resp.picked) {
-                                resp = await callOnce(256, 'try2');
-                            }
+                            resp = await callOnce(256);
                         }
                         if (resp.status >= 200 && resp.status < 300 && resp.picked) {
                             msgClass = resp.picked;
-                        } else {
-                            console.warn(`[${st.contato}] [LLM][interesse] sem label válido for msg="${msg}" — fallback=duvida`);
                         }
-                    } catch (e) {
-                        console.warn(`[${st.contato}] [LLM][interesse] erro="${e.message || e}" for msg="${msg}" — fallback=duvida`);
-                    }
+                    } catch { }
                 }
                 classes.push(msgClass);
-                console.log(`[${st.contato}] [LLM][interesse] individual class=${msgClass} for msg="${msg}"`);
             }
 
-            // Atualiza o ponteiro para "mensagens já classificadas" (evita reclassificar no futuro)
             st.lastClassifiedIdx.interesse = total;
 
-            // Decisão **apenas** com base no LOTE NOVO
             let classe = 'duvida';
             const nonDuvida = classes.filter(c => c !== 'duvida');
-            classe = nonDuvida.length > 0 ? nonDuvida[nonDuvida.length - 1] : 'duvida'; // mantém a tua regra dentro do lote novo
+            classe = nonDuvida.length > 0 ? nonDuvida[nonDuvida.length - 1] : 'duvida';
 
             st.classificacaoAceite = classe;
-            console.log(`[${st.contato}] interesse.class=${classe} (baseado apenas no lote novo)`);
-
             st.mensagensPendentes = [];
             if (classe === 'aceite') {
                 st.mensagensDesdeSolicitacao = [];
                 st.lastClassifiedIdx.interesse = 0;
                 st.etapa = 'instrucoes:send';
-                console.log(`[${st.contato}] etapa->${st.etapa}`);
             } else {
                 return { ok: true, classe };
             }
+
         }
 
         if (st.etapa === 'instrucoes:send') {
@@ -434,10 +412,8 @@ async function processarMensagensPendentes(contato) {
             st.etapa = 'instrucoes:wait';
             console.log(`[${st.contato}] etapa->${st.etapa}`);
             return { ok: true };
-        }
 
-        st.mensagensPendentes = [];
-        return { ok: true };
+        }
     } finally {
         st.enviandoMensagens = false;
     }
