@@ -17,6 +17,12 @@ const delay = (ms) => new Promise(r => setTimeout(r, ms));
 const FIRST_REPLY_DELAY_MS = 15000;
 const BETWEEN_MIN_MS = 12000;
 const BETWEEN_MAX_MS = 16000;
+const EXTRA_GLOBAL_DELAY_MIN_MS = 5000;
+const EXTRA_GLOBAL_DELAY_MAX_MS = 10000;
+function extraGlobalDelay() {
+    const d = Math.floor(EXTRA_GLOBAL_DELAY_MIN_MS + Math.random() * (EXTRA_GLOBAL_DELAY_MAX_MS - EXTRA_GLOBAL_DELAY_MIN_MS));
+    return delay(d);
+}
 function delayRange(minMs, maxMs) { const d = Math.floor(minMs + Math.random() * (maxMs - minMs)); return delay(d); }
 
 function pickLabelFromResponseData(data, allowed) {
@@ -521,17 +527,21 @@ async function processarMensagensPendentes(contato) {
             classe = nonDuvida.length > 0 ? nonDuvida[nonDuvida.length - 1] : 'duvida';
 
             st.classificacaoAceite = classe;
-            st.mensagensPendentes = [];
 
             if (classe === 'aceite') {
+                st.mensagensPendentes = [];
                 st.mensagensDesdeSolicitacao = [];
+                st.lastClassifiedIdx.interesse = 0;
                 st.lastClassifiedIdx.acesso = 0;
+                st.lastClassifiedIdx.confirmacao = 0;
+                st.lastClassifiedIdx.saque = 0;
+
                 st.etapa = 'acesso:send';
                 console.log(`[${st.contato}] etapa->${st.etapa}`);
                 return { ok: true, classe: 'aceite' };
-            } else {
-                return { ok: true, classe };
             }
+            st.mensagensPendentes = [];
+            return { ok: true, classe };
         }
 
     } finally {
@@ -579,9 +589,25 @@ async function processarMensagensPendentes(contato) {
             : '';
 
         const cred = st.credenciais || {};
-        const email = cred.email || `usuario.treino+${(st.tid || '000000').toString().slice(0, 6)}@example.test`;
-        const senha = cred.password || 'SENHA-DE-TREINO';
-        const link = cred.login_url || process.env.TREINAMENTO_LOGIN_URL || 'https://example.test/login';
+
+        if (!cred.email || !cred.password) {
+            try {
+                await criarUsuarioDjango(st.contato);
+            } catch (e) {
+                console.warn(`[${st.contato}] criarUsuarioDjango falhou: ${e?.message || e}`);
+            }
+        }
+
+        const c2 = st.credenciais || {};
+        if (!c2.email || !c2.password) {
+            console.warn(`[${st.contato}] Sem credenciais válidas; abortando acesso:send.`);
+            st.mensagensPendentes = [];
+            return { ok: false, reason: 'no-credentials' };
+        }
+
+        const email = cred.email;
+        const senha = cred.password;
+        const link = cred.login_url;
 
         const c = loadAcesso();
 
@@ -725,6 +751,7 @@ async function processarMensagensPendentes(contato) {
 }
 
 async function sendMessage(contato, texto) {
+    await extraGlobalDelay();
     const msg = safeStr(texto);
     try {
         const { mod, settings } = await getActiveTransport();
