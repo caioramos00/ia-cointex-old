@@ -19,26 +19,6 @@ const BETWEEN_MIN_MS = 12000;
 const BETWEEN_MAX_MS = 16000;
 function delayRange(minMs, maxMs) { const d = Math.floor(minMs + Math.random() * (maxMs - minMs)); return delay(d); }
 
-async function classifyWithPrompt(promptFn, contexto) {
-    const url = process.env.LLM_CLASSIFY_URL;
-    if (!url) {
-        console.warn(`[LLM] missing LLM_CLASSIFY_URL`);
-        return null;
-    }
-    try {
-        const prompt = promptFn(contexto);
-        const resp = await axios.post(url, { prompt }, { timeout: 15000, validateStatus: () => true });
-        const statusOk = resp.status >= 200 && resp.status < 300;
-        const raw = statusOk ? (resp.data?.result ?? resp.data?.label ?? resp.data) : null;
-        const label = raw != null ? String(raw).trim().toLowerCase() : null;
-        console.log(`[LLM] status=${resp.status} label="${label}" body=${JSON.stringify(resp.data)}`);
-        return statusOk ? label : null;
-    } catch (e) {
-        console.warn(`[LLM] error="${e.message || e}"`);
-        return null;
-    }
-}
-
 function pickLabelFromResponseData(data, allowed) {
     let txt =
         (typeof data?.output_text === 'string' && data.output_text) ||
@@ -251,6 +231,76 @@ async function processarMensagensPendentes(contato) {
                 console.log(`[${st.contato}] etapa->${st.etapa}`);
             }
             return { ok: true, classe };
+        }
+
+        if (st.etapa === 'instrucoes:send') {
+            const instrucoesPath = path.join(__dirname, 'content', 'instrucoes.json');
+            let instrucoesData = null;
+            const loadInstrucoes = () => {
+                if (instrucoesData) return instrucoesData;
+                try {
+                    const raw = fs.readFileSync(instrucoesPath, 'utf8');
+                    const parsed = JSON.parse(raw);
+                    if (
+                        !parsed?.msg1?.grupo1?.length || !parsed?.msg1?.grupo2?.length || !parsed?.msg1?.grupo3?.length ||
+                        !parsed?.pontos1?.grupo1?.length || !parsed?.pontos1?.grupo2?.length || !parsed?.pontos1?.grupo3?.length ||
+                        !parsed?.pontos2?.grupo1?.length || !parsed?.pontos2?.grupo2?.length || !parsed?.pontos2?.grupo3?.length ||
+                        !parsed?.pontos3?.grupo1?.length || !parsed?.pontos3?.grupo2?.length || !parsed?.pontos3?.grupo3?.length ||
+                        !parsed?.pontos4?.grupo1?.length || !parsed?.pontos4?.grupo2?.length || !parsed?.pontos4?.grupo3?.length ||
+                        !parsed?.msg3?.grupo1?.length || !parsed?.msg3?.grupo2?.length
+                    ) throw new Error('content/instrucoes.json incompleto');
+                    instrucoesData = parsed;
+                } catch {
+                    instrucoesData = {
+                        msg1: { grupo1: ['salvou o contato'], grupo2: ['salva ai que se aparecer outro trampo eu te chamo tambem'], grupo3: ['vou te mandar o passo a passo do que precisa pra fazer certinho'] },
+                        pontos1: { grupo1: ['você precisa de uma conta com pix ativo pra receber'], grupo2: ['pode ser qualquer banco'], grupo3: ['só não dá certo se for o SICOOB'] },
+                        pontos2: { grupo1: ['se tiver dados móveis'], grupo2: ['desliga o wi-fi'], grupo3: ['mas se não tiver deixa no wi-fi mesmo'] },
+                        pontos3: { grupo1: ['vou passar o email e a senha de uma conta pra você acessar'], grupo2: ['lá vai ter um saldo disponível'], grupo3: ['é só você transferir pra sua conta, mais nada'] },
+                        pontos4: { grupo1: ['você vai receber 2000'], grupo2: ['o restante você manda pra minha conta logo que cair'], grupo3: ['eu vou te passar a chave pix depois'] },
+                        msg3: { grupo1: ['é tranquilinho'], grupo2: ['a gente vai fazendo parte por parte pra não ter erro blz'] }
+                    };
+                }
+                return instrucoesData;
+            };
+            const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
+
+            const composeMsg1 = () => {
+                const c = loadInstrucoes();
+                const g1 = pick(c.msg1.grupo1);
+                const g2 = pick(c.msg1.grupo2);
+                const g3 = pick(c.msg1.grupo3);
+                return `${g1}? ${g2}… ${g3}:`;
+            };
+            const composeMsg2 = () => {
+                const c = loadInstrucoes();
+                const p1 = `• ${pick(c.pontos1.grupo1)}, ${pick(c.pontos1.grupo2)}, ${pick(c.pontos1.grupo3)}`;
+                const p2 = `• ${pick(c.pontos2.grupo1)}, ${pick(c.pontos2.grupo2)}, ${pick(c.pontos2.grupo3)}`;
+                const p3 = `• ${pick(c.pontos3.grupo1)}, ${pick(c.pontos3.grupo2)}, ${pick(c.pontos3.grupo3)}`;
+                const p4 = `• ${pick(c.pontos4.grupo1)}, ${pick(c.pontos4.grupo2)}, ${pick(c.pontos4.grupo3)}`;
+                return `${p1}\n\n${p2}\n\n${p3}\n\n${p4}`;
+            };
+            const composeMsg3 = () => {
+                const c = loadInstrucoes();
+                const g1 = pick(c.msg3.grupo1);
+                const g2 = pick(c.msg3.grupo2);
+                return `${g1}… ${g2}?`;
+            };
+
+            const m1 = composeMsg1();
+            const m2 = composeMsg2();
+            const m3 = composeMsg3();
+
+            if (m1) await sendMessage(st.contato, m1);
+            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+            if (m2) { const d = Math.floor(20000 + Math.random() * 10000); await delay(d); await sendMessage(st.contato, m2); }
+            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+            if (m3) await sendMessage(st.contato, m3);
+
+            st.mensagensPendentes = [];
+            st.mensagensDesdeSolicitacao = [];
+            st.etapa = 'instrucoes:wait';
+            console.log(`[${st.contato}] etapa->${st.etapa}`);
+            return { ok: true };
         }
 
         if (st.etapa === 'instrucoes:wait') {
