@@ -280,19 +280,15 @@ async function processarMensagensPendentes(contato) {
                             max_output_tokens: 32,
                             text: {
                                 format: {
-                                    // <- estes dois campos aqui resolvem o erro
                                     type: 'json_schema',
-                                    name: 'Label',                 // <= ***AQUI*** (faltava)
-                                    json_schema: {
-                                        name: 'Label',               // ok manter aqui também
-                                        schema: {
-                                            type: 'object',
-                                            properties: {
-                                                label: { type: 'string', enum: allowed }
-                                            },
-                                            required: ['label'],
-                                            additionalProperties: false
-                                        }
+                                    name: 'Label',
+                                    schema: {
+                                        type: 'object',
+                                        properties: {
+                                            label: { type: 'string', enum: allowed }
+                                        },
+                                        required: ['label'],
+                                        additionalProperties: false
                                     }
                                 }
                             }
@@ -307,8 +303,6 @@ async function processarMensagensPendentes(contato) {
                         }
                     );
 
-
-                    // Log amigável
                     const rawText = extractTextForLog(r.data);
                     console.log(`[${st.contato}] [LLM][${st.etapa.split(':')[0]}] http=${r.status} body=${truncate(rawText, 800)}`);
 
@@ -450,19 +444,15 @@ async function processarMensagensPendentes(contato) {
                             max_output_tokens: 32,
                             text: {
                                 format: {
-                                    // <- estes dois campos aqui resolvem o erro
                                     type: 'json_schema',
-                                    name: 'Label',                 // <= ***AQUI*** (faltava)
-                                    json_schema: {
-                                        name: 'Label',               // ok manter aqui também
-                                        schema: {
-                                            type: 'object',
-                                            properties: {
-                                                label: { type: 'string', enum: allowed }
-                                            },
-                                            required: ['label'],
-                                            additionalProperties: false
-                                        }
+                                    name: 'Label',
+                                    schema: {
+                                        type: 'object',
+                                        properties: {
+                                            label: { type: 'string', enum: allowed }
+                                        },
+                                        required: ['label'],
+                                        additionalProperties: false
                                     }
                                 }
                             }
@@ -477,7 +467,6 @@ async function processarMensagensPendentes(contato) {
                         }
                     );
 
-                    // Log amigável
                     const rawText = extractTextForLog(r.data);
                     console.log(`[${st.contato}] [LLM][${st.etapa.split(':')[0]}] http=${r.status} body=${truncate(rawText, 800)}`);
 
