@@ -639,6 +639,18 @@ function setupRoutes(
       return res.status(500).json({ ok: false, error: e.message });
     }
   });
+  app.post('/admin/test-text', checkAuth, express.json(), async (req, res) => {
+    try {
+      const { phone, text } = req.body || {};
+      const id = (phone || '').replace(/\D/g, '');
+      if (!id || !text) return res.status(400).json({ ok: false, error: 'Informe phone e text' });
+      const { sendMessage } = require('./bot.js');
+      const r = await sendMessage(id, text);
+      return res.json({ ok: true, result: r });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  });
 }
 
 module.exports = { checkAuth, setupRoutes };
