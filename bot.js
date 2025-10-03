@@ -135,6 +135,37 @@ function isOptIn(textRaw) {
     return false;
 }
 
+async function preflightOptOut(st) {
+    if (!Array.isArray(st.mensagensPendentes) || !st.mensagensPendentes.length) return false;
+
+    const hadOptOut = st.mensagensPendentes.some(m => isOptOut(m?.texto || ''));
+    if (!hadOptOut) return false;
+
+    st.mensagensPendentes = [];
+    st.mensagensDesdeSolicitacao = [];
+    st.optOutCount = (st.optOutCount || 0) + 1;
+    st.reoptinActive = false;
+    st.reoptinLotsTried = 0;
+    st.reoptinBuffer = [];
+    if (st.optOutCount >= 3) st.permanentlyBlocked = true;
+
+    const oMsgs = loadOptOutMsgs();
+    const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
+    let texto = '';
+    if (st.optOutCount === 1) {
+        const p = oMsgs?.msg1 || {};
+        texto = [pick(p.msg1b1), pick(p.msg1b2)].filter(Boolean).join(', ');
+    } else if (st.optOutCount === 2) {
+        const p = oMsgs?.msg2 || {};
+        texto = [pick(p.msg2b1), pick(p.msg2b2)].filter(Boolean).join(', ');
+    }
+    if (texto) {
+        await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+        await sendMessage(st.contato, texto, { force: true });
+    }
+    return true;
+}
+
 function randomInt(min, max) {
     return Math.floor(min + Math.random() * (max - min));
 }
@@ -445,7 +476,44 @@ async function handleManyChatWebhook(body) {
 
 async function processarMensagensPendentes(contato) {
     const st = ensureEstado(contato);
-    if (st.enviandoMensagens) return { ok: true, skipped: 'busy' };
+    if (st.enviandoMensagens) {
+        // Mesmo "ocupado", checa opt-out para interromper imediatamente
+        const pend = Array.isArray(st.mensagensPendentes) ? st.mensagensPendentes : [];
+        const hadOptOut = pend.some(m => isOptOut(m?.texto || ''));
+
+        if (hadOptOut) {
+            st.mensagensPendentes = [];
+            st.mensagensDesdeSolicitacao = [];
+            st.enviandoMensagens = false;
+
+            st.optOutCount = (st.optOutCount || 0) + 1;
+            st.reoptinActive = false;
+            st.reoptinLotsTried = 0;
+            st.reoptinBuffer = [];
+
+            if (st.optOutCount >= 3) st.permanentlyBlocked = true;
+
+            // Confirmação de opt-out (1ª e 2ª vezes)
+            const oMsgs = loadOptOutMsgs();
+            const pick = arr => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
+            let texto = '';
+            if (st.optOutCount === 1) {
+                const p = oMsgs?.msg1 || {};
+                texto = [pick(p.msg1b1), pick(p.msg1b2)].filter(Boolean).join(', ');
+            } else if (st.optOutCount === 2) {
+                const p = oMsgs?.msg2 || {};
+                texto = [pick(p.msg2b1), pick(p.msg2b2)].filter(Boolean).join(', ');
+            }
+            if (texto) {
+                await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+                await sendMessage(st.contato, texto, { force: true });
+            }
+            return { ok: true, optout: st.optOutCount, interrupted: true };
+        }
+
+        return { ok: true, skipped: 'busy' };
+    }
+
     st.enviandoMensagens = true;
     try {
         console.log(`[${st.contato}] etapa=${st.etapa} pendentes=${st.mensagensPendentes.length}`);
@@ -1565,6 +1633,10 @@ async function sendMessage(contato, texto, opts = {}) {
     const msg = safeStr(texto);
     try {
         const st = ensureEstado(contato);
+        if (await preflightOptOut(st)) {
+            console.log(`[${contato}] envio=cancelado por opt-out em tempo real`);
+            return { ok: false, reason: 'paused-by-optout' };
+        }
         const forced = opts && opts.force === true;
         const paused = (st.permanentlyBlocked === true) || (st.optOutCount >= 3) || (st.optOutCount > 0 && !st.reoptinActive);
         if (paused && !forced) {
@@ -1612,6 +1684,10 @@ async function sendImage(contato, imageUrl, caption, opts = {}) {
     if (!url) return { ok: false, reason: 'empty-image-url' };
     try {
         const st = ensureEstado(contato);
+        if (await preflightOptOut(st)) {
+            console.log(`[${contato}] envio-imagem=cancelado por opt-out em tempo real`);
+            return { ok: false, reason: 'paused-by-optout' };
+        }
         const forced = opts && opts.force === true;
         const paused = (st.permanentlyBlocked === true) || (st.optOutCount >= 3) || (st.optOutCount > 0 && !st.reoptinActive);
         if (paused && !forced) {
