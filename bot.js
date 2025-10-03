@@ -120,26 +120,6 @@ function inicializarEstado(contato, maybeTid, maybeClickType) {
     return st;
 }
 
-function decidirOptLabel(texto) {
-    const t = safeStr(texto).toLowerCase();
-
-    const isStop = [
-        /\bpar(a|e)\b/, /\bpare\b/, /\bchega\b/, /\bremover\b/, /\bremova\b/,
-        /\bnao\s*quero\b/, /\bsem\s*mensagem\b/, /\bstop\b/, /\bcancel(ar)?\b/,
-        /\bdesinscrever\b/, /\bunsubscribe\b/, /\bnao\s*me\s*chame\b/, /\bnao\s*mand(a|e)\b/
-    ].some(r => r.test(t));
-    if (isStop) return 'OPTOUT';
-
-    const isStart = [
-        /\bstart\b/, /\breopt-?in\b/, /\bsubscribe\b/, /\binscrever\b/, /\breinscrever\b/,
-        /\bquero (?:voltar a )?receber\b/, /\bpode (?:voltar a )?mandar\b/,
-        /\bpode (?:me )?chamar\b/, /\bretomar\b/, /\bvoltar a falar\b/
-    ].some(r => r.test(t));
-    if (isStart) return 'REOPTIN';
-
-    return 'NAO_OPTOUT';
-}
-
 async function criarUsuarioDjango(contato) {
     const st = ensureEstado(contato);
     if (st.createdUser === 'ok' || st.credenciais) return { ok: true, skipped: true };
@@ -1358,8 +1338,6 @@ async function sendMessage(contato, texto) {
     }
 }
 
-async function retomarEnvio(contato) { console.log(`[${contato}] retomarEnvio()`); return { ok: true }; }
-
 const KNOWN_ETAPAS = new Set([
     'none',
     'abertura:wait',
@@ -1438,12 +1416,10 @@ module.exports = {
     handleIncomingNormalizedMessage,
     processarMensagensPendentes,
     inicializarEstado,
-    decidirOptLabel,
     criarUsuarioDjango,
     delay,
     sendMessage,
     sendImage,
-    retomarEnvio,
     setEtapa,
     _utils: { ensureEstado, normalizeContato },
 };

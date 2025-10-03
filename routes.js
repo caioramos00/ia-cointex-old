@@ -2,7 +2,7 @@ const express = require('express');
 const axios = require('axios');
 
 const { pool } = require('./db.js');
-const { delay, sendMessage, retomarEnvio, decidirOptLabel, setEtapa: setEtapaBot } = require('./bot.js');
+const { delay, sendMessage, setEtapa: setEtapaBot } = require('./bot.js');
 const { getBotSettings, updateBotSettings, getContatoByPhone } = require('./db.js');
 
 const LANDING_URL = 'https://grupo-whatsapp-trampos-lara-2025.onrender.com';
@@ -11,54 +11,6 @@ const CONTACT_TOKEN = process.env.CONTACT_TOKEN;
 
 const sentContactByWa = new Set();
 const sentContactByClid = new Set();
-
-const MAX_OPTOUTS = 3;
-const OPTOUT_MSGS = {
-  1: 'tranquilo, não vou mais te mandar mensagem. qualquer coisa só chamar',
-  2: 'de boa, vou passar o trampo pra outra pessoa e não te chamo mais. não me manda mais mensagem',
-};
-
-async function registerOptOut(pool, contato, reasonText = '') {
-  const { rows } = await pool.query(
-    'SELECT opt_out_count FROM contatos WHERE id = $1 LIMIT 1',
-    [contato]
-  );
-  const next = (rows?.[0]?.opt_out_count || 0) + 1;
-  const permanently = next >= MAX_OPTOUTS;
-
-  await pool.query(
-    `UPDATE contatos
-       SET do_not_contact = TRUE,
-           do_not_contact_at = NOW(),
-           do_not_contact_reason = $2,
-           opt_out_count = $3,
-           permanently_blocked = $4
-     WHERE id = $1`,
-    [contato, String(reasonText).slice(0, 200), next, permanently]
-  );
-
-  return { next, permanently };
-}
-
-async function clearOptOutIfAllowed(pool, contato) {
-  const { rows } = await pool.query(
-    'SELECT opt_out_count, permanently_blocked FROM contatos WHERE id = $1 LIMIT 1',
-    [contato]
-  );
-  const c = rows?.[0] || {};
-  if (c.permanently_blocked || (c.opt_out_count || 0) >= MAX_OPTOUTS) {
-    return { allowed: false };
-  }
-  await pool.query(
-    `UPDATE contatos
-        SET do_not_contact = FALSE,
-            do_not_contact_at = NULL,
-            do_not_contact_reason = NULL
-      WHERE id = $1`,
-    [contato]
-  );
-  return { allowed: true };
-}
 
 function checkAuth(req, res, next) {
   if (req.session.loggedIn) next();
@@ -230,8 +182,6 @@ function setupRoutes(
         support_email: (req.body.support_email || '').trim(),
         support_phone: (req.body.support_phone || '').trim(),
         support_url: (req.body.support_url || '').trim(),
-        optout_hint_enabled: req.body.optout_hint_enabled === 'on',
-        optout_suffix: (req.body.optout_suffix || '').trim(),
 
         message_provider: (req.body.message_provider || 'meta').toLowerCase(),
 
@@ -352,29 +302,6 @@ function setupRoutes(
           const isProviderMedia = msg.type !== 'text';
           const texto = msg.type === 'text' ? (msg.text.body || '').trim() : '';
           console.log(`[${contato}] ${texto || '[mídia]'}`);
-          try {
-            const { rows: flags } = await pool.query(
-              'SELECT do_not_contact, opt_out_count, permanently_blocked FROM contatos WHERE id = $1 LIMIT 1',
-              [contato]
-            );
-            const f = flags?.[0] || {};
-            if (f.permanently_blocked || (f.opt_out_count || 0) >= MAX_OPTOUTS) { return res.sendStatus(200); }
-            const label = await decidirOptLabel(texto);
-            if (label === 'OPTOUT') {
-              const { next, permanently } = await registerOptOut(pool, contato, texto);
-              if (!permanently) {
-                await delay(10000 + Math.floor(Math.random() * 5000));
-                await sendMessage(contato, OPTOUT_MSGS[next] || OPTOUT_MSGS[2], { bypassBlock: true });
-              }
-              return res.sendStatus(200);
-            }
-            if (label === 'REOPTIN' && f.do_not_contact) {
-              const { allowed } = await clearOptOutIfAllowed(pool, contato);
-              if (!allowed) return res.sendStatus(200);
-              if (typeof retomarEnvio === 'function') { await retomarEnvio(contato); }
-              return res.sendStatus(200);
-            }
-          } catch { }
           let tid = '';
           let click_type = 'Orgânico';
           let is_ctwa = false;
