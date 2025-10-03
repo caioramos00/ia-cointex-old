@@ -373,45 +373,6 @@ async function resolveManychatWaSubscriberId(contato, modOpt, settingsOpt) {
     return null;
 }
 
-async function sendImage(contato, imageUrl, caption, opts = {}) {
-    await extraGlobalDelay();
-    const url = safeStr(imageUrl).trim();
-    if (!url) return { ok: false, reason: 'empty-image-url' };
-    try {
-        const { mod, settings } = await getActiveTransport();
-        const provider = mod?.name || 'unknown';
-        if (provider === 'manychat') {
-            const token = (settings && settings.manychat_api_token) || process.env.MANYCHAT_API_TOKEN || '';
-            if (!token) {
-                console.log(`[${contato}] envio=fail provider=manychat reason=no-api-token image="${url}"`);
-                return { ok: false, reason: 'no-api-token' };
-            }
-            let subscriberId = null;
-            try {
-                const c = await getContatoByPhone(contato);
-                if (c?.manychat_subscriber_id) subscriberId = String(c.manychat_subscriber_id);
-            } catch (e) {
-                console.warn(`[${contato}] DB lookup subscriber_id falhou: ${e.message}`);
-            }
-            if (!subscriberId) {
-                subscriberId = await resolveManychatWaSubscriberId(contato, mod, settings);
-            }
-            if (!subscriberId) {
-                console.log(`[${contato}] envio=fail provider=manychat reason=no-wa-subscriber-id image="${url}"`);
-                return { ok: false, reason: 'no-wa-subscriber-id' };
-            }
-            await mod.sendImage({ subscriberId, imageUrl: url, caption }, settings, opts);
-            console.log(`[${contato}] envio=ok provider=manychat endpoint=/fb/sending/sendContent image="${url}"`);
-            return { ok: true, provider };
-        }
-        console.log(`[${contato}] envio=fail provider=${provider} reason=unsupported image="${url}"`);
-        return { ok: false, reason: 'unsupported' };
-    } catch (e) {
-        console.log(`[${contato}] envio=fail provider=unknown reason="${e.message}" image="${url}"`);
-        return { ok: false, error: e.message };
-    }
-}
-
 const sentHashesGlobal = new Set();
 function hashText(s) { let h = 0, i, chr; const str = String(s); if (str.length === 0) return '0'; for (i = 0; i < str.length; i++) { chr = str.charCodeAt(i); h = ((h << 5) - h) + chr; h |= 0; } return String(h); }
 function chooseUnique(generator, st) { const maxTries = 200; for (let i = 0; i < maxTries; i++) { const text = generator(); const h = hashText(text); if (!sentHashesGlobal.has(h) && !st.sentHashes.has(h)) { sentHashesGlobal.add(h); st.sentHashes.add(h); return text; } } return null; }
@@ -535,10 +496,8 @@ async function processarMensagensPendentes(contato) {
             }
         }
 
-        // ======= MODO PAUSADO (após opt-out) -> detectar re-opt-in =======
         if (st.optOutCount > 0 && !st.reoptinActive) {
             if (Array.isArray(st.mensagensPendentes) && st.mensagensPendentes.length) {
-                // 1) hard match
                 let matched = false;
                 for (const m of st.mensagensPendentes) {
                     const t = m?.texto || '';
@@ -546,7 +505,6 @@ async function processarMensagensPendentes(contato) {
                     if (isOptIn(t)) { matched = true; break; }
                 }
 
-                // 2) se não bateu nada, acumula no buffer e usa IA a cada 3 msgs (até 3 lotes)
                 if (!matched) {
                     for (const m of st.mensagensPendentes) {
                         const t = safeStr(m?.texto || '').trim();
@@ -554,13 +512,21 @@ async function processarMensagensPendentes(contato) {
                     }
                     st.mensagensPendentes = [];
 
+                    let promptClassificaReoptin = null;
+                    try { ({ promptClassificaReoptin } = require('./prompts')); } catch (_) { }
+
                     const apiKey = process.env.OPENAI_API_KEY;
-                    const canAsk = apiKey && st.reoptinBuffer.length >= 3 && st.reoptinLotsTried < 3;
+                    const canAsk =
+                        apiKey &&
+                        typeof promptClassificaReoptin === 'function' &&
+                        st.reoptinBuffer.length >= 3 &&
+                        st.reoptinLotsTried < 3;
+
                     if (canAsk) {
-                        const { promptClassificaReoptin } = require('./prompts');
                         const structuredPrompt =
                             `${promptClassificaReoptin(st.reoptinBuffer.slice(-3))}\n\n` +
                             `Output only valid JSON as {"label": "optin"} or {"label": "nao_optin"}`;
+
                         const ask = async (maxTok) => {
                             try {
                                 const r = await axios.post('https://api.openai.com/v1/responses', {
@@ -576,13 +542,18 @@ async function processarMensagensPendentes(contato) {
                                 let rawText = extractTextForLog(r.data) || '';
                                 rawText = String(rawText).trim();
                                 let picked = null;
-                                try { const parsed = JSON.parse(rawText); picked = String(parsed?.label || '').toLowerCase(); } catch {
-                                    const m = /"label"\s*:\s*"([^"]+)"/i.exec(rawText); if (m && m[1]) picked = m[1].toLowerCase();
+                                try {
+                                    const parsed = JSON.parse(rawText);
+                                    picked = String(parsed?.label || '').toLowerCase();
+                                } catch {
+                                    const m = /"label"\s*:\s*"([^"]+)"/i.exec(rawText);
+                                    if (m && m[1]) picked = m[1].toLowerCase();
                                 }
                                 if (!picked) picked = pickLabelFromResponseData(r.data, ['optin', 'nao_optin']);
                                 return picked || null;
                             } catch { return null; }
                         };
+
                         let out = await ask(48);
                         if (!out) out = await ask(128);
                         st.reoptinLotsTried += 1;
@@ -597,7 +568,6 @@ async function processarMensagensPendentes(contato) {
                     st.reoptinBuffer = [];
                     st.reoptinCount = (st.reoptinCount || 0) + 1;
 
-                    // enviar mensagem de retomada (1ª e 2ª)
                     const iMsgs = loadOptInMsgs();
                     const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
                     let texto = '';
@@ -612,14 +582,11 @@ async function processarMensagensPendentes(contato) {
                         await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                         await sendMessage(st.contato, texto, { force: true });
                     }
-                    // segue fluxo normal após retomar
                 } else {
-                    // segue aguardando novas msgs do usuário
                     return { ok: true, paused: true };
                 }
             }
         }
-
 
         if (st.etapa === 'none') {
             const aberturaPath = path.join(__dirname, 'content', 'abertura.json');
@@ -1730,8 +1697,9 @@ function _resetRuntime(st, opts = {}) {
         };
     }
     if (opts.manychat_subscriber_id != null) {
-        const idNum = Number(opts.manychat_subscriber_id);
-        st.manychat_subscriber_id = Number.isFinite(idNum) ? idNum : undefined;
+        const v = opts.manychat_subscriber_id;
+        st.manychat_subscriber_id = (typeof v === 'string' && v.trim()) ? v.trim() :
+            (Number.isFinite(Number(v)) ? String(v) : undefined);
     }
     st.updatedAt = Date.now();
 }
