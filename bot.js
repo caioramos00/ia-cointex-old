@@ -229,6 +229,81 @@ async function resolveManychatSubscriberId(contato, modOpt, settingsOpt) {
     return null;
 }
 
+async function resolveManychatWaSubscriberId(contato, modOpt, settingsOpt) {
+    const phone = String(contato || '').replace(/\D/g, '');
+    const st = ensureEstado(phone);
+    let subscriberId = null;
+
+    try {
+        const c = await getContatoByPhone(phone);
+        if (c?.manychat_subscriber_id) subscriberId = String(c.manychat_subscriber_id);
+    } catch {}
+    if (!subscriberId && st?.manychat_subscriber_id) subscriberId = String(st.manychat_subscriber_id);
+
+    const { mod, settings } = (modOpt && settingsOpt) ? { mod: modOpt, settings: settingsOpt } : await getActiveTransport();
+    const token = (settings && settings.manychat_api_token) || process.env.MANYCHAT_API_TOKEN || '';
+    if (!token) return subscriberId || null;
+
+    const phonePlus = phone.startsWith('+') ? phone : `+${phone}`;
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const call = async (method, url, data) => {
+        try {
+            return await axios({ method, url, data, headers, timeout: 12000, validateStatus: () => true });
+        } catch { return { status: 0, data: null }; }
+    };
+    const tries = [
+        { m: 'get',  u: `https://api.manychat.com/whatsapp/subscribers/findByPhone?phone=${encodeURIComponent(phonePlus)}` },
+        { m: 'post', u: `https://api.manychat.com/whatsapp/subscribers/findByPhone`, p: { phone: phonePlus } },
+    ];
+
+    for (const t of tries) {
+        const r = await call(t.m, t.u, t.p);
+        const d = r?.data || {};
+        const id = d?.data?.id || d?.data?.subscriber_id || d?.subscriber?.id || d?.id || null;
+        if (r.status >= 200 && r.status < 300 && id) {
+            subscriberId = String(id);
+            break;
+        }
+    }
+
+    if (subscriberId) {
+        try { await setManychatSubscriberId(phone, subscriberId); } catch {}
+        st.manychat_subscriber_id = subscriberId;
+        console.log(`[${phone}] manychat WA subscriber_id resolvido: ${subscriberId}`);
+        return subscriberId;
+    }
+
+    return null;
+}
+
+async function sendManychatWhatsAppImage({ subscriberId, imageUrl, caption, token }) {
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const endpoint = 'https://api.manychat.com/whatsapp/sending/sendContent';
+
+    const payload = {
+        subscriber_id: subscriberId,
+        data: {
+            version: 'v2',
+            content: {
+                type: 'whatsapp',
+                messages: [
+                    Object.assign(
+                        { type: 'image', image: { url: imageUrl } },
+                        (caption ? { caption: String(caption).trim() } : {})
+                    ),
+                ]
+            }
+        }
+    };
+
+    const resp = await axios.post(endpoint, payload, { headers, timeout: 15000, validateStatus: () => true });
+    const okHttp = resp.status >= 200 && resp.status < 300;
+    const okBody = !resp.data?.status || String(resp.data?.status).toLowerCase() === 'success';
+
+    if (okHttp && okBody) return { ok: true, status: resp.status, data: resp.data };
+    return { ok: false, status: resp.status, data: resp.data };
+}
+
 async function sendImage(contato, imageUrl, caption) {
     await extraGlobalDelay();
     const url = safeStr(imageUrl).trim();
@@ -239,32 +314,37 @@ async function sendImage(contato, imageUrl, caption) {
         const provider = mod?.name || 'unknown';
 
         if (provider === 'manychat') {
+            const token = (settings && settings.manychat_api_token) || process.env.MANYCHAT_API_TOKEN || '';
+            if (!token) {
+                console.log(`[${contato}] envio=fail provider=manychat reason=no-api-token image="${url}"`);
+                return { ok: false, reason: 'no-api-token' };
+            }
+
+            // ID do assinante pelo canal **WhatsApp** (sem fallback para FB)
             let subscriberId = null;
             try {
                 const c = await getContatoByPhone(contato);
                 if (c?.manychat_subscriber_id) subscriberId = String(c.manychat_subscriber_id);
-                else if (c?.subscriber_id) subscriberId = String(c.subscriber_id);
             } catch (e) {
                 console.warn(`[${contato}] DB lookup subscriber_id falhou: ${e.message}`);
             }
-
             if (!subscriberId) {
-                subscriberId = await resolveManychatSubscriberId(contato, mod, settings);
+                subscriberId = await resolveManychatWaSubscriberId(contato, mod, settings);
+            }
+            if (!subscriberId) {
+                console.log(`[${contato}] envio=fail provider=manychat reason=no-wa-subscriber-id image="${url}"`);
+                return { ok: false, reason: 'no-wa-subscriber-id' };
             }
 
-            if (!subscriberId) {
-                console.log(`[${contato}] envio=fail provider=manychat reason=no-subscriber-id`);
-                return { ok: false, reason: 'no-subscriber-id' };
-            }
-
-            if (typeof mod.sendImage === 'function') {
-                await mod.sendImage({ subscriberId, imageUrl: url, caption }, settings);
-                console.log(`[${contato}] envio=ok provider=manychat image="${url}"`);
+            // Envio direto no endpoint correto com payload correto
+            const out = await sendManychatWhatsAppImage({ subscriberId, imageUrl: url, caption, token });
+            if (out.ok) {
+                console.log(`[${contato}] envio=ok provider=manychat endpoint=/whatsapp/sending/sendContent image="${url}"`);
                 return { ok: true, provider };
-            } else {
-                console.log(`[${contato}] envio=fail provider=manychat reason=no-sendImage image="${url}"`);
-                return { ok: false, reason: 'no-sendImage' };
             }
+
+            console.log(`[${contato}] envio=fail provider=manychat status=${out.status} resp=${truncate(JSON.stringify(out.data))}`);
+            return { ok: false, reason: 'manychat-send-failed', status: out.status, data: out.data };
         }
 
         console.log(`[${contato}] envio=fail provider=${provider} reason=unsupported image="${url}"`);

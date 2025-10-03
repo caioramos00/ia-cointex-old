@@ -497,7 +497,7 @@ function setupRoutes(
         if (!estado[phone]) {
           inicializarEstado(phone, '', 'Orgânico');
         }
-        estado[phone].manychat_subscriber_id = Number(subscriberId);
+        estado[phone].manychat_subscriber_id = String(subscriberId);
       } catch (e) {
         console.warn(`[${phone}] Falha ao vincular subscriber_id: ${e.message}`);
       }
