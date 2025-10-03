@@ -90,24 +90,46 @@ function isOptOut(textRaw) {
     const s = normMsg(textRaw, cfg);
     if (!s) return false;
 
-    const amb = new Set((data?.exceptions?.ambiguous_single_tokens || []).map(v => normMsg(v, cfg)));
+    // exceção: mensagem é *apenas* um token ambíguo (do JSON)
+    const amb = new Set(
+        (data?.exceptions?.ambiguous_single_tokens || [])
+            .map(v => normMsg(v, cfg))
+            .filter(Boolean)
+    );
     if (amb.has(s)) return false;
 
-    const phrases = (data?.phrases || []).map(v => normMsg(v, cfg));
-    const keywords = (data?.keywords || []).map(v => normMsg(v, cfg));
-    const risks = (data?.risk_terms || []).map(v => normMsg(v, cfg));
-    const regex = (data?.regex || []).map(r => {
-        try { return new RegExp(r, 'i'); } catch { return null; }
-    }).filter(Boolean);
+    // Une todas as listas por idioma (pt/en/es) do JSON
+    const bl = data?.blocklists || {};
+    const langs = Object.keys(bl);
+    const flatten = (key) => {
+        const out = [];
+        for (const L of langs) {
+            const arr = bl[L]?.[key];
+            if (Array.isArray(arr)) out.push(...arr);
+        }
+        return out;
+    };
 
-    if (anyMatch(s, phrases)) return true;
-    if (regex.some(rx => rx.test(s))) return true;
+    // Carrega listas (apenas do ARQUIVO)
+    const phrases = flatten('phrases').map(v => normMsg(v, cfg)).filter(Boolean);     // PT/EN/ES
+    const keywords = flatten('keywords').map(v => normMsg(v, cfg)).filter(Boolean);   // PT/EN/ES
+    const riskTerms = (data?.risk_terms || []).map(v => normMsg(v, cfg)).filter(Boolean);
 
-    // keywords/risk: exigir negação ou combinação
-    const HAS_NEG = /\b(nao|não|sem|pare|parar|parou|cancelar|cancel|encerrar|excluir|remover|bloquear|stop|unsubscribe|sair|chega)\b/i.test(s);
-    const hasKw = keywords.some(k => s.includes(k));
-    const hasRisk = risks.some(k => s.includes(k));
-    if ((hasKw || hasRisk) && (HAS_NEG || (hasKw && hasRisk))) return true;
+    // “block_if_any” vindo do arquivo – SEM usar regex no código
+    const rule = Array.isArray(data?.block_if_any) ? data.block_if_any : ['phrases', 'keywords', 'risk_terms'];
+    const shouldCheck = new Set(
+        rule
+            .map(x => String(x || '').toLowerCase())
+            .filter(k => k === 'phrases' || k === 'keywords' || k === 'risk_terms')
+    );
+
+    // Match helpers (tudo normalizado conforme config do JSON)
+    const hasAny = (arr) => arr.some(tok => tok && s.includes(tok));
+
+    // Aplica as regras declaradas no JSON (sem regex em código)
+    if (shouldCheck.has('phrases') && hasAny(phrases)) return true;
+    if (shouldCheck.has('keywords') && hasAny(keywords)) return true;
+    if (shouldCheck.has('risk_terms') && hasAny(riskTerms)) return true;
 
     return false;
 }
@@ -686,6 +708,7 @@ async function processarMensagensPendentes(contato) {
 
             if (m1) await sendMessage(st.contato, m1);
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+            if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-mid-batch' };
             if (m2) await sendMessage(st.contato, m2);
 
             if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-post-batch' };
@@ -860,6 +883,9 @@ async function processarMensagensPendentes(contato) {
 
             let cur = Number(st.stageCursor?.[st.etapa] || 0);
             for (let i = cur; i < msgs.length; i++) {
+                if (await preflightOptOut(st)) {
+                    return { ok: true, interrupted: 'optout-pre-batch' };
+                }
                 if (!msgs[i]) continue;
                 // delays específicos do fluxo original
                 if (i === 0) await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
@@ -1034,6 +1060,9 @@ async function processarMensagensPendentes(contato) {
             const msgs = [msg1, msg2, msg3];
             let cur = Number(st.stageCursor?.[st.etapa] || 0);
             for (let i = cur; i < msgs.length; i++) {
+                if (await preflightOptOut(st)) {
+                    return { ok: true, interrupted: 'optout-pre-batch' };
+                }
                 if (!msgs[i]) continue;
                 await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                 const r = await sendMessage(st.contato, msgs[i]);
@@ -1317,6 +1346,9 @@ async function processarMensagensPendentes(contato) {
 
             let cur = Number(st.stageCursor?.[st.etapa] || 0);
             for (let i = cur; i < msgs.length; i++) {
+                if (await preflightOptOut(st)) {
+                    return { ok: true, interrupted: 'optout-pre-batch' };
+                }
                 if (!msgs[i]) continue;
                 await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                 const r = await sendMessage(st.contato, msgs[i]);
@@ -1489,6 +1521,9 @@ async function processarMensagensPendentes(contato) {
 
             let cur = Number(st.stageCursor?.[st.etapa] || 0);
             for (let i = cur; i < msgs.length; i++) {
+                if (await preflightOptOut(st)) {
+                    return { ok: true, interrupted: 'optout-pre-batch' };
+                }
                 if (!msgs[i]) continue;
                 await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                 const r = await sendMessage(st.contato, msgs[i]);

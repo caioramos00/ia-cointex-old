@@ -8,9 +8,25 @@
     "collapse_whitespace": true,
     "trim": true
   },
-  "block_if_any": ["phrases", "keywords", "regex", "risk_terms"],
+  "block_if_any": [
+    "phrases",
+    "keywords",
+    "risk_terms"
+  ],
   "exceptions": {
-    "ambiguous_single_tokens": ["para", "nao", "não", "no", "nah", "ok", "blz", "kkk", "rs", "👍", "👎"],
+    "ambiguous_single_tokens": [
+      "para",
+      "nao",
+      "não",
+      "no",
+      "nah",
+      "ok",
+      "blz",
+      "kkk",
+      "rs",
+      "👍",
+      "👎"
+    ],
     "notes": [
       "Um token que esteja em ambiguous_single_tokens não deve bloquear sozinho.",
       "Se a mensagem tiver só um desses tokens, não considerar opt-out."
