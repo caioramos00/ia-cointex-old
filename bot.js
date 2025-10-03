@@ -121,23 +121,23 @@ function inicializarEstado(contato, maybeTid, maybeClickType) {
 }
 
 function decidirOptLabel(texto) {
-  const t = safeStr(texto).toLowerCase();
+    const t = safeStr(texto).toLowerCase();
 
-  const isStop = [
-    /\bpar(a|e)\b/, /\bpare\b/, /\bchega\b/, /\bremover\b/, /\bremova\b/,
-    /\bnao\s*quero\b/, /\bsem\s*mensagem\b/, /\bstop\b/, /\bcancel(ar)?\b/,
-    /\bdesinscrever\b/, /\bunsubscribe\b/, /\bnao\s*me\s*chame\b/, /\bnao\s*mand(a|e)\b/
-  ].some(r => r.test(t));
-  if (isStop) return 'OPTOUT';
+    const isStop = [
+        /\bpar(a|e)\b/, /\bpare\b/, /\bchega\b/, /\bremover\b/, /\bremova\b/,
+        /\bnao\s*quero\b/, /\bsem\s*mensagem\b/, /\bstop\b/, /\bcancel(ar)?\b/,
+        /\bdesinscrever\b/, /\bunsubscribe\b/, /\bnao\s*me\s*chame\b/, /\bnao\s*mand(a|e)\b/
+    ].some(r => r.test(t));
+    if (isStop) return 'OPTOUT';
 
-  const isStart = [
-    /\bstart\b/, /\breopt-?in\b/, /\bsubscribe\b/, /\binscrever\b/, /\breinscrever\b/,
-    /\bquero (?:voltar a )?receber\b/, /\bpode (?:voltar a )?mandar\b/,
-    /\bpode (?:me )?chamar\b/, /\bretomar\b/, /\bvoltar a falar\b/
-  ].some(r => r.test(t));
-  if (isStart) return 'REOPTIN';
+    const isStart = [
+        /\bstart\b/, /\breopt-?in\b/, /\bsubscribe\b/, /\binscrever\b/, /\breinscrever\b/,
+        /\bquero (?:voltar a )?receber\b/, /\bpode (?:voltar a )?mandar\b/,
+        /\bpode (?:me )?chamar\b/, /\bretomar\b/, /\bvoltar a falar\b/
+    ].some(r => r.test(t));
+    if (isStart) return 'REOPTIN';
 
-  return 'NAO_OPTOUT';
+    return 'NAO_OPTOUT';
 }
 
 async function criarUsuarioDjango(contato) {
@@ -234,7 +234,7 @@ async function resolveManychatWaSubscriberId(contato, modOpt, settingsOpt) {
     try {
         const c = await getContatoByPhone(phone);
         if (c?.manychat_subscriber_id) subscriberId = String(c.manychat_subscriber_id);
-    } catch {}
+    } catch { }
     if (!subscriberId && st?.manychat_subscriber_id) subscriberId = String(st.manychat_subscriber_id);
     const { mod, settings } = (modOpt && settingsOpt) ? { mod: modOpt, settings: settingsOpt } : await getActiveTransport();
     const token = (settings && settings.manychat_api_token) || process.env.MANYCHAT_API_TOKEN || '';
@@ -247,7 +247,7 @@ async function resolveManychatWaSubscriberId(contato, modOpt, settingsOpt) {
         } catch { return { status: 0, data: null }; }
     };
     const tries = [
-        { m: 'get',  u: `https://api.manychat.com/whatsapp/subscribers/findByPhone?phone=${encodeURIComponent(phonePlus)}` },
+        { m: 'get', u: `https://api.manychat.com/whatsapp/subscribers/findByPhone?phone=${encodeURIComponent(phonePlus)}` },
         { m: 'post', u: `https://api.manychat.com/whatsapp/subscribers/findByPhone`, p: { phone: phonePlus } },
     ];
     for (const t of tries) {
@@ -260,7 +260,7 @@ async function resolveManychatWaSubscriberId(contato, modOpt, settingsOpt) {
         }
     }
     if (subscriberId) {
-        try { await setManychatSubscriberId(phone, subscriberId); } catch {}
+        try { await setManychatSubscriberId(phone, subscriberId); } catch { }
         st.manychat_subscriber_id = subscriberId;
         console.log(`[${phone}] manychat WA subscriber_id resolvido: ${subscriberId}`);
         return subscriberId;
@@ -269,27 +269,27 @@ async function resolveManychatWaSubscriberId(contato, modOpt, settingsOpt) {
 }
 
 async function sendManychatWhatsAppImage({ subscriberId, imageUrl, caption, token }) {
-  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-  const endpoint = 'https://api.manychat.com/fb/sending/sendContent';
-  const messages = [{ type: 'image', url: String(imageUrl).trim() }];
-  if (caption) messages.push({ type: 'text', text: String(caption).trim() });
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const endpoint = 'https://api.manychat.com/fb/sending/sendContent';
+    const messages = [{ type: 'image', url: String(imageUrl).trim() }];
+    if (caption) messages.push({ type: 'text', text: String(caption).trim() });
 
-  const payload = {
-    subscriber_id: subscriberId,
-    data: {
-      version: 'v2',
-      content: {
-        type: 'whatsapp',
-        messages
-      }
-    }
-  };
+    const payload = {
+        subscriber_id: subscriberId,
+        data: {
+            version: 'v2',
+            content: {
+                type: 'whatsapp',
+                messages
+            }
+        }
+    };
 
-  const resp = await axios.post(endpoint, payload, { headers, timeout: 15000, validateStatus: () => true });
-  const okHttp = resp.status >= 200 && resp.status < 300;
-  const okBody = !resp.data?.status || String(resp.data?.status).toLowerCase() === 'success';
-  if (okHttp && okBody) return { ok: true, status: resp.status, data: resp.data };
-  return { ok: false, status: resp.status, data: resp.data };
+    const resp = await axios.post(endpoint, payload, { headers, timeout: 15000, validateStatus: () => true });
+    const okHttp = resp.status >= 200 && resp.status < 300;
+    const okBody = !resp.data?.status || String(resp.data?.status).toLowerCase() === 'success';
+    if (okHttp && okBody) return { ok: true, status: resp.status, data: resp.data };
+    return { ok: false, status: resp.status, data: resp.data };
 }
 
 async function sendImage(contato, imageUrl, caption) {
@@ -439,8 +439,9 @@ async function processarMensagensPendentes(contato) {
             st.mensagensDesdeSolicitacao = [];
             st.lastClassifiedIdx.interesse = 0;
 
+            const _prev = st.etapa;
             st.etapa = 'abertura:wait';
-            console.log(`[${st.contato}] etapa->${st.etapa}`);
+            console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
             return { ok: true };
         }
 
@@ -464,8 +465,9 @@ async function processarMensagensPendentes(contato) {
             st.mensagensPendentes = [];
             st.mensagensDesdeSolicitacao = [];
             st.lastClassifiedIdx.interesse = 0;
+            const _prev = st.etapa;
             st.etapa = 'interesse:wait';
-            console.log(`[${st.contato}] etapa->${st.etapa}`);
+            console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
             return { ok: true };
         }
 
@@ -541,6 +543,7 @@ async function processarMensagensPendentes(contato) {
                         }
                     } catch { }
                 }
+                console.log(`[${st.contato}] Análise: ${msgClass} ("${truncate(msg, 140)}")`);
                 classes.push(msgClass);
             }
             st.lastClassifiedIdx.interesse = total;
@@ -553,6 +556,7 @@ async function processarMensagensPendentes(contato) {
                 st.mensagensDesdeSolicitacao = [];
                 st.lastClassifiedIdx.interesse = 0;
                 st.etapa = 'instrucoes:send';
+                console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
             } else {
                 return { ok: true, classe };
             }
@@ -607,8 +611,9 @@ async function processarMensagensPendentes(contato) {
             st.lastClassifiedIdx.acesso = 0;
             st.lastClassifiedIdx.confirmacao = 0;
             st.lastClassifiedIdx.saque = 0;
+            const _prev = st.etapa;
             st.etapa = 'instrucoes:wait';
-            console.log(`[${st.contato}] etapa->${st.etapa}`);
+            console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
             return { ok: true };
         }
 
@@ -684,6 +689,7 @@ async function processarMensagensPendentes(contato) {
                         }
                     } catch { }
                 }
+                console.log(`[${st.contato}] Análise: ${msgClass} ("${truncate(msg, 140)}")`);
                 classes.push(msgClass);
             }
             st.lastClassifiedIdx.acesso = total;
@@ -698,8 +704,9 @@ async function processarMensagensPendentes(contato) {
                 st.lastClassifiedIdx.acesso = 0;
                 st.lastClassifiedIdx.confirmacao = 0;
                 st.lastClassifiedIdx.saque = 0;
+                const _prev = st.etapa;
                 st.etapa = 'acesso:send';
-                console.log(`[${st.contato}] etapa->${st.etapa}`);
+                console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
             } else {
                 st.mensagensPendentes = [];
                 return { ok: true, classe };
@@ -761,8 +768,9 @@ async function processarMensagensPendentes(contato) {
             st.mensagensPendentes = [];
             st.mensagensDesdeSolicitacao = [];
             st.lastClassifiedIdx.acesso = 0;
+            const _prev = st.etapa;
             st.etapa = 'acesso:wait';
-            console.log(`[${st.contato}] etapa->${st.etapa}`);
+            console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
             return { ok: true };
         }
 
@@ -840,6 +848,7 @@ async function processarMensagensPendentes(contato) {
                         }
                     } catch { }
                 }
+                console.log(`[${st.contato}] Análise: ${msgClass} ("${truncate(msg, 140)}")`);
                 classes.push(msgClass);
             }
             st.lastClassifiedIdx.acesso = total;
@@ -847,8 +856,9 @@ async function processarMensagensPendentes(contato) {
             if (classes.includes('confirmado')) {
                 st.mensagensDesdeSolicitacao = [];
                 st.lastClassifiedIdx.acesso = 0;
+                const _prev = st.etapa;
                 st.etapa = 'confirmacao:send';
-                console.log(`[${st.contato}] etapa->${st.etapa}`);
+                console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
             } else {
                 const ultima = classes[classes.length - 1] || 'neutro';
                 return { ok: true, classe: ultima };
@@ -881,8 +891,9 @@ async function processarMensagensPendentes(contato) {
             st.mensagensPendentes = [];
             st.mensagensDesdeSolicitacao = [];
             st.lastClassifiedIdx.confirmacao = 0;
+            const _prev = st.etapa;
             st.etapa = 'confirmacao:wait';
-            console.log(`[${st.contato}] etapa->${st.etapa}`);
+            console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
             return { ok: true };
         }
 
@@ -904,7 +915,7 @@ async function processarMensagensPendentes(contato) {
             let confirmado = false;
             for (const raw of novasMsgs) {
                 const msg = safeStr(raw).trim();
-                if (looksLikeMediaUrl(msg)) { confirmado = true; break; }
+                if (looksLikeMediaUrl(msg)) { console.log(`[${st.contato}] Análise: confirmado ("${truncate(msg, 140)}")`); confirmado = true; break; }
             }
             if (!confirmado && apiKey) {
                 const allowed = ['confirmado', 'nao_confirmado', 'duvida', 'neutro'];
@@ -963,6 +974,7 @@ async function processarMensagensPendentes(contato) {
                         resp = await callOnce(256);
                     }
                     confirmado = (resp.status >= 200 && resp.status < 300 && resp.picked === 'confirmado');
+                    console.log(`[${st.contato}] Análise: ${resp.picked || 'neutro'} ("${truncate(contexto, 140)}")`);
                 } catch { }
             }
             st.lastClassifiedIdx.confirmacao = total;
@@ -970,8 +982,9 @@ async function processarMensagensPendentes(contato) {
             if (confirmado) {
                 st.mensagensDesdeSolicitacao = [];
                 st.lastClassifiedIdx.saque = 0;
+                const _prev = st.etapa;
                 st.etapa = 'saque:send';
-                console.log(`[${st.contato}] etapa->${st.etapa}`);
+                console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
             } else {
                 return { ok: true, classe: 'standby' };
             }
@@ -1029,8 +1042,9 @@ async function processarMensagensPendentes(contato) {
             st.mensagensDesdeSolicitacao = [];
             st.lastClassifiedIdx.saque = 0;
             st.saquePediuPrint = false;
+            const _prev = st.etapa;
             st.etapa = 'saque:wait';
-            console.log(`[${st.contato}] etapa->${st.etapa}`);
+            console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
             return { ok: true };
         }
 
@@ -1052,15 +1066,16 @@ async function processarMensagensPendentes(contato) {
             let temImagem = false;
             for (const raw of novasMsgs) {
                 const msg = safeStr(raw).trim();
-                if (looksLikeMediaUrl(msg)) { temImagem = true; break; }
+                if (looksLikeMediaUrl(msg)) { console.log(`[${st.contato}] Análise: imagem ("${truncate(msg, 140)}")`); temImagem = true; break; }
             }
             if (temImagem) {
                 st.lastClassifiedIdx.saque = total;
                 st.mensagensPendentes = [];
                 st.mensagensDesdeSolicitacao = [];
                 st.saquePediuPrint = false;
+                const _prev = st.etapa;
                 st.etapa = 'validacao:send';
-                console.log(`[${st.contato}] etapa->${st.etapa}`);
+                console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
             } else {
                 let relevante = false;
                 if (apiKey) {
@@ -1118,6 +1133,7 @@ async function processarMensagensPendentes(contato) {
                         let resp = await callOnce(64);
                         if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) resp = await callOnce(256);
                         relevante = (resp.status >= 200 && resp.status < 300 && resp.picked === 'relevante');
+                        console.log(`[${st.contato}] Análise: ${resp.picked || (relevante ? 'relevante' : 'irrelevante')} ("${truncate(contexto, 140)}")`);
                     } catch { }
                 }
                 st.lastClassifiedIdx.saque = total;
@@ -1183,8 +1199,9 @@ async function processarMensagensPendentes(contato) {
             st.lastClassifiedIdx.validacao = 0;
             st.validacaoAwaitFirstMsg = true;
             st.validacaoTimeoutUntil = 0;
+            const _prev = st.etapa;
             st.etapa = 'validacao:wait';
-            console.log(`[${st.contato}] etapa->${st.etapa}`);
+            console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
             return { ok: true };
         }
 
@@ -1206,8 +1223,9 @@ async function processarMensagensPendentes(contato) {
                         console.warn(`[${st.contato}] validacaoTimer erro: ${e?.message || e}`);
                     }
                 }, rnd + 100);
+                const _prev = st.etapa;
                 st.etapa = 'validacao:cooldown';
-                console.log(`[${st.contato}] etapa->${st.etapa} t+${Math.round(rnd / 1000)}s`);
+                console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
                 return { ok: true, started: rnd };
             }
             st.mensagensPendentes = [];
@@ -1233,8 +1251,9 @@ async function processarMensagensPendentes(contato) {
             st.conversaoAwaitMsg = false;
             if (!st.lastClassifiedIdx) st.lastClassifiedIdx = {};
             st.lastClassifiedIdx.conversao = 0;
+            const _prev = st.etapa;
             st.etapa = 'conversao:send';
-            console.log(`[${st.contato}] etapa->${st.etapa}`);
+            console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
         }
 
         if (st.etapa === 'conversao:send') {
@@ -1301,8 +1320,9 @@ async function processarMensagensPendentes(contato) {
                     st.mensagensPendentes = [];
                     st.mensagensDesdeSolicitacao = [];
                     st.lastClassifiedIdx.conversao = 0;
+                    const _prev = st.etapa;
                     st.etapa = 'conversao:wait';
-                    console.log(`[${st.contato}] etapa->${st.etapa}`);
+                    console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
                     return { ok: true, batch: 3, done: true };
                 }
             }
@@ -1310,8 +1330,9 @@ async function processarMensagensPendentes(contato) {
                 st.conversaoAwaitMsg = false;
                 st.mensagensPendentes = [];
                 st.mensagensDesdeSolicitacao = [];
+                const _prev = st.etapa;
                 st.etapa = 'conversao:wait';
-                console.log(`[${st.contato}] etapa->${st.etapa}`);
+                console.log(`[${st.contato}] ${(_prev)} -> ${st.etapa}`);
                 return { ok: true, coerced: 'conversao:wait' };
             }
             return { ok: true };
