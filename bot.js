@@ -107,7 +107,6 @@ function ensureEstado(contato) {
         if (typeof st.saquePediuPrint !== 'boolean') st.saquePediuPrint = false;
         if (typeof st.validacaoAwaitFirstMsg !== 'boolean') st.validacaoAwaitFirstMsg = false;
         if (typeof st.validacaoTimeoutUntil !== 'number') st.validacaoTimeoutUntil = 0;
-
         if (typeof st.conversaoBatch !== 'number') st.conversaoBatch = 0;
         if (typeof st.conversaoAwaitMsg !== 'boolean') st.conversaoAwaitMsg = false;
     }
@@ -122,42 +121,45 @@ function inicializarEstado(contato, maybeTid, maybeClickType) {
 }
 
 function decidirOptLabel(texto) {
-    const t = safeStr(texto).toLowerCase();
-    const out = [
-        /\bpar(a|e)\b/, /\bpare\b/, /\bchega\b/, /\bremover\b/, /\bremova\b/,
-        /\bnao\s*quero\b/, /\bsem\s*mensagem\b/, /\bstop\b/, /\bcancel(ar)?\b/,
-        /\bdesinscrever\b/, /\bunsubscribe\b/, /\bnao\s*me\s*chame\b/, /\bnao\s*mand(a|e)\b/
-    ].some(r => r.test(t));
-    return out ? 'OPTOUT' : 'NAO_OPTOUT';
+  const t = safeStr(texto).toLowerCase();
+
+  const isStop = [
+    /\bpar(a|e)\b/, /\bpare\b/, /\bchega\b/, /\bremover\b/, /\bremova\b/,
+    /\bnao\s*quero\b/, /\bsem\s*mensagem\b/, /\bstop\b/, /\bcancel(ar)?\b/,
+    /\bdesinscrever\b/, /\bunsubscribe\b/, /\bnao\s*me\s*chame\b/, /\bnao\s*mand(a|e)\b/
+  ].some(r => r.test(t));
+  if (isStop) return 'OPTOUT';
+
+  const isStart = [
+    /\bstart\b/, /\breopt-?in\b/, /\bsubscribe\b/, /\binscrever\b/, /\breinscrever\b/,
+    /\bquero (?:voltar a )?receber\b/, /\bpode (?:voltar a )?mandar\b/,
+    /\bpode (?:me )?chamar\b/, /\bretomar\b/, /\bvoltar a falar\b/
+  ].some(r => r.test(t));
+  if (isStart) return 'REOPTIN';
+
+  return 'NAO_OPTOUT';
 }
 
 async function criarUsuarioDjango(contato) {
     const st = ensureEstado(contato);
     if (st.createdUser === 'ok' || st.credenciais) return { ok: true, skipped: true };
     if (st.createdUser === 'pending') return { ok: true, skipped: 'pending' };
-
     st.createdUser = 'pending';
-
     const phone = st.contato.startsWith('+') ? st.contato : `+${st.contato}`;
     const payload = { tid: st.tid || '', click_type: st.click_type || 'Orgânico', phone };
     const URL = 'https://www.cointex.cash/api/create-user/';
-
     const tryOnce = async () =>
         axios.post(URL, payload, { timeout: 15000, validateStatus: () => true });
-
     try {
         let resp = await tryOnce();
-
         if (resp.status >= 500 || resp.status === 429) {
             const jitter = 1200 + Math.floor(Math.random() * 400);
             console.warn(`[Contato] Cointex retry agendado em ${jitter}ms: ${st.contato} HTTP ${resp.status}`);
             await delay(jitter);
             resp = await tryOnce();
         }
-
         const okHttp = resp.status >= 200 && resp.status < 300;
         const okBody = !resp.data?.status || resp.data?.status === 'success';
-
         if (okHttp && okBody) {
             const user = Array.isArray(resp.data?.users) ? resp.data.users[0] : null;
             if (user?.email && user?.password) {
@@ -171,7 +173,6 @@ async function criarUsuarioDjango(contato) {
             console.log(`[Contato] Cointex criado: ${st.contato} ${st.credenciais?.email || ''}`.trim());
             return { ok: true, status: resp.status, data: resp.data };
         }
-
         const msg = resp.data?.message || `HTTP ${resp.status}`;
         st.createdUser = undefined;
         console.warn(`[Contato] Cointex ERRO: ${st.contato} ${msg}`);
@@ -187,14 +188,12 @@ async function resolveManychatSubscriberId(contato, modOpt, settingsOpt) {
     const phone = String(contato || '').replace(/\D/g, '');
     const st = ensureEstado(phone);
     let subscriberId = null;
-
     try {
         const c = await getContatoByPhone(phone);
         if (c?.manychat_subscriber_id) subscriberId = String(c.manychat_subscriber_id);
     } catch { }
     if (!subscriberId && st?.manychat_subscriber_id) subscriberId = String(st.manychat_subscriber_id);
     if (subscriberId) return subscriberId;
-
     try {
         const { mod, settings } = (modOpt && settingsOpt) ? { mod: modOpt, settings: settingsOpt } : await getActiveTransport();
         const token = (settings && settings.manychat_api_token) || process.env.MANYCHAT_API_TOKEN || '';
@@ -232,17 +231,14 @@ async function resolveManychatWaSubscriberId(contato, modOpt, settingsOpt) {
     const phone = String(contato || '').replace(/\D/g, '');
     const st = ensureEstado(phone);
     let subscriberId = null;
-
     try {
         const c = await getContatoByPhone(phone);
         if (c?.manychat_subscriber_id) subscriberId = String(c.manychat_subscriber_id);
     } catch {}
     if (!subscriberId && st?.manychat_subscriber_id) subscriberId = String(st.manychat_subscriber_id);
-
     const { mod, settings } = (modOpt && settingsOpt) ? { mod: modOpt, settings: settingsOpt } : await getActiveTransport();
     const token = (settings && settings.manychat_api_token) || process.env.MANYCHAT_API_TOKEN || '';
     if (!token) return subscriberId || null;
-
     const phonePlus = phone.startsWith('+') ? phone : `+${phone}`;
     const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
     const call = async (method, url, data) => {
@@ -254,7 +250,6 @@ async function resolveManychatWaSubscriberId(contato, modOpt, settingsOpt) {
         { m: 'get',  u: `https://api.manychat.com/whatsapp/subscribers/findByPhone?phone=${encodeURIComponent(phonePlus)}` },
         { m: 'post', u: `https://api.manychat.com/whatsapp/subscribers/findByPhone`, p: { phone: phonePlus } },
     ];
-
     for (const t of tries) {
         const r = await call(t.m, t.u, t.p);
         const d = r?.data || {};
@@ -264,61 +259,52 @@ async function resolveManychatWaSubscriberId(contato, modOpt, settingsOpt) {
             break;
         }
     }
-
     if (subscriberId) {
         try { await setManychatSubscriberId(phone, subscriberId); } catch {}
         st.manychat_subscriber_id = subscriberId;
         console.log(`[${phone}] manychat WA subscriber_id resolvido: ${subscriberId}`);
         return subscriberId;
     }
-
     return null;
 }
 
 async function sendManychatWhatsAppImage({ subscriberId, imageUrl, caption, token }) {
-    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-    const endpoint = 'https://api.manychat.com/whatsapp/sending/sendContent';
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  const endpoint = 'https://api.manychat.com/fb/sending/sendContent';
+  const messages = [{ type: 'image', url: String(imageUrl).trim() }];
+  if (caption) messages.push({ type: 'text', text: String(caption).trim() });
 
-    const payload = {
-        subscriber_id: subscriberId,
-        data: {
-            version: 'v2',
-            content: {
-                type: 'whatsapp',
-                messages: [
-                    Object.assign(
-                        { type: 'image', image: { url: imageUrl } },
-                        (caption ? { caption: String(caption).trim() } : {})
-                    ),
-                ]
-            }
-        }
-    };
+  const payload = {
+    subscriber_id: subscriberId,
+    data: {
+      version: 'v2',
+      content: {
+        type: 'whatsapp',
+        messages
+      }
+    }
+  };
 
-    const resp = await axios.post(endpoint, payload, { headers, timeout: 15000, validateStatus: () => true });
-    const okHttp = resp.status >= 200 && resp.status < 300;
-    const okBody = !resp.data?.status || String(resp.data?.status).toLowerCase() === 'success';
-
-    if (okHttp && okBody) return { ok: true, status: resp.status, data: resp.data };
-    return { ok: false, status: resp.status, data: resp.data };
+  const resp = await axios.post(endpoint, payload, { headers, timeout: 15000, validateStatus: () => true });
+  const okHttp = resp.status >= 200 && resp.status < 300;
+  const okBody = !resp.data?.status || String(resp.data?.status).toLowerCase() === 'success';
+  if (okHttp && okBody) return { ok: true, status: resp.status, data: resp.data };
+  return { ok: false, status: resp.status, data: resp.data };
 }
 
 async function sendImage(contato, imageUrl, caption) {
     await extraGlobalDelay();
     const url = safeStr(imageUrl).trim();
     if (!url) return { ok: false, reason: 'empty-image-url' };
-
     try {
         const { mod, settings } = await getActiveTransport();
         const provider = mod?.name || 'unknown';
-
         if (provider === 'manychat') {
             const token = (settings && settings.manychat_api_token) || process.env.MANYCHAT_API_TOKEN || '';
             if (!token) {
                 console.log(`[${contato}] envio=fail provider=manychat reason=no-api-token image="${url}"`);
                 return { ok: false, reason: 'no-api-token' };
             }
-
             let subscriberId = null;
             try {
                 const c = await getContatoByPhone(contato);
@@ -333,17 +319,14 @@ async function sendImage(contato, imageUrl, caption) {
                 console.log(`[${contato}] envio=fail provider=manychat reason=no-wa-subscriber-id image="${url}"`);
                 return { ok: false, reason: 'no-wa-subscriber-id' };
             }
-
             const out = await sendManychatWhatsAppImage({ subscriberId, imageUrl: url, caption, token });
             if (out.ok) {
                 console.log(`[${contato}] envio=ok provider=manychat endpoint=/whatsapp/sending/sendContent image="${url}"`);
                 return { ok: true, provider };
             }
-
             console.log(`[${contato}] envio=fail provider=manychat status=${out.status} resp=${truncate(JSON.stringify(out.data))}`);
             return { ok: false, reason: 'manychat-send-failed', status: out.status, data: out.data };
         }
-
         console.log(`[${contato}] envio=fail provider=${provider} reason=unsupported image="${url}"`);
         return { ok: false, reason: 'unsupported' };
     } catch (e) {
@@ -387,7 +370,6 @@ async function handleManyChatWebhook(body) {
             }
             return null;
         };
-
         const subscriberId = pickPath(body, [
             'subscriber.id',
             'data.subscriber.id',
@@ -397,7 +379,6 @@ async function handleManyChatWebhook(body) {
             'subscriber_id',
             'contact.id'
         ]);
-
         let phone = pickPath(body, [
             'subscriber.phone',
             'data.subscriber.phone',
@@ -409,16 +390,13 @@ async function handleManyChatWebhook(body) {
             'message.from'
         ]);
         phone = phone ? String(phone).replace(/\D/g, '') : '';
-
         if (!subscriberId || !phone) {
             console.log(`[ManyChat][webhook] ignorado: subscriberId=${subscriberId || 'null'} phone=${phone || 'null'} payload=${truncate(JSON.stringify(body))}`);
             return { ok: true, ignored: true };
         }
-
         await setManychatSubscriberId(phone, subscriberId);
         const st = ensureEstado(phone);
         st.manychat_subscriber_id = String(subscriberId);
-
         console.log(`[ManyChat][webhook] vinculado phone=${phone} subscriber_id=${subscriberId}`);
         return { ok: true, linked: true };
     } catch (e) {
@@ -439,13 +417,9 @@ async function processarMensagensPendentes(contato) {
             let aberturaData = null;
             const loadAbertura = () => {
                 if (aberturaData) return aberturaData;
-                try {
-                    let raw = fs.readFileSync(aberturaPath, 'utf8');
-                    raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
-                    aberturaData = JSON.parse(raw);
-                } catch {
-                    aberturaData = {};
-                }
+                let raw = fs.readFileSync(aberturaPath, 'utf8');
+                raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
+                aberturaData = JSON.parse(raw);
                 return aberturaData;
             };
             const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
@@ -472,17 +446,12 @@ async function processarMensagensPendentes(contato) {
 
         if (st.etapa === 'abertura:wait') {
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
-
             const interessePath = path.join(__dirname, 'content', 'interesse.json');
             let interesseData = null;
             const loadInteresse = () => {
                 if (interesseData) return interesseData;
-                try {
-                    const raw = fs.readFileSync(interessePath, 'utf8');
-                    interesseData = JSON.parse(raw);
-                } catch {
-                    interesseData = {};
-                }
+                const raw = fs.readFileSync(interessePath, 'utf8');
+                interesseData = JSON.parse(raw);
                 return interesseData;
             };
             const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
@@ -502,7 +471,6 @@ async function processarMensagensPendentes(contato) {
 
         if (st.etapa === 'interesse:wait') {
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
-
             const total = st.mensagensDesdeSolicitacao.length;
             const startIdx = Math.max(0, st.lastClassifiedIdx?.interesse || 0);
             if (startIdx >= total) {
@@ -511,17 +479,14 @@ async function processarMensagensPendentes(contato) {
             }
             const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
             const apiKey = process.env.OPENAI_API_KEY;
-
             let classes = [];
             for (const raw of novasMsgs) {
                 const msg = safeStr(raw).trim();
                 const prompt = promptClassificaAceite(msg);
-
                 let msgClass = 'duvida';
                 if (apiKey) {
                     const allowed = ['aceite', 'recusa', 'duvida'];
                     const structuredPrompt = `${prompt}\n\nOutput only this valid JSON format with double quotes around keys and values, nothing else: {"label": "aceite"} or {"label": "recusa"} or {"label": "duvida"}`;
-
                     const callOnce = async (maxTok) => {
                         let r;
                         try {
@@ -566,7 +531,6 @@ async function processarMensagensPendentes(contato) {
                         if (!picked) picked = pickLabelFromResponseData(data, allowed);
                         return { status: r.status, picked };
                     };
-
                     try {
                         let resp = await callOnce(64);
                         if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) {
@@ -579,13 +543,10 @@ async function processarMensagensPendentes(contato) {
                 }
                 classes.push(msgClass);
             }
-
             st.lastClassifiedIdx.interesse = total;
-
             let classe = 'duvida';
             const nonDuvida = classes.filter(c => c !== 'duvida');
             classe = nonDuvida.length > 0 ? nonDuvida[nonDuvida.length - 1] : 'duvida';
-
             st.classificacaoAceite = classe;
             st.mensagensPendentes = [];
             if (classe === 'aceite') {
@@ -595,7 +556,6 @@ async function processarMensagensPendentes(contato) {
             } else {
                 return { ok: true, classe };
             }
-
         }
 
         if (st.etapa === 'instrucoes:send') {
@@ -603,18 +563,12 @@ async function processarMensagensPendentes(contato) {
             let instrucoesData = null;
             const loadInstrucoes = () => {
                 if (instrucoesData) return instrucoesData;
-                try {
-                    let raw = fs.readFileSync(instrucoesPath, 'utf8');
-                    raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
-                    instrucoesData = JSON.parse(raw);
-                } catch {
-                    instrucoesData = {};
-                }
+                let raw = fs.readFileSync(instrucoesPath, 'utf8');
+                raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
+                instrucoesData = JSON.parse(raw);
                 return instrucoesData;
             };
-
             const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
-
             const composeMsg1 = () => {
                 const c = loadInstrucoes();
                 const g1 = pick(c?.msg1?.grupo1);
@@ -622,7 +576,6 @@ async function processarMensagensPendentes(contato) {
                 const g3 = pick(c?.msg1?.grupo3);
                 return [g1 && `${g1}?`, g2 && `${g2}…`, g3 && `${g3}:`].filter(Boolean).join(' ');
             };
-
             const composeMsg2 = () => {
                 const c = loadInstrucoes();
                 const p1 = [pick(c?.pontos?.p1?.g1), pick(c?.pontos?.p1?.g2), pick(c?.pontos?.p1?.g3)].filter(Boolean).join(', ');
@@ -633,35 +586,27 @@ async function processarMensagensPendentes(contato) {
                 out = out.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
                 return out;
             };
-
             const composeMsg3 = () => {
                 const c = loadInstrucoes();
                 const g1 = pick(c?.msg3?.grupo1);
                 const g2 = pick(c?.msg3?.grupo2);
                 return [g1 && `${g1}…`, g2 && `${g2}?`].filter(Boolean).join(' ');
             };
-
             const m1 = composeMsg1();
             const m2 = composeMsg2();
             const m3 = composeMsg3();
-
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
             if (m1) await sendMessage(st.contato, m1);
-
             await delayRange(20000, 30000);
-
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
             if (m2) await sendMessage(st.contato, m2);
-
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
             if (m3) await sendMessage(st.contato, m3);
-
             st.mensagensPendentes = [];
             st.mensagensDesdeSolicitacao = [];
             st.lastClassifiedIdx.acesso = 0;
             st.lastClassifiedIdx.confirmacao = 0;
             st.lastClassifiedIdx.saque = 0;
-
             st.etapa = 'instrucoes:wait';
             console.log(`[${st.contato}] etapa->${st.etapa}`);
             return { ok: true };
@@ -669,27 +614,22 @@ async function processarMensagensPendentes(contato) {
 
         if (st.etapa === 'instrucoes:wait') {
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
-
             const total = st.mensagensDesdeSolicitacao.length;
             const startIdx = Math.max(0, st.lastClassifiedIdx?.acesso || 0);
             if (startIdx >= total) {
                 st.mensagensPendentes = [];
                 return { ok: true, noop: 'no-new-messages' };
             }
-
             const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
             const apiKey = process.env.OPENAI_API_KEY;
-
             let classes = [];
             for (const raw of novasMsgs) {
                 const msg = safeStr(raw).trim();
                 const prompt = promptClassificaAceite(msg);
-
                 let msgClass = 'duvida';
                 if (apiKey) {
                     const allowed = ['aceite', 'recusa', 'duvida'];
                     const structuredPrompt = `${prompt}\n\nOutput only this valid JSON format with double quotes around keys and values, nothing else: {"label": "aceite"} or {"label": "recusa"} or {"label": "duvida"}`;
-
                     const callOnce = async (maxTok) => {
                         let r;
                         try {
@@ -734,7 +674,6 @@ async function processarMensagensPendentes(contato) {
                         if (!picked) picked = pickLabelFromResponseData(data, allowed);
                         return { status: r.status, picked };
                     };
-
                     try {
                         let resp = await callOnce(64);
                         if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) {
@@ -747,15 +686,11 @@ async function processarMensagensPendentes(contato) {
                 }
                 classes.push(msgClass);
             }
-
             st.lastClassifiedIdx.acesso = total;
-
             let classe = 'duvida';
             const nonDuvida = classes.filter(c => c !== 'duvida');
             classe = nonDuvida.length > 0 ? nonDuvida[nonDuvida.length - 1] : 'duvida';
-
             st.classificacaoAceite = classe;
-
             if (classe === 'aceite') {
                 st.mensagensPendentes = [];
                 st.mensagensDesdeSolicitacao = [];
@@ -763,7 +698,6 @@ async function processarMensagensPendentes(contato) {
                 st.lastClassifiedIdx.acesso = 0;
                 st.lastClassifiedIdx.confirmacao = 0;
                 st.lastClassifiedIdx.saque = 0;
-
                 st.etapa = 'acesso:send';
                 console.log(`[${st.contato}] etapa->${st.etapa}`);
             } else {
@@ -775,23 +709,16 @@ async function processarMensagensPendentes(contato) {
         if (st.etapa === 'acesso:send') {
             const acessoPath = path.join(__dirname, 'content', 'acesso.json');
             let acessoData = null;
-
             const loadAcesso = () => {
                 if (acessoData) return acessoData;
-                try {
-                    let raw = fs.readFileSync(acessoPath, 'utf8');
-                    raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
-                    acessoData = JSON.parse(raw);
-                } catch {
-                    acessoData = {};
-                }
+                let raw = fs.readFileSync(acessoPath, 'utf8');
+                raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
+                acessoData = JSON.parse(raw);
                 return acessoData;
             };
-
             const pick = (arr) => Array.isArray(arr) && arr.length
                 ? arr[Math.floor(Math.random() * arr.length)]
                 : '';
-
             if (!st.credenciais?.email || !st.credenciais?.password || !st.credenciais?.login_url) {
                 try {
                     await criarUsuarioDjango(st.contato);
@@ -799,20 +726,16 @@ async function processarMensagensPendentes(contato) {
                     console.warn(`[${st.contato}] criarUsuarioDjango falhou: ${e?.message || e}`);
                 }
             }
-
             const cred = (st.credenciais && typeof st.credenciais === 'object') ? st.credenciais : {};
             const email = safeStr(cred.email).trim();
             const senha = safeStr(cred.password).trim();
             const link = safeStr(cred.login_url).trim();
-
             if (!email || !senha || !link) {
                 console.warn(`[${st.contato}] Credenciais incompletas; abortando acesso:send. email=${!!email} senha=${!!senha} link=${!!link}`);
                 st.mensagensPendentes = [];
                 return { ok: false, reason: 'missing-credentials' };
             }
-
             const c = loadAcesso();
-
             const msg1 = [
                 `${pick(c?.msg1?.bloco1A) || ''} ${pick(c?.msg1?.bloco2A) ? ', ' + pick(c?.msg1?.bloco2A) : ''}:`.trim(),
                 '',
@@ -821,9 +744,7 @@ async function processarMensagensPendentes(contato) {
                 '',
                 'Senha:'
             ].join('\n');
-
             const msg2 = String(senha);
-
             const msg3 = [
                 `${pick(c?.msg3?.bloco1C) || 'entra nesse link'}:`,
                 '',
@@ -831,20 +752,15 @@ async function processarMensagensPendentes(contato) {
                 '',
                 `${[pick(c?.msg3?.bloco2C), pick(c?.msg3?.bloco3C)].filter(Boolean).join(', ')}`
             ].join('\n');
-
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
             if (msg1) await sendMessage(st.contato, msg1);
-
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
             if (msg2) await sendMessage(st.contato, msg2);
-
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
             if (msg3) await sendMessage(st.contato, msg3);
-
             st.mensagensPendentes = [];
             st.mensagensDesdeSolicitacao = [];
             st.lastClassifiedIdx.acesso = 0;
-
             st.etapa = 'acesso:wait';
             console.log(`[${st.contato}] etapa->${st.etapa}`);
             return { ok: true };
@@ -852,30 +768,24 @@ async function processarMensagensPendentes(contato) {
 
         if (st.etapa === 'acesso:wait') {
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
-
             const total = st.mensagensDesdeSolicitacao.length;
             const startIdx = Math.max(0, st.lastClassifiedIdx?.acesso || 0);
             if (startIdx >= total) {
                 st.mensagensPendentes = [];
                 return { ok: true, noop: 'no-new-messages' };
             }
-
             const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
             const apiKey = process.env.OPENAI_API_KEY;
-
             const allowed = ['confirmado', 'nao_confirmado', 'duvida', 'neutro'];
             let classes = [];
-
             for (const raw of novasMsgs) {
                 const msg = safeStr(raw).trim();
                 let msgClass = 'neutro';
-
                 if (apiKey) {
                     const structuredPrompt =
                         `${promptClassificaAcesso(msg)}\n\n` +
                         `Output only this valid JSON format with double quotes around keys and values, nothing else: ` +
                         `{"label": "confirmado"} or {"label": "nao_confirmado"} or {"label": "duvida"} or {"label": "neutro"}`;
-
                     const callOnce = async (maxTok) => {
                         let r;
                         try {
@@ -907,7 +817,6 @@ async function processarMensagensPendentes(contato) {
                         }
                         if (!rawText) rawText = extractTextForLog(data);
                         rawText = String(rawText || '').trim();
-
                         let picked = null;
                         if (rawText) {
                             try {
@@ -921,7 +830,6 @@ async function processarMensagensPendentes(contato) {
                         if (!picked) picked = pickLabelFromResponseData(data, allowed);
                         return { status: r.status, picked };
                     };
-
                     try {
                         let resp = await callOnce(64);
                         if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) {
@@ -932,17 +840,13 @@ async function processarMensagensPendentes(contato) {
                         }
                     } catch { }
                 }
-
                 classes.push(msgClass);
             }
-
             st.lastClassifiedIdx.acesso = total;
             st.mensagensPendentes = [];
-
             if (classes.includes('confirmado')) {
                 st.mensagensDesdeSolicitacao = [];
                 st.lastClassifiedIdx.acesso = 0;
-
                 st.etapa = 'confirmacao:send';
                 console.log(`[${st.contato}] etapa->${st.etapa}`);
             } else {
@@ -950,26 +854,20 @@ async function processarMensagensPendentes(contato) {
                 return { ok: true, classe: ultima };
             }
         }
+
         if (st.etapa === 'confirmacao:send') {
             const confirmacaoPath = path.join(__dirname, 'content', 'confirmacao.json');
             let confirmacaoData = null;
-
             const loadConfirmacao = () => {
                 if (confirmacaoData) return confirmacaoData;
-                try {
-                    let raw = fs.readFileSync(confirmacaoPath, 'utf8');
-                    raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
-                    confirmacaoData = JSON.parse(raw);
-                } catch {
-                    confirmacaoData = {};
-                }
+                let raw = fs.readFileSync(confirmacaoPath, 'utf8');
+                raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
+                confirmacaoData = JSON.parse(raw);
                 return confirmacaoData;
             };
-
             const pick = (arr) => Array.isArray(arr) && arr.length
                 ? arr[Math.floor(Math.random() * arr.length)]
                 : '';
-
             const composeConfirmacaoMsg = () => {
                 const c = loadConfirmacao();
                 const b1 = pick(c?.msg1?.bloco1);
@@ -977,16 +875,12 @@ async function processarMensagensPendentes(contato) {
                 const b3 = pick(c?.msg1?.bloco3);
                 return [b1, b2, b3].filter(Boolean).join(', ');
             };
-
             const m = chooseUnique(composeConfirmacaoMsg, st) || composeConfirmacaoMsg();
-
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
             if (m) await sendMessage(st.contato, m);
-
             st.mensagensPendentes = [];
             st.mensagensDesdeSolicitacao = [];
             st.lastClassifiedIdx.confirmacao = 0;
-
             st.etapa = 'confirmacao:wait';
             console.log(`[${st.contato}] etapa->${st.etapa}`);
             return { ok: true };
@@ -994,39 +888,31 @@ async function processarMensagensPendentes(contato) {
 
         if (st.etapa === 'confirmacao:wait') {
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
-
             const total = st.mensagensDesdeSolicitacao.length;
             const startIdx = Math.max(0, st.lastClassifiedIdx?.confirmacao || 0);
             if (startIdx >= total) {
                 st.mensagensPendentes = [];
                 return { ok: true, noop: 'no-new-messages' };
             }
-
             const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
             const apiKey = process.env.OPENAI_API_KEY;
-
             const looksLikeMediaUrl = (s) => {
                 const n = String(s || '');
                 return /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(n)
                     || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
             };
-
             let confirmado = false;
-
             for (const raw of novasMsgs) {
                 const msg = safeStr(raw).trim();
                 if (looksLikeMediaUrl(msg)) { confirmado = true; break; }
             }
-
             if (!confirmado && apiKey) {
                 const allowed = ['confirmado', 'nao_confirmado', 'duvida', 'neutro'];
-
                 const contexto = novasMsgs.map(s => safeStr(s)).join(' | ');
                 const structuredPrompt =
                     `${promptClassificaConfirmacao(contexto)}\n\n` +
                     `Output only this valid JSON format with double quotes around keys and values, nothing else: ` +
                     `{"label": "confirmado"} or {"label": "nao_confirmado"} or {"label": "duvida"} or {"label": "neutro"}`;
-
                 const callOnce = async (maxTok) => {
                     let r;
                     try {
@@ -1058,7 +944,6 @@ async function processarMensagensPendentes(contato) {
                     }
                     if (!rawText) rawText = extractTextForLog(data);
                     rawText = String(rawText || '').trim();
-
                     let picked = null;
                     if (rawText) {
                         try {
@@ -1072,7 +957,6 @@ async function processarMensagensPendentes(contato) {
                     if (!picked) picked = pickLabelFromResponseData(data, allowed);
                     return { status: r.status, picked };
                 };
-
                 try {
                     let resp = await callOnce(64);
                     if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) {
@@ -1081,10 +965,8 @@ async function processarMensagensPendentes(contato) {
                     confirmado = (resp.status >= 200 && resp.status < 300 && resp.picked === 'confirmado');
                 } catch { }
             }
-
             st.lastClassifiedIdx.confirmacao = total;
             st.mensagensPendentes = [];
-
             if (confirmado) {
                 st.mensagensDesdeSolicitacao = [];
                 st.lastClassifiedIdx.saque = 0;
@@ -1098,33 +980,24 @@ async function processarMensagensPendentes(contato) {
         if (st.etapa === 'saque:send') {
             const saquePath = path.join(__dirname, 'content', 'saque.json');
             let saqueData = null;
-
             function gerarSenhaAleatoria() {
                 return String(Math.floor(1000 + Math.random() * 9000));
             }
-
             const loadSaque = () => {
                 if (saqueData) return saqueData;
-                try {
-                    let raw = fs.readFileSync(saquePath, 'utf8');
-                    raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
-                    saqueData = JSON.parse(raw);
-                } catch {
-                    saqueData = {};
-                }
+                let raw = fs.readFileSync(saquePath, 'utf8');
+                raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
+                saqueData = JSON.parse(raw);
                 return saqueData;
             };
-
             const pick = (arr) => Array.isArray(arr) && arr.length
                 ? arr[Math.floor(Math.random() * arr.length)]
                 : '';
-
             const composeMsg1 = () => {
                 const c = loadSaque();
                 const m = c?.msg1 || {};
                 return `${[pick(m.m1b1), pick(m.m1b2)].filter(Boolean).join(' ')}: ${[pick(m.m1b3), pick(m.m1b4)].filter(Boolean).join(', ')}${pick(m.m1b5) ? '… ' + pick(m.m1b5) : ''}${pick(m.m1b6) ? ', ' + pick(m.m1b6) : ''}`.trim();
             };
-
             const composeMsg2 = () => {
                 const c = loadSaque();
                 const m = c?.msg2 || {};
@@ -1135,7 +1008,6 @@ async function processarMensagensPendentes(contato) {
                 const headLine = header ? `${header}:` : '';
                 return `${headLine}\n\n${s1}\n${s2}\n${s3}`.trim();
             };
-
             const composeMsg3 = () => {
                 const c = loadSaque();
                 const m = c?.msg3 || {};
@@ -1144,54 +1016,44 @@ async function processarMensagensPendentes(contato) {
                 const tail = [pick(m.m3b4), pick(m.m3b5), pick(m.m3b6)].filter(Boolean).join(', ');
                 return `${[left, right && `${right}!`].filter(Boolean).join(' ')}${tail ? ` ${tail}` : ''}`.trim();
             };
-
             const m1 = chooseUnique(composeMsg1, st) || composeMsg1();
             const m2 = chooseUnique(composeMsg2, st) || composeMsg2();
             const m3 = chooseUnique(composeMsg3, st) || composeMsg3();
-
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
             if (m1) await sendMessage(st.contato, m1);
-
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
             if (m2) await sendMessage(st.contato, m2);
-
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
             if (m3) await sendMessage(st.contato, m3);
-
             st.mensagensPendentes = [];
             st.mensagensDesdeSolicitacao = [];
             st.lastClassifiedIdx.saque = 0;
-
             st.saquePediuPrint = false;
             st.etapa = 'saque:wait';
             console.log(`[${st.contato}] etapa->${st.etapa}`);
             return { ok: true };
         }
+
         if (st.etapa === 'saque:wait') {
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
-
             const total = st.mensagensDesdeSolicitacao.length;
             const startIdx = Math.max(0, st.lastClassifiedIdx?.saque || 0);
             if (startIdx >= total) {
                 st.mensagensPendentes = [];
                 return { ok: true, noop: 'no-new-messages' };
             }
-
             const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
             const apiKey = process.env.OPENAI_API_KEY;
-
             const looksLikeMediaUrl = (s) => {
                 const n = String(s || '');
                 return /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(n)
                     || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
             };
-
             let temImagem = false;
             for (const raw of novasMsgs) {
                 const msg = safeStr(raw).trim();
                 if (looksLikeMediaUrl(msg)) { temImagem = true; break; }
             }
-
             if (temImagem) {
                 st.lastClassifiedIdx.saque = total;
                 st.mensagensPendentes = [];
@@ -1208,7 +1070,6 @@ async function processarMensagensPendentes(contato) {
                         `${promptClassificaRelevancia(contexto, false)}\n\n` +
                         `Output only this valid JSON format with double quotes around keys and values, nothing else: ` +
                         `{"label": "relevante"} or {"label": "irrelevante"}`;
-
                     const callOnce = async (maxTok) => {
                         let r;
                         try {
@@ -1240,7 +1101,6 @@ async function processarMensagensPendentes(contato) {
                         }
                         if (!rawText) rawText = extractTextForLog(data);
                         rawText = String(rawText || '').trim();
-
                         let picked = null;
                         if (rawText) {
                             try {
@@ -1254,46 +1114,37 @@ async function processarMensagensPendentes(contato) {
                         if (!picked) picked = pickLabelFromResponseData(data, allowed);
                         return { status: r.status, picked };
                     };
-
                     try {
                         let resp = await callOnce(64);
                         if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) resp = await callOnce(256);
                         relevante = (resp.status >= 200 && resp.status < 300 && resp.picked === 'relevante');
                     } catch { }
                 }
-
                 st.lastClassifiedIdx.saque = total;
                 st.mensagensPendentes = [];
-
                 if (relevante) {
                     const saquePath = path.join(__dirname, 'content', 'saque.json');
                     let saqueMsgPrint = null;
-                    try {
-                        let raw = fs.readFileSync(saquePath, 'utf8');
-                        raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
-                        const parsed = JSON.parse(raw);
-                        if (Array.isArray(parsed?.msgprint) && parsed.msgprint.length > 0) {
-                            saqueMsgPrint = parsed.msgprint;
-                        }
-                    } catch { }
+                    let raw = fs.readFileSync(saquePath, 'utf8');
+                    raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
+                    const parsed = JSON.parse(raw);
+                    if (Array.isArray(parsed?.msgprint) && parsed.msgprint.length > 0) {
+                        saqueMsgPrint = parsed.msgprint;
+                    }
                     if (!Array.isArray(saqueMsgPrint) || saqueMsgPrint.length === 0) {
                         return { ok: true, classe: 'aguardando_imagem' };
                     }
-
                     if (!st.saquePediuPrint) {
                         const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
                         const composeMsgPrint = () => pick(saqueMsgPrint);
                         const m = chooseUnique(composeMsgPrint, st) || composeMsgPrint();
-
                         await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                         if (m) await sendMessage(st.contato, m);
                         st.saquePediuPrint = true;
                         return { ok: true, classe: 'relevante' };
                     }
-
                     return { ok: true, classe: 'aguardando_imagem' };
                 }
-
                 return { ok: true, classe: 'irrelevante' };
             }
         }
@@ -1301,51 +1152,37 @@ async function processarMensagensPendentes(contato) {
         if (st.etapa === 'validacao:send') {
             const validacaoPath = path.join(__dirname, 'content', 'validacao.json');
             let validacaoData = null;
-
             const loadValidacao = () => {
                 if (validacaoData) return validacaoData;
-                try {
-                    let raw = fs.readFileSync(validacaoPath, 'utf8');
-                    raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
-                    validacaoData = JSON.parse(raw);
-                } catch {
-                    validacaoData = {};
-                }
+                let raw = fs.readFileSync(validacaoPath, 'utf8');
+                raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
+                validacaoData = JSON.parse(raw);
                 return validacaoData;
             };
-
             const pick = (arr) => Array.isArray(arr) && arr.length
                 ? arr[Math.floor(Math.random() * arr.length)]
                 : '';
-
             const composeMsg1 = () => {
                 const c = loadValidacao();
                 return [pick(c?.msg1?.msg1b1), pick(c?.msg1?.msg1b2)].filter(Boolean).join(', ') + (pick(c?.msg1?.msg1b3) ? `. ${pick(c?.msg1?.msg1b3)}` : '');
             };
-
             const composeMsg2 = () => {
                 const c = loadValidacao();
                 const part1 = [pick(c?.msg2?.msg2b1), pick(c?.msg2?.msg2b2)].filter(Boolean).join(', ');
                 const part2 = [pick(c?.msg2?.msg2b3), pick(c?.msg2?.msg2b4)].filter(Boolean).join(', ');
                 return [part1 && `${part1}.`, part2 && `${part2}?`].filter(Boolean).join(' ');
             };
-
             const m1 = chooseUnique(composeMsg1, st) || composeMsg1();
             const m2 = chooseUnique(composeMsg2, st) || composeMsg2();
-
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
             if (m1) await sendMessage(st.contato, m1);
-
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
             if (m2) await sendMessage(st.contato, m2);
-
             st.mensagensPendentes = [];
             st.mensagensDesdeSolicitacao = [];
             st.lastClassifiedIdx.validacao = 0;
-
             st.validacaoAwaitFirstMsg = true;
             st.validacaoTimeoutUntil = 0;
-
             st.etapa = 'validacao:wait';
             console.log(`[${st.contato}] etapa->${st.etapa}`);
             return { ok: true };
@@ -1353,17 +1190,14 @@ async function processarMensagensPendentes(contato) {
 
         if (st.etapa === 'validacao:wait') {
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
-
             if (st.validacaoAwaitFirstMsg && st.validacaoTimeoutUntil === 0) {
                 const FOUR = 4 * 60 * 1000;
                 const SIX = 6 * 60 * 1000;
                 const rnd = randomInt(FOUR, SIX + 1);
                 st.validacaoTimeoutUntil = Date.now() + rnd;
                 st.validacaoAwaitFirstMsg = false;
-
                 st.mensagensPendentes = [];
                 st.mensagensDesdeSolicitacao = [];
-
                 if (st.validacaoTimer) { try { clearTimeout(st.validacaoTimer); } catch { } }
                 st.validacaoTimer = setTimeout(async () => {
                     try {
@@ -1372,18 +1206,16 @@ async function processarMensagensPendentes(contato) {
                         console.warn(`[${st.contato}] validacaoTimer erro: ${e?.message || e}`);
                     }
                 }, rnd + 100);
-
                 st.etapa = 'validacao:cooldown';
                 console.log(`[${st.contato}] etapa->${st.etapa} t+${Math.round(rnd / 1000)}s`);
                 return { ok: true, started: rnd };
             }
-
             st.mensagensPendentes = [];
             return { ok: true, noop: 'await-first-message' };
         }
+
         if (st.etapa === 'validacao:cooldown') {
             const now = Date.now();
-
             if (st.validacaoTimeoutUntil > 0 && now < st.validacaoTimeoutUntil) {
                 if (st.mensagensPendentes.length > 0) {
                     st.mensagensPendentes = [];
@@ -1391,120 +1223,89 @@ async function processarMensagensPendentes(contato) {
                 }
                 return { ok: true, noop: 'cooldown' };
             }
-
             st.validacaoTimeoutUntil = 0;
             st.validacaoAwaitFirstMsg = false;
-
             if (st.validacaoTimer) { try { clearTimeout(st.validacaoTimer); } catch { } st.validacaoTimer = null; }
-
             st.mensagensPendentes = [];
             st.mensagensDesdeSolicitacao = [];
             st.lastClassifiedIdx.validacao = 0;
-
             st.conversaoBatch = 0;
             st.conversaoAwaitMsg = false;
             if (!st.lastClassifiedIdx) st.lastClassifiedIdx = {};
             st.lastClassifiedIdx.conversao = 0;
-
             st.etapa = 'conversao:send';
             console.log(`[${st.contato}] etapa->${st.etapa}`);
         }
+
         if (st.etapa === 'conversao:send') {
             let conversao = null;
-            try {
-                let raw = fs.readFileSync(path.join(__dirname, 'content', 'conversao.json'), 'utf8');
-                raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
-                conversao = JSON.parse(raw);
-            } catch (e) {
-                console.warn(`[Conversao] Falha ao ler conversao.json: ${e?.message || e}`);
-                conversao = {};
-            }
-
+            let raw = fs.readFileSync(path.join(__dirname, 'content', 'conversao.json'), 'utf8');
+            raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
+            conversao = JSON.parse(raw);
             const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
-
             if (st.conversaoBatch === 0) {
                 const m1 = [pick(conversao?.msg1?.msg1b1), pick(conversao?.msg1?.msg1b2)].filter(Boolean).join(', ');
                 const img = Array.isArray(conversao?.msg2?.images) && conversao.msg2.images.length ? pick(conversao.msg2.images) : '';
                 const m3 = [pick(conversao?.msg3?.msg3b1), pick(conversao?.msg3?.msg3b2), pick(conversao?.msg3?.msg3b3)].filter(Boolean).join(', ');
-
                 await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                 if (m1) await sendMessage(st.contato, m1);
-
                 if (img) {
                     await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                     await sendImage(st.contato, img);
                 }
-
                 await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                 if (m3) await sendMessage(st.contato, m3);
-
                 st.conversaoBatch = 1;
                 st.conversaoAwaitMsg = true;
                 st.mensagensPendentes = [];
                 st.mensagensDesdeSolicitacao = [];
                 return { ok: true, batch: 1 };
             }
-
             if (st.conversaoAwaitMsg) {
                 const temMsg =
                     (Array.isArray(st.mensagensPendentes) && st.mensagensPendentes.length > 0) ||
                     (Array.isArray(st.mensagensDesdeSolicitacao) && st.mensagensDesdeSolicitacao.length > (st.lastClassifiedIdx?.conversao || 0));
-
                 if (!temMsg) {
                     st.mensagensPendentes = [];
                     return { ok: true, noop: 'await-user-message' };
                 }
-
                 st.lastClassifiedIdx.conversao = st.mensagensDesdeSolicitacao.length;
                 st.mensagensPendentes = [];
                 st.mensagensDesdeSolicitacao = [];
-
                 if (st.conversaoBatch === 1) {
                     const m4 = [pick(conversao?.msg4?.msg4b1), pick(conversao?.msg4?.msg4b2), pick(conversao?.msg4?.msg4b3), pick(conversao?.msg4?.msg4b4), pick(conversao?.msg4?.msg4b5), pick(conversao?.msg4?.msg4b6), pick(conversao?.msg4?.msg4b7)].filter(Boolean).join('. ');
                     const m5 = [pick(conversao?.msg5?.msg5b1), pick(conversao?.msg5?.msg5b2)].filter(Boolean).join(', ');
                     const m6 = [pick(conversao?.msg6?.msg6b1), pick(conversao?.msg6?.msg6b2), pick(conversao?.msg6?.msg6b3)].filter(Boolean).join(', ');
-
                     await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                     if (m4) await sendMessage(st.contato, m4);
-
                     await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                     if (m5) await sendMessage(st.contato, m5 ? `${m5}?` : m5);
-
                     await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                     if (m6) await sendMessage(st.contato, m6);
-
                     st.conversaoBatch = 2;
                     st.conversaoAwaitMsg = true;
                     return { ok: true, batch: 2 };
                 }
-
                 if (st.conversaoBatch === 2) {
                     const m7 = [pick(conversao?.msg7?.msg7b1), pick(conversao?.msg7?.msg7b2), pick(conversao?.msg7?.msg7b3), pick(conversao?.msg7?.msg7b4), pick(conversao?.msg7?.msg7b5)].filter(Boolean).join('. ');
                     const m8 = [pick(conversao?.msg8?.msg8b1), pick(conversao?.msg8?.msg8b2), pick(conversao?.msg8?.msg8b3), pick(conversao?.msg8?.msg8b4)].filter(Boolean).join(', ');
                     const m9 = [pick(conversao?.msg9?.msg9b1), pick(conversao?.msg9?.msg9b2), pick(conversao?.msg9?.msg9b3), pick(conversao?.msg9?.msg9b4), pick(conversao?.msg9?.msg9b5), pick(conversao?.msg9?.msg9b6), pick(conversao?.msg9?.msg9b7)].filter(Boolean).join('. ');
-
                     await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                     if (m7) await sendMessage(st.contato, m7);
-
                     await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                     if (m8) await sendMessage(st.contato, m8);
-
                     await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                     if (m9) await sendMessage(st.contato, m9);
-
                     st.conversaoBatch = 3;
                     st.conversaoAwaitMsg = false;
-
                     st.mensagensPendentes = [];
                     st.mensagensDesdeSolicitacao = [];
                     st.lastClassifiedIdx.conversao = 0;
-
                     st.etapa = 'conversao:wait';
                     console.log(`[${st.contato}] etapa->${st.etapa}`);
                     return { ok: true, batch: 3, done: true };
                 }
             }
-
             if (st.conversaoBatch >= 3) {
                 st.conversaoAwaitMsg = false;
                 st.mensagensPendentes = [];
@@ -1513,9 +1314,9 @@ async function processarMensagensPendentes(contato) {
                 console.log(`[${st.contato}] etapa->${st.etapa}`);
                 return { ok: true, coerced: 'conversao:wait' };
             }
-
             return { ok: true };
         }
+
         if (st.etapa === 'conversao:wait') {
             st.mensagensPendentes = [];
             return { ok: true, noop: 'idle' };
@@ -1531,7 +1332,6 @@ async function sendMessage(contato, texto) {
     try {
         const { mod, settings } = await getActiveTransport();
         const provider = mod?.name || 'unknown';
-
         if (provider === 'manychat') {
             let subscriberId = null;
             try {
@@ -1541,27 +1341,21 @@ async function sendMessage(contato, texto) {
             } catch (e) {
                 console.warn(`[${contato}] DB lookup subscriber_id falhou: ${e.message}`);
             }
-
             if (!subscriberId) {
                 subscriberId = await resolveManychatSubscriberId(contato, mod, settings);
             }
-
             if (!subscriberId) {
                 console.log(`[${contato}] envio=fail provider=manychat reason=no-subscriber-id`);
                 return { ok: false, reason: 'no-subscriber-id' };
             }
-
             let finalText = String(msg ?? '')
                 .replace(/\r\n/g, '\n')
                 .replace(/\n{3,}/g, '\n\n')
                 .trim();
-
             await mod.sendText({ subscriberId, text: finalText }, settings);
-
             console.log(`[${contato}] envio=ok provider=manychat msg="${finalText}"`);
             return { ok: true, provider };
         }
-
         console.log(`[${contato}] envio=fail provider=${provider} reason=unsupported msg="${msg}"`);
         return { ok: false, reason: 'unsupported' };
     } catch (e) {
@@ -1596,21 +1390,16 @@ function _resetRuntime(st, opts = {}) {
     st.mensagensPendentes = [];
     st.mensagensDesdeSolicitacao = [];
     st.sentHashes = st.sentHashes instanceof Set ? st.sentHashes : new Set();
-
     st.lastClassifiedIdx = {
         interesse: 0, acesso: 0, confirmacao: 0, saque: 0, validacao: 0, conversao: 0
     };
-
     st.saquePediuPrint = false;
-
     if (st.validacaoTimer) { try { clearTimeout(st.validacaoTimer); } catch { } }
     st.validacaoTimer = null;
     st.validacaoAwaitFirstMsg = false;
     st.validacaoTimeoutUntil = 0;
-
     st.conversaoBatch = 0;
     st.conversaoAwaitMsg = false;
-
     if (opts.clearCredenciais) st.credenciais = undefined;
     if (opts.seedCredenciais && typeof opts.seedCredenciais === 'object') {
         st.credenciais = {
@@ -1623,7 +1412,6 @@ function _resetRuntime(st, opts = {}) {
         const idNum = Number(opts.manychat_subscriber_id);
         st.manychat_subscriber_id = Number.isFinite(idNum) ? idNum : undefined;
     }
-
     st.updatedAt = Date.now();
 }
 
@@ -1633,10 +1421,8 @@ async function setEtapa(contato, etapa, opts = {}) {
         throw new Error(`etapa inválida: "${target}"`);
     }
     const st = ensureEstado(contato);
-
     _resetRuntime(st, opts);
     st.etapa = target;
-
     if (opts.autoCreateUser && !st.credenciais &&
         (target.startsWith('acesso:') ||
             target.startsWith('confirmacao:') ||
@@ -1649,7 +1435,6 @@ async function setEtapa(contato, etapa, opts = {}) {
             console.warn(`[${st.contato}] setEtapa:autoCreateUser falhou: ${e?.message || e}`);
         }
     }
-
     return { ok: true, contato: st.contato, etapa: st.etapa };
 }
 

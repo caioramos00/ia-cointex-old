@@ -44,6 +44,15 @@ async function initDatabase() {
       ON contatos (manychat_subscriber_id);
     `);
     console.log('[DB] Coluna manychat_subscriber_id OK.');
+    await client.query(`
+      ALTER TABLE contatos
+      ADD COLUMN IF NOT EXISTS do_not_contact BOOLEAN DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS do_not_contact_at TIMESTAMP NULL,
+      ADD COLUMN IF NOT EXISTS do_not_contact_reason TEXT,
+      ADD COLUMN IF NOT EXISTS opt_out_count INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS permanently_blocked BOOLEAN DEFAULT FALSE
+    `);
+    console.log('[DB] Colunas de opt-out OK.');
   } catch (error) {
     console.error('[DB] Erro ao inicializar tabela:', error.message);
   } finally {
