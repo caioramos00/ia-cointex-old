@@ -268,48 +268,6 @@ async function resolveManychatWaSubscriberId(contato, modOpt, settingsOpt) {
     return null;
 }
 
-async function sendManychatWhatsAppImage({ subscriberId, imageUrl, caption, token }) {
-    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-    const endpoint = 'https://api.manychat.com/fb/sending/sendContent';
-
-    const imageMsg = {
-        type: 'image',
-        url: String(imageUrl).trim()
-    };
-    if (caption) imageMsg.caption = String(caption).trim();
-
-    const payloadV1 = {
-        subscriber_id: subscriberId,
-        data: {
-            messages: [imageMsg]
-        }
-    };
-
-    let resp = await axios.post(endpoint, payloadV1, { headers, timeout: 15000, validateStatus: () => true });
-    let okHttp = resp.status >= 200 && resp.status < 300;
-    let okBody = !resp.data?.status || String(resp.data?.status).toLowerCase() === 'success';
-    if (okHttp && okBody) return { ok: true, status: resp.status, data: resp.data };
-
-    const payloadV2 = {
-        subscriber_id: subscriberId,
-        data: {
-            version: 'v2',
-            content: {
-                type: 'whatsapp',
-                messages: [imageMsg]
-            }
-        }
-    };
-
-    resp = await axios.post(endpoint, payloadV2, { headers, timeout: 15000, validateStatus: () => true });
-    okHttp = resp.status >= 200 && resp.status < 300;
-    okBody = !resp.data?.status || String(resp.data?.status).toLowerCase() === 'success';
-    if (okHttp && okBody) return { ok: true, status: resp.status, data: resp.data };
-
-    const errMsg = (resp.data && (resp.data.error || resp.data.message)) ? JSON.stringify(resp.data) : '';
-    return { ok: false, status: resp.status, data: resp.data, reason: `manychat-wa-send-failed ${errMsg}` };
-}
-
 async function sendImage(contato, imageUrl, caption, opts = {}) {
     await extraGlobalDelay();
     const url = safeStr(imageUrl).trim();
