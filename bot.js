@@ -133,99 +133,103 @@ function decidirOptLabel(texto) {
 }
 
 async function criarUsuarioDjango(contato) {
-  const st = ensureEstado(contato);
-  if (st.createdUser === 'ok' || st.credenciais) return { ok: true, skipped: true };
-  if (st.createdUser === 'pending') return { ok: true, skipped: 'pending' };
+    const st = ensureEstado(contato);
+    if (st.createdUser === 'ok' || st.credenciais) return { ok: true, skipped: true };
+    if (st.createdUser === 'pending') return { ok: true, skipped: 'pending' };
 
-  st.createdUser = 'pending';
+    st.createdUser = 'pending';
 
-  const phone = st.contato.startsWith('+') ? st.contato : `+${st.contato}`;
-  const payload = { tid: st.tid || '', click_type: st.click_type || 'Orgânico', phone };
-  const URL = 'https://www.cointex.cash/api/create-user/';
+    const phone = st.contato.startsWith('+') ? st.contato : `+${st.contato}`;
+    const payload = { tid: st.tid || '', click_type: st.click_type || 'Orgânico', phone };
+    const URL = 'https://www.cointex.cash/api/create-user/';
 
-  const tryOnce = async () =>
-    axios.post(URL, payload, { timeout: 15000, validateStatus: () => true });
+    const tryOnce = async () =>
+        axios.post(URL, payload, { timeout: 15000, validateStatus: () => true });
 
-  try {
-    let resp = await tryOnce();
+    try {
+        let resp = await tryOnce();
 
-    // Retry único para erros transitórios de infra / rate limit
-    if (resp.status >= 500 || resp.status === 429) {
-      const jitter = 1200 + Math.floor(Math.random() * 400); // 1.2s–1.6s
-      console.warn(`[Contato] Cointex retry agendado em ${jitter}ms: ${st.contato} HTTP ${resp.status}`);
-      await delay(jitter);
-      resp = await tryOnce();
+        // Retry único para erros transitórios de infra / rate limit
+        if (resp.status >= 500 || resp.status === 429) {
+            const jitter = 1200 + Math.floor(Math.random() * 400); // 1.2s–1.6s
+            console.warn(`[Contato] Cointex retry agendado em ${jitter}ms: ${st.contato} HTTP ${resp.status}`);
+            await delay(jitter);
+            resp = await tryOnce();
+        }
+
+        const okHttp = resp.status >= 200 && resp.status < 300;
+        const okBody = !resp.data?.status || resp.data?.status === 'success';
+
+        if (okHttp && okBody) {
+            const user = Array.isArray(resp.data?.users) ? resp.data.users[0] : null;
+            if (user?.email && user?.password) {
+                st.credenciais = {
+                    email: user.email,
+                    password: user.password,
+                    login_url: user.login_url || ''
+                };
+            }
+            st.createdUser = 'ok';
+            console.log(`[Contato] Cointex criado: ${st.contato} ${st.credenciais?.email || ''}`.trim());
+            return { ok: true, status: resp.status, data: resp.data };
+        }
+
+        const msg = resp.data?.message || `HTTP ${resp.status}`;
+        st.createdUser = undefined;
+        console.warn(`[Contato] Cointex ERRO: ${st.contato} ${msg}`);
+        throw new Error(msg);
+    } catch (err) {
+        st.createdUser = undefined;
+        console.warn(`[Contato] Cointex ERRO: ${st.contato} ${err.message || err}`);
+        throw err;
     }
-
-    const okHttp = resp.status >= 200 && resp.status < 300;
-    const okBody = !resp.data?.status || resp.data?.status === 'success';
-
-    if (okHttp && okBody) {
-      const user = Array.isArray(resp.data?.users) ? resp.data.users[0] : null;
-      if (user?.email && user?.password) {
-        st.credenciais = {
-          email: user.email,
-          password: user.password,
-          login_url: user.login_url || ''
-        };
-      }
-      st.createdUser = 'ok';
-      console.log(`[Contato] Cointex criado: ${st.contato} ${st.credenciais?.email || ''}`.trim());
-      return { ok: true, status: resp.status, data: resp.data };
-    }
-
-    const msg = resp.data?.message || `HTTP ${resp.status}`;
-    st.createdUser = undefined;
-    console.warn(`[Contato] Cointex ERRO: ${st.contato} ${msg}`);
-    throw new Error(msg);
-  } catch (err) {
-    st.createdUser = undefined;
-    console.warn(`[Contato] Cointex ERRO: ${st.contato} ${err.message || err}`);
-    throw err;
-  }
 }
 
 async function sendImage(contato, imageUrl, caption) {
-  await extraGlobalDelay();
-  const url = safeStr(imageUrl).trim();
-  if (!url) return { ok: false, reason: 'empty-image-url' };
+    await extraGlobalDelay();
+    const url = safeStr(imageUrl).trim();
+    if (!url) return { ok: false, reason: 'empty-image-url' };
 
-  try {
-    const { mod, settings } = await getActiveTransport();
-    const provider = mod?.name || 'unknown';
+    try {
+        const { mod, settings } = await getActiveTransport();
+        const provider = mod?.name || 'unknown';
 
-    if (provider === 'manychat') {
-      let subscriberId = null;
-      try {
-        const c = await getContatoByPhone(contato);
-        subscriberId = c?.manychat_subscriber_id || c?.subscriber_id || null;
-      } catch {}
+        if (provider === 'manychat') {
+            let subscriberId = null;
+            try {
+                const c = await getContatoByPhone(contato);
+                if (c?.manychat_subscriber_id) subscriberId = String(c.manychat_subscriber_id);
+                else if (c?.subscriber_id) subscriberId = String(c.subscriber_id);
+            } catch (e) {
+                console.warn(`[${contato}] DB lookup subscriber_id falhou: ${e.message}`);
+            }
 
-      if (!subscriberId) {
-        const st = ensureEstado(contato);
-        if (st.manychat_subscriber_id) subscriberId = st.manychat_subscriber_id;
-      }
-      if (!subscriberId) {
-        console.log(`[${contato}] envio=fail provider=manychat reason=no-subscriber-id image="${url}"`);
-        return { ok: false, reason: 'no-subscriber-id' };
-      }
+            if (!subscriberId) {
+                const st = ensureEstado(contato);
+                if (st?.manychat_subscriber_id) subscriberId = String(st.manychat_subscriber_id);
+            }
 
-      if (typeof mod.sendImage === 'function') {
-        await mod.sendImage({ subscriberId, imageUrl: url, caption }, settings);
-        console.log(`[${contato}] envio=ok provider=manychat image="${url}"`);
-        return { ok: true, provider };
-      } else {
-        console.log(`[${contato}] envio=fail provider=manychat reason=no-sendImage image="${url}"`);
-        return { ok: false, reason: 'no-sendImage' };
-      }
+            if (!subscriberId) {
+                console.log(`[${contato}] envio=fail provider=manychat reason=no-subscriber-id`);
+                return { ok: false, reason: 'no-subscriber-id' };
+            }
+
+            if (typeof mod.sendImage === 'function') {
+                await mod.sendImage({ subscriberId, imageUrl: url, caption }, settings);
+                console.log(`[${contato}] envio=ok provider=manychat image="${url}"`);
+                return { ok: true, provider };
+            } else {
+                console.log(`[${contato}] envio=fail provider=manychat reason=no-sendImage image="${url}"`);
+                return { ok: false, reason: 'no-sendImage' };
+            }
+        }
+
+        console.log(`[${contato}] envio=fail provider=${provider} reason=unsupported image="${url}"`);
+        return { ok: false, reason: 'unsupported' };
+    } catch (e) {
+        console.log(`[${contato}] envio=fail provider=unknown reason="${e.message}" image="${url}"`);
+        return { ok: false, error: e.message };
     }
-
-    console.log(`[${contato}] envio=fail provider=${provider} reason=unsupported image="${url}"`);
-    return { ok: false, reason: 'unsupported' };
-  } catch (e) {
-    console.log(`[${contato}] envio=fail provider=unknown reason="${e.message}" image="${url}"`);
-    return { ok: false, error: e.message };
-  }
 }
 
 const sentHashesGlobal = new Set();
@@ -1488,14 +1492,19 @@ async function sendMessage(contato, texto) {
             let subscriberId = null;
             try {
                 const c = await getContatoByPhone(contato);
-                subscriberId = c?.manychat_subscriber_id || c?.subscriber_id || null;
-            } catch { }
+                if (c?.manychat_subscriber_id) subscriberId = String(c.manychat_subscriber_id);
+                else if (c?.subscriber_id) subscriberId = String(c.subscriber_id);
+            } catch (e) {
+                console.warn(`[${contato}] DB lookup subscriber_id falhou: ${e.message}`);
+            }
+
             if (!subscriberId) {
                 const st = ensureEstado(contato);
-                if (st.manychat_subscriber_id) subscriberId = st.manychat_subscriber_id;
+                if (st?.manychat_subscriber_id) subscriberId = String(st.manychat_subscriber_id);
             }
+
             if (!subscriberId) {
-                console.log(`[${contato}] envio=fail provider=manychat reason=no-subscriber-id msg="${msg}"`);
+                console.log(`[${contato}] envio=fail provider=manychat reason=no-subscriber-id`);
                 return { ok: false, reason: 'no-subscriber-id' };
             }
 
@@ -1521,84 +1530,84 @@ async function sendMessage(contato, texto) {
 async function retomarEnvio(contato) { console.log(`[${contato}] retomarEnvio()`); return { ok: true }; }
 
 const KNOWN_ETAPAS = new Set([
-  'none',
-  'abertura:wait',
-  'interesse:wait',
-  'instrucoes:send',
-  'instrucoes:wait',
-  'acesso:send',
-  'acesso:wait',
-  'confirmacao:send',
-  'confirmacao:wait',
-  'saque:send',
-  'saque:wait',
-  'validacao:send',
-  'validacao:wait',
-  'validacao:cooldown',
-  'conversao:send',
-  'conversao:wait',
+    'none',
+    'abertura:wait',
+    'interesse:wait',
+    'instrucoes:send',
+    'instrucoes:wait',
+    'acesso:send',
+    'acesso:wait',
+    'confirmacao:send',
+    'confirmacao:wait',
+    'saque:send',
+    'saque:wait',
+    'validacao:send',
+    'validacao:wait',
+    'validacao:cooldown',
+    'conversao:send',
+    'conversao:wait',
 ]);
 
 function _resetRuntime(st, opts = {}) {
-  st.enviandoMensagens = false;
-  st.mensagensPendentes = [];
-  st.mensagensDesdeSolicitacao = [];
-  st.sentHashes = st.sentHashes instanceof Set ? st.sentHashes : new Set();
+    st.enviandoMensagens = false;
+    st.mensagensPendentes = [];
+    st.mensagensDesdeSolicitacao = [];
+    st.sentHashes = st.sentHashes instanceof Set ? st.sentHashes : new Set();
 
-  st.lastClassifiedIdx = {
-    interesse: 0, acesso: 0, confirmacao: 0, saque: 0, validacao: 0, conversao: 0
-  };
-
-  st.saquePediuPrint = false;
-
-  if (st.validacaoTimer) { try { clearTimeout(st.validacaoTimer); } catch {} }
-  st.validacaoTimer = null;
-  st.validacaoAwaitFirstMsg = false;
-  st.validacaoTimeoutUntil = 0;
-
-  st.conversaoBatch = 0;
-  st.conversaoAwaitMsg = false;
-
-  if (opts.clearCredenciais) st.credenciais = undefined;
-  if (opts.seedCredenciais && typeof opts.seedCredenciais === 'object') {
-    st.credenciais = {
-      email: String(opts.seedCredenciais.email || ''),
-      password: String(opts.seedCredenciais.password || ''),
-      login_url: String(opts.seedCredenciais.login_url || ''),
+    st.lastClassifiedIdx = {
+        interesse: 0, acesso: 0, confirmacao: 0, saque: 0, validacao: 0, conversao: 0
     };
-  }
-  if (opts.manychat_subscriber_id != null) {
-    const idNum = Number(opts.manychat_subscriber_id);
-    st.manychat_subscriber_id = Number.isFinite(idNum) ? idNum : undefined;
-  }
 
-  st.updatedAt = Date.now();
+    st.saquePediuPrint = false;
+
+    if (st.validacaoTimer) { try { clearTimeout(st.validacaoTimer); } catch { } }
+    st.validacaoTimer = null;
+    st.validacaoAwaitFirstMsg = false;
+    st.validacaoTimeoutUntil = 0;
+
+    st.conversaoBatch = 0;
+    st.conversaoAwaitMsg = false;
+
+    if (opts.clearCredenciais) st.credenciais = undefined;
+    if (opts.seedCredenciais && typeof opts.seedCredenciais === 'object') {
+        st.credenciais = {
+            email: String(opts.seedCredenciais.email || ''),
+            password: String(opts.seedCredenciais.password || ''),
+            login_url: String(opts.seedCredenciais.login_url || ''),
+        };
+    }
+    if (opts.manychat_subscriber_id != null) {
+        const idNum = Number(opts.manychat_subscriber_id);
+        st.manychat_subscriber_id = Number.isFinite(idNum) ? idNum : undefined;
+    }
+
+    st.updatedAt = Date.now();
 }
 
 async function setEtapa(contato, etapa, opts = {}) {
-  const target = String(etapa || '').trim();
-  if (!KNOWN_ETAPAS.has(target)) {
-    throw new Error(`etapa inválida: "${target}"`);
-  }
-  const st = ensureEstado(contato);
-
-  _resetRuntime(st, opts);
-  st.etapa = target;
-
-  if (opts.autoCreateUser && !st.credenciais &&
-      (target.startsWith('acesso:') ||
-       target.startsWith('confirmacao:') ||
-       target.startsWith('saque:') ||
-       target.startsWith('validacao:') ||
-       target.startsWith('conversao:'))) {
-    try {
-      await criarUsuarioDjango(contato);
-    } catch (e) {
-      console.warn(`[${st.contato}] setEtapa:autoCreateUser falhou: ${e?.message || e}`);
+    const target = String(etapa || '').trim();
+    if (!KNOWN_ETAPAS.has(target)) {
+        throw new Error(`etapa inválida: "${target}"`);
     }
-  }
+    const st = ensureEstado(contato);
 
-  return { ok: true, contato: st.contato, etapa: st.etapa };
+    _resetRuntime(st, opts);
+    st.etapa = target;
+
+    if (opts.autoCreateUser && !st.credenciais &&
+        (target.startsWith('acesso:') ||
+            target.startsWith('confirmacao:') ||
+            target.startsWith('saque:') ||
+            target.startsWith('validacao:') ||
+            target.startsWith('conversao:'))) {
+        try {
+            await criarUsuarioDjango(contato);
+        } catch (e) {
+            console.warn(`[${st.contato}] setEtapa:autoCreateUser falhou: ${e?.message || e}`);
+        }
+    }
+
+    return { ok: true, contato: st.contato, etapa: st.etapa };
 }
 
 module.exports = {

@@ -1,3 +1,4 @@
+// db.js
 const { Pool } = require('pg');
 
 let _settingsCache = null;
@@ -33,6 +34,16 @@ async function initDatabase() {
       ADD COLUMN IF NOT EXISTS click_type VARCHAR(50) DEFAULT 'Orgânico';
     `);
     console.log('[DB] Colunas tid e click_type adicionadas ou já existem.');
+
+    await client.query(`
+      ALTER TABLE contatos
+      ADD COLUMN IF NOT EXISTS manychat_subscriber_id VARCHAR(32);
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_contatos_manychat_subscriber_id
+      ON contatos (manychat_subscriber_id);
+    `);
+    console.log('[DB] Coluna manychat_subscriber_id OK.');
   } catch (error) {
     console.error('[DB] Erro ao inicializar tabela:', error.message);
   } finally {
@@ -158,17 +169,15 @@ async function salvarContato(contatoId, grupoId = null, mensagem = null, tid = '
           tid,
           click_type
         ]);
-        console.log(`[Contato] Novo contato salvo: ${contatoId}, TID: ${tid}, click_type: ${click_type}`);
-        console.log(`[DB] Contato ${contatoId} salvo`);
+        console.log(`[DB] Contato novo salvo: ${contatoId}`);
       } else {
         let grupos = contatoExistente.grupos || [];
         if (grupoId && !grupos.some(g => g.id === grupoId)) {
           grupos.push({ id: grupoId, dataEntrada: agora });
         }
         let historico = contatoExistente.historico || [];
-        if (mensagem) {
-          historico.push({ data: agora, mensagem });
-        }
+        if (mensagem) historico.push({ data: agora, mensagem });
+
         await client.query(`
           UPDATE contatos SET
             grupos = $1,
@@ -221,4 +230,33 @@ async function atualizarContato(contato, conversou, etapa_atual, mensagem = null
   }
 }
 
-module.exports = { initDatabase, salvarContato, atualizarContato, getBotSettings, updateBotSettings, pool, getContatoByPhone };
+async function setManychatSubscriberId(phone, subscriberId) {
+  const id = String(phone || '').replace(/\D/g, '');
+  const sid = String(subscriberId || '').replace(/\D/g, '');
+  if (!id || !sid) return;
+
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      INSERT INTO contatos (id, manychat_subscriber_id, status, etapa, ultima_interacao)
+      VALUES ($1, $2, 'ativo', 'abertura', NOW())
+      ON CONFLICT (id) DO UPDATE
+        SET manychat_subscriber_id = EXCLUDED.manychat_subscriber_id,
+            ultima_interacao = NOW();
+    `, [id, sid]);
+    console.log(`[DB] Vinculado ManyChat subscriber_id=${sid} ao contato ${id}`);
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = {
+  initDatabase,
+  salvarContato,
+  atualizarContato,
+  getBotSettings,
+  updateBotSettings,
+  pool,
+  getContatoByPhone,
+  setManychatSubscriberId,
+};
