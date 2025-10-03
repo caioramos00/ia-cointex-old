@@ -555,6 +555,7 @@ async function processarMensagensPendentes(contato) {
             if (classe === 'aceite') {
                 st.mensagensDesdeSolicitacao = [];
                 st.lastClassifiedIdx.interesse = 0;
+                const _prev = st.etapa;
                 st.etapa = 'instrucoes:send';
                 console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
             } else {
