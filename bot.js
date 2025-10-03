@@ -134,25 +134,58 @@ function isOptOut(textRaw) {
     return false;
 }
 
-// heurística p/ re-opt-in (lista dura dos opt-ins + regex simples)
 function isOptIn(textRaw) {
     const data = loadOptInData();
     const cfg = data?.config || {};
     const s = normMsg(textRaw, cfg);
     if (!s) return false;
 
-    const phrases = (data?.phrases || []).map(v => normMsg(v, cfg));
-    const keywords = (data?.keywords || []).map(v => normMsg(v, cfg));
-    const regex = (data?.regex || []).map(r => {
-        try { return new RegExp(r, 'i'); } catch { return null; }
-    }).filter(Boolean);
+    // 1) Exceções: tokens ambíguos sozinhos NÃO contam
+    const amb = new Set(
+        (data?.exceptions?.ambiguous_single_tokens || [])
+            .map(v => normMsg(v, cfg))
+            .filter(Boolean)
+    );
+    if (amb.has(s)) return false;
 
-    if (anyMatch(s, phrases)) return true;
-    if (regex.some(rx => rx.test(s))) return true;
+    // 2) Achata allowlists por idioma
+    const al = data?.allowlists || {};
+    const langs = Object.keys(al);
+    const flatten = (key) => {
+        const out = [];
+        for (const L of langs) {
+            const arr = al[L]?.[key];
+            if (Array.isArray(arr)) out.push(...arr);
+        }
+        return out;
+    };
 
-    const POS = /\b(pode|pode mandar|manda|envia|continuar|continua|retomar|voltar|segu(e|ir)|ok|bora|vamos|quero|to dentro|tô dentro|aceito|sim)\b/i;
-    const hasKw = keywords.some(k => s.includes(k));
-    if (hasKw && POS.test(s)) return true;
+    const phrases = flatten('phrases').map(v => normMsg(v, cfg)).filter(Boolean);
+    const keywords = flatten('keywords').map(v => normMsg(v, cfg)).filter(Boolean);
+    const regexList = flatten('regex')
+        .map(r => { try { return new RegExp(r, 'i'); } catch { return null; } })
+        .filter(Boolean);
+
+    // 3) Regras declarativas do JSON
+    const rule = Array.isArray(data?.match_if_any) ? data.match_if_any : ['phrases','keywords','regex'];
+    const shouldCheck = new Set(rule.map(x => String(x || '').toLowerCase()));
+    const hasAny = (arr) => arr.some(tok => tok && s.includes(tok));
+
+    if (shouldCheck.has('phrases') && hasAny(phrases)) return true;
+    if (shouldCheck.has('regex') && regexList.some(rx => rx.test(s))) return true;
+
+    if (shouldCheck.has('keywords') && hasAny(keywords)) {
+        const POS = new RegExp(
+            '\\b(' +
+            'pode(?:\\s+sim)?\\s*(?:continuar|mandar|seguir|prosseguir|enviar)|' +
+            'manda(?:\\s+ver|\\s+a[ií])?|' +
+            'envia|continuar|continua|retomar|voltar|' +
+            'segue|bora|vamos|quero|to dentro|tô dentro|aceito' +
+            ')\\b',
+            'i'
+        );
+        if (POS.test(s)) return true;
+    }
 
     return false;
 }
@@ -662,6 +695,7 @@ async function processarMensagensPendentes(contato) {
                 }
 
                 if (matched) {
+                    console.log(`[${st.contato}] re-opt-in DETECTADO: "${t}"`);
                     st.reoptinActive = true;
                     st.reoptinLotsTried = 0;
                     st.reoptinBuffer = [];
