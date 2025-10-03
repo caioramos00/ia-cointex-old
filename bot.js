@@ -270,7 +270,7 @@ async function resolveManychatWaSubscriberId(contato, modOpt, settingsOpt) {
 
 async function sendManychatWhatsAppImage({ subscriberId, imageUrl, caption, token }) {
     const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-    const endpoint = 'https://api.manychat.com/whatsapp/sending/sendContent';
+    const endpoint = 'https://api.manychat.com/fb/sending/sendContent';
 
     const imageMsg = {
         type: 'image',
@@ -337,13 +337,9 @@ async function sendImage(contato, imageUrl, caption) {
                 console.log(`[${contato}] envio=fail provider=manychat reason=no-wa-subscriber-id image="${url}"`);
                 return { ok: false, reason: 'no-wa-subscriber-id' };
             }
-            const out = await sendManychatWhatsAppImage({ subscriberId, imageUrl: url, caption, token });
-            if (out.ok) {
-                console.log(`[${contato}] envio=ok provider=manychat endpoint=/whatsapp/sending/sendContent image="${url}"`);
-                return { ok: true, provider };
-            }
-            console.log(`[${contato}] envio=fail provider=manychat status=${out.status} resp=${truncate(JSON.stringify(out.data))}`);
-            return { ok: false, reason: 'manychat-send-failed', status: out.status, data: out.data };
+            await mod.sendImage({ subscriberId, imageUrl: url, caption }, settings);
+            console.log(`[${contato}] envio=ok provider=manychat endpoint=/fb/sending/sendContent image="${url}"`);
+            return { ok: true, provider };
         }
         console.log(`[${contato}] envio=fail provider=${provider} reason=unsupported image="${url}"`);
         return { ok: false, reason: 'unsupported' };
