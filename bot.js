@@ -5,7 +5,7 @@ const path = require('path');
 const axios = require('axios');
 const estadoContatos = require('./state.js');
 const { getActiveTransport } = require('./lib/transport');
-const { getContatoByPhone } = require('./db');
+const { getContatoByPhone, setManychatSubscriberId } = require('./db');
 const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia } = require('./prompts');
 
 let log = console;
@@ -256,7 +256,56 @@ function init(options = {}) {
     return { ok: true };
 }
 
-async function handleManyChatWebhook(body) { return { ok: true }; }
+async function handleManyChatWebhook(body) {
+    try {
+        const pickPath = (obj, paths) => {
+            for (const p of paths) {
+                try {
+                    const val = p.split('.').reduce((o, k) => (o && o[k] !== undefined ? o[k] : undefined), obj);
+                    if (val !== undefined && val !== null && String(val).trim() !== '') return val;
+                } catch { }
+            }
+            return null;
+        };
+
+        const subscriberId = pickPath(body, [
+            'subscriber.id',
+            'data.subscriber.id',
+            'event.data.subscriber.id',
+            'event.subscriber.id',
+            'user.id',
+            'subscriber_id',
+            'contact.id'
+        ]);
+
+        let phone = pickPath(body, [
+            'subscriber.phone',
+            'data.subscriber.phone',
+            'event.data.subscriber.phone',
+            'event.subscriber.phone',
+            'user.phone',
+            'contact.phone',
+            'phone',
+            'message.from'
+        ]);
+        phone = phone ? String(phone).replace(/\D/g, '') : '';
+
+        if (!subscriberId || !phone) {
+            console.log(`[ManyChat][webhook] ignorado: subscriberId=${subscriberId || 'null'} phone=${phone || 'null'} payload=${truncate(JSON.stringify(body))}`);
+            return { ok: true, ignored: true };
+        }
+
+        await setManychatSubscriberId(phone, subscriberId);
+        const st = ensureEstado(phone);
+        st.manychat_subscriber_id = String(subscriberId);
+
+        console.log(`[ManyChat][webhook] vinculado phone=${phone} subscriber_id=${subscriberId}`);
+        return { ok: true, linked: true };
+    } catch (e) {
+        console.warn(`[ManyChat][webhook] erro: ${e?.message || e}`);
+        return { ok: false, error: e?.message || String(e) };
+    }
+}
 
 async function processarMensagensPendentes(contato) {
     const st = ensureEstado(contato);
