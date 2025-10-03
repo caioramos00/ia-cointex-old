@@ -72,7 +72,7 @@ function extractTextForLog(data) {
 }
 
 function ensureEstado(contato) {
-    const key = safeStr(contato) || 'desconhecido';
+    const key = normalizeContato(contato) || 'desconhecido';
     if (!estadoContatos[key]) {
         estadoContatos[key] = {
             contato: key,
@@ -149,9 +149,8 @@ async function criarUsuarioDjango(contato) {
     try {
         let resp = await tryOnce();
 
-        // Retry único para erros transitórios de infra / rate limit
         if (resp.status >= 500 || resp.status === 429) {
-            const jitter = 1200 + Math.floor(Math.random() * 400); // 1.2s–1.6s
+            const jitter = 1200 + Math.floor(Math.random() * 400);
             console.warn(`[Contato] Cointex retry agendado em ${jitter}ms: ${st.contato} HTTP ${resp.status}`);
             await delay(jitter);
             resp = await tryOnce();
@@ -185,6 +184,51 @@ async function criarUsuarioDjango(contato) {
     }
 }
 
+async function resolveManychatSubscriberId(contato, modOpt, settingsOpt) {
+    const phone = String(contato || '').replace(/\D/g, '');
+    const st = ensureEstado(phone);
+    let subscriberId = null;
+
+    try {
+        const c = await getContatoByPhone(phone);
+        if (c?.manychat_subscriber_id) subscriberId = String(c.manychat_subscriber_id);
+    } catch { }
+    if (!subscriberId && st?.manychat_subscriber_id) subscriberId = String(st.manychat_subscriber_id);
+    if (subscriberId) return subscriberId;
+
+    try {
+        const { mod, settings } = (modOpt && settingsOpt) ? { mod: modOpt, settings: settingsOpt } : await getActiveTransport();
+        const token = (settings && settings.manychat_api_token) || process.env.MANYCHAT_API_TOKEN || '';
+        if (!token) return null;
+        const phonePlus = phone.startsWith('+') ? phone : `+${phone}`;
+        const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+        const call = async (method, url, data) => {
+            try {
+                return await axios({ method, url, data, headers, timeout: 12000, validateStatus: () => true });
+            } catch { return { status: 0, data: null }; }
+        };
+        const tries = [
+            { m: 'get', u: `https://api.manychat.com/whatsapp/subscribers/findByPhone?phone=${encodeURIComponent(phonePlus)}` },
+            { m: 'post', u: 'https://api.manychat.com/whatsapp/subscribers/findByPhone', p: { phone: phonePlus } },
+            { m: 'get', u: `https://api.manychat.com/fb/subscriber/findByPhone?phone=${encodeURIComponent(phonePlus)}` },
+            { m: 'post', u: 'https://api.manychat.com/fb/subscriber/findByPhone', p: { phone: phonePlus } },
+        ];
+        for (const t of tries) {
+            const r = await call(t.m, t.u, t.p);
+            const d = r?.data || {};
+            const id = d?.data?.id || d?.data?.subscriber_id || d?.subscriber?.id || d?.id || null;
+            if (r.status >= 200 && r.status < 300 && id) { subscriberId = String(id); break; }
+        }
+        if (subscriberId) {
+            try { await setManychatSubscriberId(phone, subscriberId); } catch { }
+            st.manychat_subscriber_id = subscriberId;
+            console.log(`[${phone}] manychat subscriber_id resolvido via API: ${subscriberId}`);
+            return subscriberId;
+        }
+    } catch { }
+    return null;
+}
+
 async function sendImage(contato, imageUrl, caption) {
     await extraGlobalDelay();
     const url = safeStr(imageUrl).trim();
@@ -205,8 +249,7 @@ async function sendImage(contato, imageUrl, caption) {
             }
 
             if (!subscriberId) {
-                const st = ensureEstado(contato);
-                if (st?.manychat_subscriber_id) subscriberId = String(st.manychat_subscriber_id);
+                subscriberId = await resolveManychatSubscriberId(contato, mod, settings);
             }
 
             if (!subscriberId) {
@@ -1548,8 +1591,7 @@ async function sendMessage(contato, texto) {
             }
 
             if (!subscriberId) {
-                const st = ensureEstado(contato);
-                if (st?.manychat_subscriber_id) subscriberId = String(st.manychat_subscriber_id);
+                subscriberId = await resolveManychatSubscriberId(contato, mod, settings);
             }
 
             if (!subscriberId) {
