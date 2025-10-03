@@ -310,7 +310,7 @@ async function sendManychatWhatsAppImage({ subscriberId, imageUrl, caption, toke
     return { ok: false, status: resp.status, data: resp.data, reason: `manychat-wa-send-failed ${errMsg}` };
 }
 
-async function sendImage(contato, imageUrl, caption) {
+async function sendImage(contato, imageUrl, caption, opts = {}) {
     await extraGlobalDelay();
     const url = safeStr(imageUrl).trim();
     if (!url) return { ok: false, reason: 'empty-image-url' };
@@ -337,7 +337,7 @@ async function sendImage(contato, imageUrl, caption) {
                 console.log(`[${contato}] envio=fail provider=manychat reason=no-wa-subscriber-id image="${url}"`);
                 return { ok: false, reason: 'no-wa-subscriber-id' };
             }
-            await mod.sendImage({ subscriberId, imageUrl: url, caption }, settings);
+            await mod.sendImage({ subscriberId, imageUrl: url, caption }, settings, opts);
             console.log(`[${contato}] envio=ok provider=manychat endpoint=/fb/sending/sendContent image="${url}"`);
             return { ok: true, provider };
         }

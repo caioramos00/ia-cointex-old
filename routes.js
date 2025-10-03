@@ -633,7 +633,7 @@ function setupRoutes(
       if (!estado[id]) inicializarEstado(id, '', 'Orgânico');
 
       const { sendImage } = require('./bot.js');
-      const r = await sendImage(id, url, caption);
+      const r = await sendImage(id, url, caption, { alsoSendAsFile: req.body.asFile === '1' });
       return res.json({ ok: true, result: r });
     } catch (e) {
       return res.status(500).json({ ok: false, error: e.message });
