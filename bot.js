@@ -114,7 +114,6 @@ function ensureEstado(contato) {
     return estadoContatos[key];
 }
 
-
 function inicializarEstado(contato, maybeTid, maybeClickType) {
     const st = ensureEstado(contato);
     if (typeof maybeTid === 'string') st.tid = maybeTid || st.tid || '';
@@ -320,7 +319,6 @@ async function sendImage(contato, imageUrl, caption) {
                 return { ok: false, reason: 'no-api-token' };
             }
 
-            // ID do assinante pelo canal **WhatsApp** (sem fallback para FB)
             let subscriberId = null;
             try {
                 const c = await getContatoByPhone(contato);
@@ -336,7 +334,6 @@ async function sendImage(contato, imageUrl, caption) {
                 return { ok: false, reason: 'no-wa-subscriber-id' };
             }
 
-            // Envio direto no endpoint correto com payload correto
             const out = await sendManychatWhatsAppImage({ subscriberId, imageUrl: url, caption, token });
             if (out.ok) {
                 console.log(`[${contato}] envio=ok provider=manychat endpoint=/whatsapp/sending/sendContent image="${url}"`);
@@ -445,18 +442,15 @@ async function processarMensagensPendentes(contato) {
                 try {
                     let raw = fs.readFileSync(aberturaPath, 'utf8');
                     raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
-                    const parsed = JSON.parse(raw);
-                    if (!parsed?.msg1?.grupo1?.length || !parsed?.msg1?.grupo2?.length || !parsed?.msg1?.grupo3?.length) throw new Error('content/abertura.json incompleto: msg1.* ausente');
-                    if (!parsed?.msg2?.grupo1?.length || !parsed?.msg2?.grupo2?.length || !parsed?.msg2?.grupo3?.length) throw new Error('content/abertura.json incompleto: msg2.* ausente');
-                    aberturaData = parsed;
+                    aberturaData = JSON.parse(raw);
                 } catch {
-                    aberturaData = { msg1: { grupo1: ['salve'], grupo2: ['tô precisando de alguém pro trampo agora'], grupo3: ['tá disponível?'] }, msg2: { grupo1: ['nem liga pro nome desse whats,'], grupo2: ['número empresarial q usamos pros trampo'], grupo3: ['pode salvar como "Ryan"'] } };
+                    aberturaData = {};
                 }
                 return aberturaData;
             };
             const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
-            const composeAberturaMsg1 = () => { const c = loadAbertura(); const g1 = pick(c.msg1.grupo1); const g2 = pick(c.msg1.grupo2); const g3 = pick(c.msg1.grupo3); return [g1, g2, g3].filter(Boolean).join(', '); };
-            const composeAberturaMsg2 = () => { const c = loadAbertura(); const g1 = pick(c.msg2.grupo1); const g2 = pick(c.msg2.grupo2); const g3 = pick(c.msg2.grupo3); const head = [g1, g2].filter(Boolean).join(' '); return [head, g3].filter(Boolean).join(', '); };
+            const composeAberturaMsg1 = () => { const c = loadAbertura(); const g1 = pick(c?.msg1?.grupo1); const g2 = pick(c?.msg1?.grupo2); const g3 = pick(c?.msg1?.grupo3); return [g1, g2, g3].filter(Boolean).join(', '); };
+            const composeAberturaMsg2 = () => { const c = loadAbertura(); const g1 = pick(c?.msg2?.grupo1); const g2 = pick(c?.msg2?.grupo2); const g3 = pick(c?.msg2?.grupo3); const head = [g1, g2].filter(Boolean).join(' '); return [head, g3].filter(Boolean).join(', '); };
 
             await delay(FIRST_REPLY_DELAY_MS);
 
@@ -485,16 +479,14 @@ async function processarMensagensPendentes(contato) {
                 if (interesseData) return interesseData;
                 try {
                     const raw = fs.readFileSync(interessePath, 'utf8');
-                    const parsed = JSON.parse(raw);
-                    if (!parsed?.msg?.g1?.length || !parsed?.msg?.g2?.length || !parsed?.msg?.g3?.length || !parsed?.msg?.g4?.length || !parsed?.msg?.g5?.length) throw new Error('content/interesse.json incompleto');
-                    interesseData = parsed;
+                    interesseData = JSON.parse(raw);
                 } catch {
-                    interesseData = { msg: { g1: ['tô na correria aqui'], g2: ['fazendo vários ao mesmo tempo'], g3: ['vou te mandando tudo o que você tem que fazer'], g4: ['e você só responde o que eu te perguntar'], g5: ['beleza?'] } };
+                    interesseData = {};
                 }
                 return interesseData;
             };
             const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
-            const composeInteresseMsg = () => { const c = loadInteresse(); const g1 = pick(c.msg.g1); const g2 = pick(c.msg.g2); const g3 = pick(c.msg.g3); const g4 = pick(c.msg.g4); const g5 = pick(c.msg.g5); return `${[g1, g2].filter(Boolean).join(', ')}... ${g3}, ${g4}, ${g5}`.replace(/\s+,/g, ','); };
+            const composeInteresseMsg = () => { const c = loadInteresse(); const g1 = pick(c?.msg?.g1); const g2 = pick(c?.msg?.g2); const g3 = pick(c?.msg?.g3); const g4 = pick(c?.msg?.g4); const g5 = pick(c?.msg?.g5); return `${[g1, g2].filter(Boolean).join(', ')}... ${[g3, g4, g5].filter(Boolean).join(', ')}`.replace(/\s+,/g, ','); };
 
             const mi = chooseUnique(composeInteresseMsg, st) || composeInteresseMsg();
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
@@ -614,31 +606,9 @@ async function processarMensagensPendentes(contato) {
                 try {
                     let raw = fs.readFileSync(instrucoesPath, 'utf8');
                     raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
-                    const parsed = JSON.parse(raw);
-                    if (
-                        !parsed?.msg1?.grupo1?.length || !parsed?.msg1?.grupo2?.length || !parsed?.msg1?.grupo3?.length ||
-                        !parsed?.pontos?.p1?.g1?.length || !parsed?.pontos?.p1?.g2?.length || !parsed?.pontos?.p1?.g3?.length ||
-                        !parsed?.pontos?.p2?.g1?.length || !parsed?.pontos?.p2?.g2?.length || !parsed?.pontos?.p2?.g3?.length ||
-                        !parsed?.pontos?.p3?.g1?.length || !parsed?.pontos?.p3?.g2?.length || !parsed?.pontos?.p3?.g3?.length ||
-                        !parsed?.pontos?.p4?.g1?.length || !parsed?.pontos?.p4?.g2?.length || !parsed?.pontos?.p4?.g3?.length ||
-                        !parsed?.msg3?.grupo1?.length || !parsed?.msg3?.grupo2?.length
-                    ) throw new Error('content/instrucoes.json incompleto');
-                    instrucoesData = parsed;
+                    instrucoesData = JSON.parse(raw);
                 } catch {
-                    instrucoesData = {
-                        msg1: {
-                            grupo1: ["salvou o contato", "salvou o número"],
-                            grupo2: ["salva ai que se aparecer outro trampo eu te chamo tambem", "salva aí que se aparecer outro trampo eu te chamo também"],
-                            grupo3: ["vou te mandar o passo a passo do que precisa pra fazer certinho", "vou te mandar o passo a passo do que precisa pra fazer direitinho"]
-                        },
-                        pontos: {
-                            p1: { g1: ["você precisa de uma conta com pix ativo pra receber", "você precisa ter uma conta com pix ativo pra receber"], g2: ["pode ser qualquer banco", "pode ser qlqr banco"], g3: ["so nao da certo se for o SICOOB", "só não dá certo se for o SICOOB"] },
-                            p2: { g1: ["se tiver dados moveis", "se tiver dados móveis"], g2: ["desativa o wi-fi", "desliga o wi-fi"], g3: ["mas se nao tiver deixa no wifi mesmo", "mas se não tiver deixa no wifi mesmo"] },
-                            p3: { g1: ["vou passar o email e a senha de uma conta pra você acessar", "vou passar o e-mail e a senha de uma conta pra você acessar"], g2: ["lá vai ter um saldo disponível", "lá vai ter um saldo disponivel"], g3: ["é só você transferir pra sua conta, mais nada", "é só vc transferir pra sua conta, mais nada"] },
-                            p4: { g1: ["sua parte vai ser 2000", "você vai receber 2000"], g2: ["o restante manda pra minha conta logo que cair", "o restante você manda pra minha conta logo que cair"], g3: ["eu vou te passar a chave pix depois", "depois eu te passo a chave pix"] }
-                        },
-                        msg3: { grupo1: ["é tranquilinho", "é tranquilo"], grupo2: ["a gente vai fazendo parte por parte pra nao ter erro blz", "a gente vai fazendo parte por parte pra não ter erro blz"] }
-                    };
+                    instrucoesData = {};
                 }
                 return instrucoesData;
             };
@@ -647,31 +617,28 @@ async function processarMensagensPendentes(contato) {
 
             const composeMsg1 = () => {
                 const c = loadInstrucoes();
-                const g1 = pick(c.msg1.grupo1);
-                const g2 = pick(c.msg1.grupo2);
-                const g3 = pick(c.msg1.grupo3);
-                return `${g1}? ${g2}… ${g3}:`;
+                const g1 = pick(c?.msg1?.grupo1);
+                const g2 = pick(c?.msg1?.grupo2);
+                const g3 = pick(c?.msg1?.grupo3);
+                return [g1 && `${g1}?`, g2 && `${g2}…`, g3 && `${g3}:`].filter(Boolean).join(' ');
             };
 
             const composeMsg2 = () => {
                 const c = loadInstrucoes();
-
-                const p1 = `• ${pick(c.pontos.p1.g1)}, ${pick(c.pontos.p1.g2)}, ${pick(c.pontos.p1.g3)}`;
-                const p2 = `• ${pick(c.pontos.p2.g1)}, ${pick(c.pontos.p2.g2)}, ${pick(c.pontos.p2.g3)}`;
-                const p3 = `• ${pick(c.pontos.p3.g1)}, ${pick(c.pontos.p3.g2)}, ${pick(c.pontos.p3.g3)}`;
-                const p4 = `• ${pick(c.pontos.p4.g1)}, ${pick(c.pontos.p4.g2)}, ${pick(c.pontos.p4.g3)}`;
-
-                let out = [p1, '', p2, '', p3, '', p4].join('\n');
+                const p1 = [pick(c?.pontos?.p1?.g1), pick(c?.pontos?.p1?.g2), pick(c?.pontos?.p1?.g3)].filter(Boolean).join(', ');
+                const p2 = [pick(c?.pontos?.p2?.g1), pick(c?.pontos?.p2?.g2), pick(c?.pontos?.p2?.g3)].filter(Boolean).join(', ');
+                const p3 = [pick(c?.pontos?.p3?.g1), pick(c?.pontos?.p3?.g2), pick(c?.pontos?.p3?.g3)].filter(Boolean).join(', ');
+                const p4 = [pick(c?.pontos?.p4?.g1), pick(c?.pontos?.p4?.g2), pick(c?.pontos?.p4?.g3)].filter(Boolean).join(', ');
+                let out = [`• ${p1}`, '', `• ${p2}`, '', `• ${p3}`, '', `• ${p4}`].join('\n');
                 out = out.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
-
                 return out;
             };
 
             const composeMsg3 = () => {
                 const c = loadInstrucoes();
-                const g1 = pick(c.msg3.grupo1);
-                const g2 = pick(c.msg3.grupo2);
-                return `${g1}… ${g2}?`;
+                const g1 = pick(c?.msg3?.grupo1);
+                const g2 = pick(c?.msg3?.grupo2);
+                return [g1 && `${g1}…`, g2 && `${g2}?`].filter(Boolean).join(' ');
             };
 
             const m1 = composeMsg1();
@@ -814,29 +781,9 @@ async function processarMensagensPendentes(contato) {
                 try {
                     let raw = fs.readFileSync(acessoPath, 'utf8');
                     raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
-                    const parsed = JSON.parse(raw);
-                    if (
-                        !parsed?.msg1?.bloco1A?.length ||
-                        !parsed?.msg1?.bloco2A?.length ||
-                        !parsed?.msg1?.bloco3A?.length ||
-                        !parsed?.msg3?.bloco1C?.length ||
-                        !parsed?.msg3?.bloco2C?.length ||
-                        !parsed?.msg3?.bloco3C?.length
-                    ) throw new Error('content/acesso.json incompleto');
-                    acessoData = parsed;
+                    acessoData = JSON.parse(raw);
                 } catch {
-                    acessoData = {
-                        msg1: {
-                            bloco1A: ["vou mandar o e-mail e a senha da conta"],
-                            bloco2A: ["só copia e cola pra não errar"],
-                            bloco3A: ["E-mail"]
-                        },
-                        msg3: {
-                            bloco1C: ["entra nesse link"],
-                            bloco2C: ["entra na conta mas nao mexe em nada ainda"],
-                            bloco3C: ["assim que conseguir acessar me manda um \"ENTREI\""]
-                        }
-                    };
+                    acessoData = {};
                 }
                 return acessoData;
             };
@@ -867,9 +814,9 @@ async function processarMensagensPendentes(contato) {
             const c = loadAcesso();
 
             const msg1 = [
-                `${pick(c.msg1.bloco1A)}, ${pick(c.msg1.bloco2A)}:`,
+                `${pick(c?.msg1?.bloco1A) || ''} ${pick(c?.msg1?.bloco2A) ? ', ' + pick(c?.msg1?.bloco2A) : ''}:`.trim(),
                 '',
-                `${pick(c.msg1.bloco3A)}:`,
+                `${pick(c?.msg1?.bloco3A) || 'E-mail'}:`,
                 email,
                 '',
                 'Senha:'
@@ -878,11 +825,11 @@ async function processarMensagensPendentes(contato) {
             const msg2 = String(senha);
 
             const msg3 = [
-                `${pick(c.msg3.bloco1C)}:`,
+                `${pick(c?.msg3?.bloco1C) || 'entra nesse link'}:`,
                 '',
                 link,
                 '',
-                `${pick(c.msg3.bloco2C)}, ${pick(c.msg3.bloco3C)}`
+                `${[pick(c?.msg3?.bloco2C), pick(c?.msg3?.bloco3C)].filter(Boolean).join(', ')}`
             ].join('\n');
 
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
@@ -1012,31 +959,9 @@ async function processarMensagensPendentes(contato) {
                 try {
                     let raw = fs.readFileSync(confirmacaoPath, 'utf8');
                     raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
-                    const parsed = JSON.parse(raw);
-                    if (
-                        !parsed?.msg1?.bloco1?.length ||
-                        !parsed?.msg1?.bloco2?.length ||
-                        !parsed?.msg1?.bloco3?.length
-                    ) throw new Error('content/confirmacao.json incompleto');
-                    confirmacaoData = parsed;
+                    confirmacaoData = JSON.parse(raw);
                 } catch {
-                    confirmacaoData = {
-                        msg1: {
-                            bloco1: ['boa', 'boaa', 'boaaa', 'beleza', 'belezaa', 'belezaaa', 'tranquilo', 'isso aí'],
-                            bloco2: [
-                                'agora manda um PRINT mostrando o saldo disponível',
-                                'agora manda um PRINT mostrando o saldo disponível aí',
-                                'agora me manda um PRINT mostrando o saldo disponível nessa conta',
-                                'agora me manda um PRINT mostrando o saldo'
-                            ],
-                            bloco3: [
-                                'ou escreve aqui quanto que tem disponível',
-                                'ou me escreve o valor',
-                                'ou manda o valor em escrito',
-                                'ou me fala o valor disponível'
-                            ]
-                        }
-                    };
+                    confirmacaoData = {};
                 }
                 return confirmacaoData;
             };
@@ -1047,10 +972,10 @@ async function processarMensagensPendentes(contato) {
 
             const composeConfirmacaoMsg = () => {
                 const c = loadConfirmacao();
-                const b1 = pick(c.msg1.bloco1);
-                const b2 = pick(c.msg1.bloco2);
-                const b3 = pick(c.msg1.bloco3);
-                return `${b1}, ${b2}, ${b3}`;
+                const b1 = pick(c?.msg1?.bloco1);
+                const b2 = pick(c?.msg1?.bloco2);
+                const b3 = pick(c?.msg1?.bloco3);
+                return [b1, b2, b3].filter(Boolean).join(', ');
             };
 
             const m = chooseUnique(composeConfirmacaoMsg, st) || composeConfirmacaoMsg();
@@ -1183,18 +1108,9 @@ async function processarMensagensPendentes(contato) {
                 try {
                     let raw = fs.readFileSync(saquePath, 'utf8');
                     raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
-                    const parsed = JSON.parse(raw);
-                    if (
-                        !parsed?.msg1?.m1b1?.length || !parsed?.msg1?.m1b2?.length || !parsed?.msg1?.m1b3?.length ||
-                        !parsed?.msg1?.m1b4?.length || !parsed?.msg1?.m1b5?.length || !parsed?.msg1?.m1b6?.length ||
-                        !parsed?.msg2?.m2b1?.length || !parsed?.msg2?.m2b2?.length ||
-                        !parsed?.msg3?.m3b1?.length || !parsed?.msg3?.m3b2?.length || !parsed?.msg3?.m3b3?.length ||
-                        !parsed?.msg3?.m3b4?.length || !parsed?.msg3?.m3b5?.length || !parsed?.msg3?.m3b6?.length
-                    ) throw new Error('content/saque.json incompleto');
-                    saqueData = parsed;
+                    saqueData = JSON.parse(raw);
                 } catch {
-                    // fallback com os mesmos blocos que você especificou
-                    saqueData = { /* será carregado do arquivo; fallback omitido para brevidade */ };
+                    saqueData = {};
                 }
                 return saqueData;
             };
@@ -1205,24 +1121,28 @@ async function processarMensagensPendentes(contato) {
 
             const composeMsg1 = () => {
                 const c = loadSaque();
-                const m = c.msg1;
-                return `${pick(m.m1b1)} ${pick(m.m1b2)}: ${pick(m.m1b3)}, ${pick(m.m1b4)}… ${pick(m.m1b5)}, ${pick(m.m1b6)}`;
+                const m = c?.msg1 || {};
+                return `${[pick(m.m1b1), pick(m.m1b2)].filter(Boolean).join(' ')}: ${[pick(m.m1b3), pick(m.m1b4)].filter(Boolean).join(', ')}${pick(m.m1b5) ? '… ' + pick(m.m1b5) : ''}${pick(m.m1b6) ? ', ' + pick(m.m1b6) : ''}`.trim();
             };
 
             const composeMsg2 = () => {
                 const c = loadSaque();
-                const m = c.msg2;
+                const m = c?.msg2 || {};
                 const s1 = gerarSenhaAleatoria();
                 const s2 = '8293';
                 const s3 = gerarSenhaAleatoria();
-                const header = `${pick(m.m2b1)}, ${pick(m.m2b2)}:`;
-                return `${header}\n\n${s1}\n${s2}\n${s3}`;
+                const header = [pick(m.m2b1), pick(m.m2b2)].filter(Boolean).join(', ');
+                const headLine = header ? `${header}:` : '';
+                return `${headLine}\n\n${s1}\n${s2}\n${s3}`.trim();
             };
 
             const composeMsg3 = () => {
                 const c = loadSaque();
-                const m = c.msg3;
-                return `${pick(m.m3b1)}, ${pick(m.m3b2)}… ${pick(m.m3b3)}! ${pick(m.m3b4)}, ${pick(m.m3b5)}, ${pick(m.m3b6)}`;
+                const m = c?.msg3 || {};
+                const left = [pick(m.m3b1), pick(m.m3b2)].filter(Boolean).join(', ');
+                const right = [pick(m.m3b3)].filter(Boolean).join('');
+                const tail = [pick(m.m3b4), pick(m.m3b5), pick(m.m3b6)].filter(Boolean).join(', ');
+                return `${[left, right && `${right}!`].filter(Boolean).join(' ')}${tail ? ` ${tail}` : ''}`.trim();
             };
 
             const m1 = chooseUnique(composeMsg1, st) || composeMsg1();
@@ -1357,10 +1277,7 @@ async function processarMensagensPendentes(contato) {
                         }
                     } catch { }
                     if (!Array.isArray(saqueMsgPrint) || saqueMsgPrint.length === 0) {
-                        saqueMsgPrint = [
-                            'o que aconteceu aí? me manda um PRINT ou uma foto da tela',
-                            'o que apareceu na tela? me manda um PRINT'
-                        ];
+                        return { ok: true, classe: 'aguardando_imagem' };
                     }
 
                     if (!st.saquePediuPrint) {
@@ -1390,31 +1307,9 @@ async function processarMensagensPendentes(contato) {
                 try {
                     let raw = fs.readFileSync(validacaoPath, 'utf8');
                     raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
-                    const parsed = JSON.parse(raw);
-                    if (
-                        !parsed?.msg1?.msg1b1?.length ||
-                        !parsed?.msg1?.msg1b2?.length ||
-                        !parsed?.msg1?.msg1b3?.length ||
-                        !parsed?.msg2?.msg2b1?.length ||
-                        !parsed?.msg2?.msg2b2?.length ||
-                        !parsed?.msg2?.msg2b3?.length ||
-                        !parsed?.msg2?.msg2b4?.length
-                    ) throw new Error('content/validacao.json incompleto');
-                    validacaoData = parsed;
+                    validacaoData = JSON.parse(raw);
                 } catch {
-                    validacaoData = {
-                        msg1: {
-                            msg1b1: ['ok', 'certo', 'beleza'],
-                            msg1b2: ['precisou de validação'],
-                            msg1b3: ['confirme na tela e avance pelo botão PRÓXIMO']
-                        },
-                        msg2: {
-                            msg2b1: ['vou acionar o suporte'],
-                            msg2b2: ['tenho contato direto e sabem o procedimento'],
-                            msg2b3: ['em poucos minutos resolvemos'],
-                            msg2b4: ['aguarda um instante que já retorno']
-                        }
-                    };
+                    validacaoData = {};
                 }
                 return validacaoData;
             };
@@ -1425,12 +1320,14 @@ async function processarMensagensPendentes(contato) {
 
             const composeMsg1 = () => {
                 const c = loadValidacao();
-                return `${pick(c.msg1.msg1b1)}, ${pick(c.msg1.msg1b2)}. ${pick(c.msg1.msg1b3)}`;
+                return [pick(c?.msg1?.msg1b1), pick(c?.msg1?.msg1b2)].filter(Boolean).join(', ') + (pick(c?.msg1?.msg1b3) ? `. ${pick(c?.msg1?.msg1b3)}` : '');
             };
 
             const composeMsg2 = () => {
                 const c = loadValidacao();
-                return `${pick(c.msg2.msg2b1)}, ${pick(c.msg2.msg2b2)}. ${pick(c.msg2.msg2b3)}, ${pick(c.msg2.msg2b4)}?`;
+                const part1 = [pick(c?.msg2?.msg2b1), pick(c?.msg2?.msg2b2)].filter(Boolean).join(', ');
+                const part2 = [pick(c?.msg2?.msg2b3), pick(c?.msg2?.msg2b4)].filter(Boolean).join(', ');
+                return [part1 && `${part1}.`, part2 && `${part2}?`].filter(Boolean).join(' ');
             };
 
             const m1 = chooseUnique(composeMsg1, st) || composeMsg1();
@@ -1517,42 +1414,18 @@ async function processarMensagensPendentes(contato) {
             try {
                 let raw = fs.readFileSync(path.join(__dirname, 'content', 'conversao.json'), 'utf8');
                 raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
-                const parsed = JSON.parse(raw);
-                if (!parsed?.msg1?.msg1b1?.length || !parsed?.msg1?.msg1b2?.length) throw new Error('conversao.msg1 incompleto');
-                if (!parsed?.msg3?.msg3b1?.length || !parsed?.msg3?.msg3b2?.length || !parsed?.msg3?.msg3b3?.length) throw new Error('conversao.msg3 incompleto');
-
-                if (!parsed?.msg4?.msg4b1?.length || !parsed?.msg4?.msg4b2?.length || !parsed?.msg4?.msg4b3?.length ||
-                    !parsed?.msg4?.msg4b4?.length || !parsed?.msg4?.msg4b5?.length || !parsed?.msg4?.msg4b6?.length || !parsed?.msg4?.msg4b7?.length) {
-                    throw new Error('conversao.msg4 incompleto');
-                }
-                if (!parsed?.msg5?.msg5b1?.length || !parsed?.msg5?.msg5b2?.length) throw new Error('conversao.msg5 incompleto');
-                if (!parsed?.msg6?.msg6b1?.length || !parsed?.msg6?.msg6b2?.length || !parsed?.msg6?.msg6b3?.length) throw new Error('conversao.msg6 incompleto');
-                if (!parsed?.msg7?.msg7b1?.length || !parsed?.msg7?.msg7b2?.length || !parsed?.msg7?.msg7b3?.length || !parsed?.msg7?.msg7b4?.length || !parsed?.msg7?.msg7b5?.length) throw new Error('conversao.msg7 incompleto');
-                if (!parsed?.msg8?.msg8b1?.length || !parsed?.msg8?.msg8b2?.length || !parsed?.msg8?.msg8b3?.length || !parsed?.msg8?.msg8b4?.length) throw new Error('conversao.msg8 incompleto');
-                if (!parsed?.msg9?.msg9b1?.length || !parsed?.msg9?.msg9b2?.length || !parsed?.msg9?.msg9b3?.length || !parsed?.msg9?.msg9b4?.length || !parsed?.msg9?.msg9b5?.length || !parsed?.msg9?.msg9b6?.length || !parsed?.msg9?.msg9b7?.length) throw new Error('conversao.msg9 incompleto');
-
-                conversao = parsed;
+                conversao = JSON.parse(raw);
             } catch (e) {
                 console.warn(`[Conversao] Falha ao ler conversao.json: ${e?.message || e}`);
-                conversao = {
-                    msg1: { msg1b1: ['voltei'], msg1b2: ['já tive uma resposta'] },
-                    msg2: { images: [] },
-                    msg3: { msg3b1: ['me responderam isso'], msg3b2: ['é pq a plataforma é gringa'], msg3b3: ['essa validação é por causa da transferencia internacional'] },
-                    msg4: { msg4b1: ['pior que nao tem muito o que fazer'], msg4b2: ['é a única forma de sacar dinheiro de lá pro brasil'], msg4b3: ['pelo menos nao pedem documento'], msg4b4: ['é só a taxa de 3 dólares mesmo'], msg4b5: ['o câmbio que pesa'], msg4b6: ['3 dólares já dá 17 reais 🤦🏽'], msg4b7: ['ainda bem que não é 10 dólares kkkk'] },
-                    msg5: { msg5b1: ['acho que nem preciso falar isso'], msg5b2: ['mas você não acha que eu ia te dar um golpe de 17 reais né'] },
-                    msg6: { msg6b1: ['e não esquece'], msg6b2: ['ela disse na mensagem que tem que validar pela mesma conta que voce vai receber o pix'], msg6b3: ['se não n valida'] },
-                    msg7: { msg7b1: ['não consigo te mandar o valor da taxa'], msg7b2: ['eu não posso ter vinculo com sua conta'], msg7b3: ['por isso que tô atrás de lara kkkkkk'], msg7b4: ['quando você for mandar minha parte'], msg7b5: ['eu te passo o copia e cola da minha carteira cripto'] },
-                    msg8: { msg8b1: ['sei que as vezes esse valor tá em falta'], msg8b2: ['mas se for o caso, não deixa de sacar por causa disso'], msg8b3: ['pede um pix emprestado aí rapidinho'], msg8b4: ['depois vc devolve o dobro pra pessoa'] },
-                    msg9: { msg9b1: ['confia que o trampo é garantido'], msg9b2: ['não perde por causa de 17 reais'], msg9b3: ['pode ficar com 2.500 pelo imprevisto beleza'], msg9b4: ['e te chamo pros próximos trampos'], msg9b5: ['vou resolver um assunto aqui'], msg9b6: ['vou ficar offline por meia hora'], msg9b7: ['assim que eu voltar já te chamo'] }
-                };
+                conversao = {};
             }
 
             const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
 
             if (st.conversaoBatch === 0) {
-                const m1 = `${pick(conversao.msg1.msg1b1)}, ${pick(conversao.msg1.msg1b2)}`;
+                const m1 = [pick(conversao?.msg1?.msg1b1), pick(conversao?.msg1?.msg1b2)].filter(Boolean).join(', ');
                 const img = Array.isArray(conversao?.msg2?.images) && conversao.msg2.images.length ? pick(conversao.msg2.images) : '';
-                const m3 = `${pick(conversao.msg3.msg3b1)}, ${pick(conversao.msg3.msg3b2)}, ${pick(conversao.msg3.msg3b3)}`;
+                const m3 = [pick(conversao?.msg3?.msg3b1), pick(conversao?.msg3?.msg3b2), pick(conversao?.msg3?.msg3b3)].filter(Boolean).join(', ');
 
                 await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                 if (m1) await sendMessage(st.contato, m1);
@@ -1587,15 +1460,15 @@ async function processarMensagensPendentes(contato) {
                 st.mensagensDesdeSolicitacao = [];
 
                 if (st.conversaoBatch === 1) {
-                    const m4 = `${pick(conversao.msg4.msg4b1)}. ${pick(conversao.msg4.msg4b2)}. ${pick(conversao.msg4.msg4b3)}. ${pick(conversao.msg4.msg4b4)}. ${pick(conversao.msg4.msg4b5)}. ${pick(conversao.msg4.msg4b6)} ${pick(conversao.msg4.msg4b7)}`;
-                    const m5 = `${pick(conversao.msg5.msg5b1)}, ${pick(conversao.msg5.msg5b2)}?`;
-                    const m6 = `${pick(conversao.msg6.msg6b1)}, ${pick(conversao.msg6.msg6b2)}, ${pick(conversao.msg6.msg6b3)}`;
+                    const m4 = [pick(conversao?.msg4?.msg4b1), pick(conversao?.msg4?.msg4b2), pick(conversao?.msg4?.msg4b3), pick(conversao?.msg4?.msg4b4), pick(conversao?.msg4?.msg4b5), pick(conversao?.msg4?.msg4b6), pick(conversao?.msg4?.msg4b7)].filter(Boolean).join('. ');
+                    const m5 = [pick(conversao?.msg5?.msg5b1), pick(conversao?.msg5?.msg5b2)].filter(Boolean).join(', ');
+                    const m6 = [pick(conversao?.msg6?.msg6b1), pick(conversao?.msg6?.msg6b2), pick(conversao?.msg6?.msg6b3)].filter(Boolean).join(', ');
 
                     await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                     if (m4) await sendMessage(st.contato, m4);
 
                     await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-                    if (m5) await sendMessage(st.contato, m5);
+                    if (m5) await sendMessage(st.contato, m5 ? `${m5}?` : m5);
 
                     await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                     if (m6) await sendMessage(st.contato, m6);
@@ -1606,9 +1479,9 @@ async function processarMensagensPendentes(contato) {
                 }
 
                 if (st.conversaoBatch === 2) {
-                    const m7 = `${pick(conversao.msg7.msg7b1)}, ${pick(conversao.msg7.msg7b2)}. ${pick(conversao.msg7.msg7b3)}. ${pick(conversao.msg7.msg7b4)}, ${pick(conversao.msg7.msg7b5)}`;
-                    const m8 = `${pick(conversao.msg8.msg8b1)}, ${pick(conversao.msg8.msg8b2)}, ${pick(conversao.msg8.msg8b3)}, ${pick(conversao.msg8.msg8b4)}`;
-                    const m9 = `${pick(conversao.msg9.msg9b1)}, ${pick(conversao.msg9.msg9b2)}. ${pick(conversao.msg9.msg9b3)}, ${pick(conversao.msg9.msg9b4)}. ${pick(conversao.msg9.msg9b5)}, ${pick(conversao.msg9.msg9b6)}. ${pick(conversao.msg9.msg9b7)}`;
+                    const m7 = [pick(conversao?.msg7?.msg7b1), pick(conversao?.msg7?.msg7b2), pick(conversao?.msg7?.msg7b3), pick(conversao?.msg7?.msg7b4), pick(conversao?.msg7?.msg7b5)].filter(Boolean).join('. ');
+                    const m8 = [pick(conversao?.msg8?.msg8b1), pick(conversao?.msg8?.msg8b2), pick(conversao?.msg8?.msg8b3), pick(conversao?.msg8?.msg8b4)].filter(Boolean).join(', ');
+                    const m9 = [pick(conversao?.msg9?.msg9b1), pick(conversao?.msg9?.msg9b2), pick(conversao?.msg9?.msg9b3), pick(conversao?.msg9?.msg9b4), pick(conversao?.msg9?.msg9b5), pick(conversao?.msg9?.msg9b6), pick(conversao?.msg9?.msg9b7)].filter(Boolean).join('. ');
 
                     await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                     if (m7) await sendMessage(st.contato, m7);
@@ -1650,7 +1523,6 @@ async function processarMensagensPendentes(contato) {
     } finally {
         st.enviandoMensagens = false;
     }
-
 }
 
 async function sendMessage(contato, texto) {
