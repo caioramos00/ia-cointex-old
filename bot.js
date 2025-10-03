@@ -25,6 +25,116 @@ function extraGlobalDelay() {
 }
 function delayRange(minMs, maxMs) { const d = Math.floor(minMs + Math.random() * (maxMs - minMs)); return delay(d); }
 
+// ===== Normalização p/ matching de opt-in/out =====
+const URL_RX = /https?:\/\/\S+/gi;
+const EMOJI_RX = /([\u203C-\u3299]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDD00-\uDFFF])/g;
+
+function stripUrls(s = '') { return String(s || '').replace(URL_RX, ' ').trim(); }
+function stripEmojis(s = '') { return String(s || '').replace(EMOJI_RX, ' ').trim(); }
+function collapseSpaces(s = '') { return String(s || '').replace(/\s+/g, ' ').trim(); }
+function removeDiacritics(s = '') { return String(s || '').normalize('NFD').replace(/\p{Diacritic}/gu, ''); }
+function normMsg(s = '', { case_insensitive = true, accent_insensitive = true, strip_urls = true, strip_emojis = true, collapse_whitespace = true, trim = true } = {}) {
+    let out = String(s || '');
+    if (strip_urls) out = stripUrls(out);
+    if (strip_emojis) out = stripEmojis(out);
+    if (accent_insensitive) out = removeDiacritics(out);
+    if (case_insensitive) out = out.toLowerCase();
+    if (collapse_whitespace) out = collapseSpaces(out);
+    if (trim) out = out.trim();
+    return out;
+}
+
+function loadJsonSafe(p) {
+    let raw = fs.readFileSync(p, 'utf8');
+    raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
+    return JSON.parse(raw);
+}
+
+// cache loaders
+let _optOutData = null, _optInData = null, _optOutMsgs = null, _optInMsgs = null;
+function loadOptOutData() {
+    if (_optOutData) return _optOutData;
+    _optOutData = loadJsonSafe(path.join(__dirname, 'content', 'opt-out.json'));
+    return _optOutData;
+}
+function loadOptOutMsgs() {
+    if (_optOutMsgs) return _optOutMsgs;
+    _optOutMsgs = loadJsonSafe(path.join(__dirname, 'content', 'opt-out-messages.json'));
+    return _optOutMsgs;
+}
+function loadOptInData() {
+    if (_optInData) return _optInData;
+    _optInData = loadJsonSafe(path.join(__dirname, 'content', 'opt-in.json'));
+    return _optInData;
+}
+function loadOptInMsgs() {
+    if (_optInMsgs) return _optInMsgs;
+    _optInMsgs = loadJsonSafe(path.join(__dirname, 'content', 'opt-in-messages.json'));
+    return _optInMsgs;
+}
+
+function anyMatch(haystack, needles = []) {
+    const s = String(haystack || '');
+    for (const x of (needles || [])) {
+        const n = String(x || '').trim();
+        if (!n) continue;
+        if (s.includes(n)) return true;
+    }
+    return false;
+}
+
+// heurística segura para opt-out
+function isOptOut(textRaw) {
+    const data = loadOptOutData();
+    const cfg = data?.config || {};
+    const s = normMsg(textRaw, cfg);
+    if (!s) return false;
+
+    const amb = new Set((data?.exceptions?.ambiguous_single_tokens || []).map(v => normMsg(v, cfg)));
+    if (amb.has(s)) return false;
+
+    const phrases = (data?.phrases || []).map(v => normMsg(v, cfg));
+    const keywords = (data?.keywords || []).map(v => normMsg(v, cfg));
+    const risks = (data?.risk_terms || []).map(v => normMsg(v, cfg));
+    const regex = (data?.regex || []).map(r => {
+        try { return new RegExp(r, 'i'); } catch { return null; }
+    }).filter(Boolean);
+
+    if (anyMatch(s, phrases)) return true;
+    if (regex.some(rx => rx.test(s))) return true;
+
+    // keywords/risk: exigir negação ou combinação
+    const HAS_NEG = /\b(nao|não|sem|pare|parar|parou|cancelar|cancel|encerrar|excluir|remover|bloquear|stop|unsubscribe|sair|chega)\b/i.test(s);
+    const hasKw = keywords.some(k => s.includes(k));
+    const hasRisk = risks.some(k => s.includes(k));
+    if ((hasKw || hasRisk) && (HAS_NEG || (hasKw && hasRisk))) return true;
+
+    return false;
+}
+
+// heurística p/ re-opt-in (lista dura dos opt-ins + regex simples)
+function isOptIn(textRaw) {
+    const data = loadOptInData();
+    const cfg = data?.config || {};
+    const s = normMsg(textRaw, cfg);
+    if (!s) return false;
+
+    const phrases = (data?.phrases || []).map(v => normMsg(v, cfg));
+    const keywords = (data?.keywords || []).map(v => normMsg(v, cfg));
+    const regex = (data?.regex || []).map(r => {
+        try { return new RegExp(r, 'i'); } catch { return null; }
+    }).filter(Boolean);
+
+    if (anyMatch(s, phrases)) return true;
+    if (regex.some(rx => rx.test(s))) return true;
+
+    const POS = /\b(pode|pode mandar|manda|envia|continuar|continua|retomar|voltar|segu(e|ir)|ok|bora|vamos|quero|to dentro|tô dentro|aceito|sim)\b/i;
+    const hasKw = keywords.some(k => s.includes(k));
+    if (hasKw && POS.test(s)) return true;
+
+    return false;
+}
+
 function randomInt(min, max) {
     return Math.floor(min + Math.random() * (max - min));
 }
@@ -92,7 +202,14 @@ function ensureEstado(contato) {
             validacaoAwaitFirstMsg: false,
             validacaoTimeoutUntil: 0,
             conversaoBatch: 0,
-            conversaoAwaitMsg: false
+            conversaoAwaitMsg: false,
+            optOutCount: 0,
+            permanentlyBlocked: false,
+            reoptinActive: false,     // false enquanto "pausado" por opt-out
+            reoptinLotsTried: 0,      // lotes IA já usados (máx 3)
+            reoptinBuffer: [],        // acumula 1..3 msgs antes de consultar IA
+            reoptinCount: 0,          // quantas retomadas já realizadas (máx 2)
+            stageCursor: {}
         };
     } else {
         const st = estadoContatos[key];
@@ -109,6 +226,14 @@ function ensureEstado(contato) {
         if (typeof st.validacaoTimeoutUntil !== 'number') st.validacaoTimeoutUntil = 0;
         if (typeof st.conversaoBatch !== 'number') st.conversaoBatch = 0;
         if (typeof st.conversaoAwaitMsg !== 'boolean') st.conversaoAwaitMsg = false;
+        if (typeof st.optOutCount !== 'number') st.optOutCount = 0;
+        if (typeof st.permanentlyBlocked !== 'boolean') st.permanentlyBlocked = false;
+        if (typeof st.reoptinActive !== 'boolean') st.reoptinActive = false;
+        if (typeof st.reoptinLotsTried !== 'number') st.reoptinLotsTried = 0;
+        if (!Array.isArray(st.reoptinBuffer)) st.reoptinBuffer = [];
+        if (typeof st.reoptinCount !== 'number') st.reoptinCount = 0;
+        if (!st.stageCursor || typeof st.stageCursor !== 'object') st.stageCursor = {};
+
     }
     return estadoContatos[key];
 }
@@ -364,6 +489,138 @@ async function processarMensagensPendentes(contato) {
     try {
         console.log(`[${st.contato}] etapa=${st.etapa} pendentes=${st.mensagensPendentes.length}`);
 
+        // ======= BLOQUEIO PERMANENTE =======
+        if (st.permanentlyBlocked || st.optOutCount >= 3) {
+            st.permanentlyBlocked = true;
+            st.mensagensPendentes = [];
+            st.mensagensDesdeSolicitacao = [];
+            return { ok: true, noop: 'permanently-blocked' };
+        }
+
+        // ======= DETECÇÃO DE OPT-OUT AGORA =======
+        if (Array.isArray(st.mensagensPendentes) && st.mensagensPendentes.length) {
+            const hadOptOut = st.mensagensPendentes.some(m => isOptOut(m?.texto || ''));
+            if (hadOptOut) {
+                st.mensagensPendentes = [];
+                st.mensagensDesdeSolicitacao = [];
+                st.enviandoMensagens = false;
+
+                st.optOutCount = (st.optOutCount || 0) + 1;
+                st.reoptinActive = false;
+                st.reoptinLotsTried = 0;
+                st.reoptinBuffer = [];
+
+                if (st.optOutCount >= 3) {
+                    st.permanentlyBlocked = true;
+                    console.log(`[${st.contato}] opt-out #${st.optOutCount} => bloqueio permanente`);
+                    return { ok: true, status: 'blocked-forever' };
+                }
+
+                // enviar confirmação de opt-out (1ª e 2ª vezes)
+                const oMsgs = loadOptOutMsgs();
+                const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
+                let texto = '';
+                if (st.optOutCount === 1) {
+                    const p = oMsgs?.msg1 || {};
+                    texto = [pick(p.msg1b1), pick(p.msg1b2)].filter(Boolean).join(', ');
+                } else if (st.optOutCount === 2) {
+                    const p = oMsgs?.msg2 || {};
+                    texto = [pick(p.msg2b1), pick(p.msg2b2)].filter(Boolean).join(', ');
+                }
+                if (texto) {
+                    await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+                    await sendMessage(st.contato, texto, { force: true });
+                }
+                return { ok: true, optout: st.optOutCount };
+            }
+        }
+
+        // ======= MODO PAUSADO (após opt-out) -> detectar re-opt-in =======
+        if (st.optOutCount > 0 && !st.reoptinActive) {
+            if (Array.isArray(st.mensagensPendentes) && st.mensagensPendentes.length) {
+                // 1) hard match
+                let matched = false;
+                for (const m of st.mensagensPendentes) {
+                    const t = m?.texto || '';
+                    if (!t) continue;
+                    if (isOptIn(t)) { matched = true; break; }
+                }
+
+                // 2) se não bateu nada, acumula no buffer e usa IA a cada 3 msgs (até 3 lotes)
+                if (!matched) {
+                    for (const m of st.mensagensPendentes) {
+                        const t = safeStr(m?.texto || '').trim();
+                        if (t) st.reoptinBuffer.push(t);
+                    }
+                    st.mensagensPendentes = [];
+
+                    const apiKey = process.env.OPENAI_API_KEY;
+                    const canAsk = apiKey && st.reoptinBuffer.length >= 3 && st.reoptinLotsTried < 3;
+                    if (canAsk) {
+                        const { promptClassificaReoptin } = require('./prompts');
+                        const structuredPrompt =
+                            `${promptClassificaReoptin(st.reoptinBuffer.slice(-3))}\n\n` +
+                            `Output only valid JSON as {"label": "optin"} or {"label": "nao_optin"}`;
+                        const ask = async (maxTok) => {
+                            try {
+                                const r = await axios.post('https://api.openai.com/v1/responses', {
+                                    model: 'gpt-5',
+                                    input: structuredPrompt,
+                                    max_output_tokens: maxTok,
+                                    reasoning: { effort: 'low' }
+                                }, {
+                                    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                                    timeout: 15000,
+                                    validateStatus: () => true
+                                });
+                                let rawText = extractTextForLog(r.data) || '';
+                                rawText = String(rawText).trim();
+                                let picked = null;
+                                try { const parsed = JSON.parse(rawText); picked = String(parsed?.label || '').toLowerCase(); } catch {
+                                    const m = /"label"\s*:\s*"([^"]+)"/i.exec(rawText); if (m && m[1]) picked = m[1].toLowerCase();
+                                }
+                                if (!picked) picked = pickLabelFromResponseData(r.data, ['optin', 'nao_optin']);
+                                return picked || null;
+                            } catch { return null; }
+                        };
+                        let out = await ask(48);
+                        if (!out) out = await ask(128);
+                        st.reoptinLotsTried += 1;
+                        st.reoptinBuffer = [];
+                        matched = (out === 'optin');
+                    }
+                }
+
+                if (matched) {
+                    st.reoptinActive = true;
+                    st.reoptinLotsTried = 0;
+                    st.reoptinBuffer = [];
+                    st.reoptinCount = (st.reoptinCount || 0) + 1;
+
+                    // enviar mensagem de retomada (1ª e 2ª)
+                    const iMsgs = loadOptInMsgs();
+                    const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
+                    let texto = '';
+                    if (st.reoptinCount === 1) {
+                        const p = iMsgs?.msg1 || {};
+                        texto = [pick(p.msg1b1), pick(p.msg1b2)].filter(Boolean).join(', ');
+                    } else {
+                        const p = iMsgs?.msg2 || {};
+                        texto = [pick(p.msg2b1), pick(p.msg2b2), pick(p.msg2b3)].filter(Boolean).join('. ');
+                    }
+                    if (texto) {
+                        await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+                        await sendMessage(st.contato, texto, { force: true });
+                    }
+                    // segue fluxo normal após retomar
+                } else {
+                    // segue aguardando novas msgs do usuário
+                    return { ok: true, paused: true };
+                }
+            }
+        }
+
+
         if (st.etapa === 'none') {
             const aberturaPath = path.join(__dirname, 'content', 'abertura.json');
             let aberturaData = null;
@@ -549,25 +806,39 @@ async function processarMensagensPendentes(contato) {
                 const g2 = pick(c?.msg3?.grupo2);
                 return [g1 && `${g1}…`, g2 && `${g2}?`].filter(Boolean).join(' ');
             };
+
             const m1 = composeMsg1();
             const m2 = composeMsg2();
             const m3 = composeMsg3();
-            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-            if (m1) await sendMessage(st.contato, m1);
-            await delayRange(20000, 30000);
-            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-            if (m2) await sendMessage(st.contato, m2);
-            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-            if (m3) await sendMessage(st.contato, m3);
-            st.mensagensPendentes = [];
-            st.mensagensDesdeSolicitacao = [];
-            st.lastClassifiedIdx.acesso = 0;
-            st.lastClassifiedIdx.confirmacao = 0;
-            st.lastClassifiedIdx.saque = 0;
-            const _prev = st.etapa;
-            st.etapa = 'instrucoes:wait';
-            console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
-            return { ok: true };
+            const msgs = [m1, m2, m3];
+
+            let cur = Number(st.stageCursor?.[st.etapa] || 0);
+            for (let i = cur; i < msgs.length; i++) {
+                if (!msgs[i]) continue;
+                // delays específicos do fluxo original
+                if (i === 0) await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+                if (i === 1) { await delayRange(20000, 30000); await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS); }
+                if (i === 2) await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+
+                const r = await sendMessage(st.contato, msgs[i]);
+                if (!r?.ok) break; // se bloqueado por opt-out no meio
+
+                st.stageCursor[st.etapa] = i + 1;
+            }
+
+            if ((st.stageCursor[st.etapa] || 0) >= msgs.length) {
+                st.stageCursor[st.etapa] = 0;
+                st.mensagensPendentes = [];
+                st.mensagensDesdeSolicitacao = [];
+                st.lastClassifiedIdx.acesso = 0;
+                st.lastClassifiedIdx.confirmacao = 0;
+                st.lastClassifiedIdx.saque = 0;
+                const _prev = st.etapa;
+                st.etapa = 'instrucoes:wait';
+                console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+                return { ok: true };
+            }
+            return { ok: true, partial: true };
         }
 
         if (st.etapa === 'instrucoes:wait') {
@@ -680,11 +951,7 @@ async function processarMensagensPendentes(contato) {
                 ? arr[Math.floor(Math.random() * arr.length)]
                 : '';
             if (!st.credenciais?.email || !st.credenciais?.password || !st.credenciais?.login_url) {
-                try {
-                    await criarUsuarioDjango(st.contato);
-                } catch (e) {
-                    console.warn(`[${st.contato}] criarUsuarioDjango falhou: ${e?.message || e}`);
-                }
+                try { await criarUsuarioDjango(st.contato); } catch (e) { console.warn(`[${st.contato}] criarUsuarioDjango falhou: ${e?.message || e}`); }
             }
             const cred = (st.credenciais && typeof st.credenciais === 'object') ? st.credenciais : {};
             const email = safeStr(cred.email).trim();
@@ -712,19 +979,27 @@ async function processarMensagensPendentes(contato) {
                 '',
                 `${[pick(c?.msg3?.bloco2C), pick(c?.msg3?.bloco3C)].filter(Boolean).join(', ')}`
             ].join('\n');
-            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-            if (msg1) await sendMessage(st.contato, msg1);
-            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-            if (msg2) await sendMessage(st.contato, msg2);
-            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-            if (msg3) await sendMessage(st.contato, msg3);
-            st.mensagensPendentes = [];
-            st.mensagensDesdeSolicitacao = [];
-            st.lastClassifiedIdx.acesso = 0;
-            const _prev = st.etapa;
-            st.etapa = 'acesso:wait';
-            console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
-            return { ok: true };
+
+            const msgs = [msg1, msg2, msg3];
+            let cur = Number(st.stageCursor?.[st.etapa] || 0);
+            for (let i = cur; i < msgs.length; i++) {
+                if (!msgs[i]) continue;
+                await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+                const r = await sendMessage(st.contato, msgs[i]);
+                if (!r?.ok) break;
+                st.stageCursor[st.etapa] = i + 1;
+            }
+            if ((st.stageCursor[st.etapa] || 0) >= msgs.length) {
+                st.stageCursor[st.etapa] = 0;
+                st.mensagensPendentes = [];
+                st.mensagensDesdeSolicitacao = [];
+                st.lastClassifiedIdx.acesso = 0;
+                const _prev = st.etapa;
+                st.etapa = 'acesso:wait';
+                console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+                return { ok: true };
+            }
+            return { ok: true, partial: true };
         }
 
         if (st.etapa === 'acesso:wait') {
@@ -946,9 +1221,7 @@ async function processarMensagensPendentes(contato) {
         if (st.etapa === 'saque:send') {
             const saquePath = path.join(__dirname, 'content', 'saque.json');
             let saqueData = null;
-            function gerarSenhaAleatoria() {
-                return String(Math.floor(1000 + Math.random() * 9000));
-            }
+            function gerarSenhaAleatoria() { return String(Math.floor(1000 + Math.random() * 9000)); }
             const loadSaque = () => {
                 if (saqueData) return saqueData;
                 let raw = fs.readFileSync(saquePath, 'utf8');
@@ -956,9 +1229,7 @@ async function processarMensagensPendentes(contato) {
                 saqueData = JSON.parse(raw);
                 return saqueData;
             };
-            const pick = (arr) => Array.isArray(arr) && arr.length
-                ? arr[Math.floor(Math.random() * arr.length)]
-                : '';
+            const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
             const composeMsg1 = () => {
                 const c = loadSaque();
                 const m = c?.msg1 || {};
@@ -982,23 +1253,33 @@ async function processarMensagensPendentes(contato) {
                 const tail = [pick(m.m3b4), pick(m.m3b5), pick(m.m3b6)].filter(Boolean).join(', ');
                 return `${[left, right && `${right}!`].filter(Boolean).join(' ')}${tail ? ` ${tail}` : ''}`.trim();
             };
+
             const m1 = chooseUnique(composeMsg1, st) || composeMsg1();
             const m2 = chooseUnique(composeMsg2, st) || composeMsg2();
             const m3 = chooseUnique(composeMsg3, st) || composeMsg3();
-            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-            if (m1) await sendMessage(st.contato, m1);
-            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-            if (m2) await sendMessage(st.contato, m2);
-            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-            if (m3) await sendMessage(st.contato, m3);
-            st.mensagensPendentes = [];
-            st.mensagensDesdeSolicitacao = [];
-            st.lastClassifiedIdx.saque = 0;
-            st.saquePediuPrint = false;
-            const _prev = st.etapa;
-            st.etapa = 'saque:wait';
-            console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
-            return { ok: true };
+            const msgs = [m1, m2, m3];
+
+            let cur = Number(st.stageCursor?.[st.etapa] || 0);
+            for (let i = cur; i < msgs.length; i++) {
+                if (!msgs[i]) continue;
+                await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+                const r = await sendMessage(st.contato, msgs[i]);
+                if (!r?.ok) break;
+                st.stageCursor[st.etapa] = i + 1;
+            }
+
+            if ((st.stageCursor[st.etapa] || 0) >= msgs.length) {
+                st.stageCursor[st.etapa] = 0;
+                st.mensagensPendentes = [];
+                st.mensagensDesdeSolicitacao = [];
+                st.lastClassifiedIdx.saque = 0;
+                st.saquePediuPrint = false;
+                const _prev = st.etapa;
+                st.etapa = 'saque:wait';
+                console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+                return { ok: true };
+            }
+            return { ok: true, partial: true };
         }
 
         if (st.etapa === 'saque:wait') {
@@ -1141,21 +1422,33 @@ async function processarMensagensPendentes(contato) {
                 const part2 = [pick(c?.msg2?.msg2b3), pick(c?.msg2?.msg2b4)].filter(Boolean).join(', ');
                 return [part1 && `${part1}.`, part2 && `${part2}?`].filter(Boolean).join(' ');
             };
+
             const m1 = chooseUnique(composeMsg1, st) || composeMsg1();
             const m2 = chooseUnique(composeMsg2, st) || composeMsg2();
-            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-            if (m1) await sendMessage(st.contato, m1);
-            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-            if (m2) await sendMessage(st.contato, m2);
-            st.mensagensPendentes = [];
-            st.mensagensDesdeSolicitacao = [];
-            st.lastClassifiedIdx.validacao = 0;
-            st.validacaoAwaitFirstMsg = true;
-            st.validacaoTimeoutUntil = 0;
-            const _prev = st.etapa;
-            st.etapa = 'validacao:wait';
-            console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
-            return { ok: true };
+            const msgs = [m1, m2];
+
+            let cur = Number(st.stageCursor?.[st.etapa] || 0);
+            for (let i = cur; i < msgs.length; i++) {
+                if (!msgs[i]) continue;
+                await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+                const r = await sendMessage(st.contato, msgs[i]);
+                if (!r?.ok) break;
+                st.stageCursor[st.etapa] = i + 1;
+            }
+
+            if ((st.stageCursor[st.etapa] || 0) >= msgs.length) {
+                st.stageCursor[st.etapa] = 0;
+                st.mensagensPendentes = [];
+                st.mensagensDesdeSolicitacao = [];
+                st.lastClassifiedIdx.validacao = 0;
+                st.validacaoAwaitFirstMsg = true;
+                st.validacaoTimeoutUntil = 0;
+                const _prev = st.etapa;
+                st.etapa = 'validacao:wait';
+                console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+                return { ok: true };
+            }
+            return { ok: true, partial: true };
         }
 
         if (st.etapa === 'validacao:wait') {
@@ -1300,10 +1593,18 @@ async function processarMensagensPendentes(contato) {
     }
 }
 
-async function sendMessage(contato, texto) {
+async function sendMessage(contato, texto, opts = {}) {
     await extraGlobalDelay();
     const msg = safeStr(texto);
     try {
+        const st = ensureEstado(contato);
+        const forced = opts && opts.force === true;
+        const paused = (st.permanentlyBlocked === true) || (st.optOutCount >= 3) || (st.optOutCount > 0 && !st.reoptinActive);
+        if (paused && !forced) {
+            console.log(`[${contato}] envio=skip reason=paused-by-optout msg="${safeStr(texto).slice(0, 140)}"`);
+            return { ok: false, reason: 'paused-by-optout' };
+        }
+
         const { mod, settings } = await getActiveTransport();
         const provider = mod?.name || 'unknown';
         if (provider === 'manychat') {
@@ -1334,6 +1635,53 @@ async function sendMessage(contato, texto) {
         return { ok: false, reason: 'unsupported' };
     } catch (e) {
         console.log(`[${contato}] envio=fail provider=unknown reason="${e.message}" msg="${msg}"`);
+        return { ok: false, error: e.message };
+    }
+}
+
+async function sendImage(contato, imageUrl, caption, opts = {}) {
+    await extraGlobalDelay();
+    const url = safeStr(imageUrl).trim();
+    if (!url) return { ok: false, reason: 'empty-image-url' };
+    try {
+        const st = ensureEstado(contato);
+        const forced = opts && opts.force === true;
+        const paused = (st.permanentlyBlocked === true) || (st.optOutCount >= 3) || (st.optOutCount > 0 && !st.reoptinActive);
+        if (paused && !forced) {
+            console.log(`[${contato}] envio-imagem=skip reason=paused-by-optout url="${url}"`);
+            return { ok: false, reason: 'paused-by-optout' };
+        }
+
+        const { mod, settings } = await getActiveTransport();
+        const provider = mod?.name || 'unknown';
+        if (provider === 'manychat') {
+            const token = (settings && settings.manychat_api_token) || process.env.MANYCHAT_API_TOKEN || '';
+            if (!token) {
+                console.log(`[${contato}] envio=fail provider=manychat reason=no-api-token image="${url}"`);
+                return { ok: false, reason: 'no-api-token' };
+            }
+            let subscriberId = null;
+            try {
+                const c = await getContatoByPhone(contato);
+                if (c?.manychat_subscriber_id) subscriberId = String(c.manychat_subscriber_id);
+            } catch (e) {
+                console.warn(`[${contato}] DB lookup subscriber_id falhou: ${e.message}`);
+            }
+            if (!subscriberId) {
+                subscriberId = await resolveManychatWaSubscriberId(contato, mod, settings);
+            }
+            if (!subscriberId) {
+                console.log(`[${contato}] envio=fail provider=manychat reason=no-wa-subscriber-id image="${url}"`);
+                return { ok: false, reason: 'no-wa-subscriber-id' };
+            }
+            await mod.sendImage({ subscriberId, imageUrl: url, caption }, settings, opts);
+            console.log(`[${contato}] envio=ok provider=manychat endpoint=/fb/sending/sendContent image="${url}"`);
+            return { ok: true, provider };
+        }
+        console.log(`[${contato}] envio=fail provider=${provider} reason=unsupported image="${url}"`);
+        return { ok: false, reason: 'unsupported' };
+    } catch (e) {
+        console.log(`[${contato}] envio=fail provider=unknown reason="${e.message}" image="${url}"`);
         return { ok: false, error: e.message };
     }
 }
@@ -1372,6 +1720,7 @@ function _resetRuntime(st, opts = {}) {
     st.validacaoTimeoutUntil = 0;
     st.conversaoBatch = 0;
     st.conversaoAwaitMsg = false;
+    st.stageCursor = {};
     if (opts.clearCredenciais) st.credenciais = undefined;
     if (opts.seedCredenciais && typeof opts.seedCredenciais === 'object') {
         st.credenciais = {

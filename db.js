@@ -1,4 +1,3 @@
-// db.js
 const { Pool } = require('pg');
 
 let _settingsCache = null;

@@ -1,0 +1,160 @@
+{
+  "version": 1,
+  "config": {
+    "case_insensitive": true,
+    "accent_insensitive": true,
+    "strip_urls": true,
+    "strip_emojis": true,
+    "collapse_whitespace": true,
+    "trim": true
+  },
+  "block_if_any": ["phrases", "keywords", "regex", "risk_terms"],
+  "exceptions": {
+    "ambiguous_single_tokens": ["para", "nao", "não", "no", "nah", "ok", "blz", "kkk", "rs", "👍", "👎"],
+    "notes": [
+      "Um token que esteja em ambiguous_single_tokens não deve bloquear sozinho.",
+      "Se a mensagem tiver só um desses tokens, não considerar opt-out."
+    ]
+  },
+  "blocklists": {
+    "pt": {
+      "phrases": [
+        "pare de me mandar mensagem",
+        "pare de me mandar mensagens",
+        "pare de enviar mensagem",
+        "pare de enviar mensagens",
+        "para com essas mensagens",
+        "pare com isso",
+        "nao me chame mais",
+        "não me chame mais",
+        "nao me liga mais",
+        "não me liga mais",
+        "nao manda mais",
+        "não manda mais",
+        "nao manda mais nada",
+        "não manda mais nada",
+        "nao quero mais receber",
+        "não quero mais receber",
+        "nao quero mais mensagem",
+        "não quero mais mensagem",
+        "me tira da lista",
+        "me retira da lista",
+        "remove meu numero",
+        "remove o meu numero",
+        "remova meu numero",
+        "remova o meu numero",
+        "excluir meu contato",
+        "apaga meu numero",
+        "apaga meu contato",
+        "nao entrar em contato",
+        "não entrar em contato",
+        "nao me incomode",
+        "não me incomode",
+        "nao perturbe",
+        "não perturbe"
+      ],
+      "keywords": [
+        "cancela",
+        "cancelar",
+        "remover",
+        "remove",
+        "remova",
+        "excluir",
+        "exclui",
+        "apagar",
+        "apaga",
+        "bloquear",
+        "bloqueia",
+        "chega",
+        "basta"
+      ],
+      "regex": [
+        "\\bpare\\s+de\\s+(me\\s+)?(enviar|mandar)(\\s+mensagens?)?\\b",
+        "\\bpara\\s+com\\s+(isso|essas\\s+mensagens?)\\b",
+        "\\bna[oã]\\s+me\\s+(chame|ligue|incomode|perturbe|contate|contacte|mande|envie)\\b",
+        "\\b(remove|remova|exclu(i|a|ir)|apaga(r)?)\\s+(meu\\s+|o\\s+meu\\s+)?(n[uú]mero|contato)\\b",
+        "\\bna[oã]\\s+quero\\s+(mais\\s+)?(mensagens?|receber)\\b"
+      ]
+    },
+    "en": {
+      "phrases": [
+        "do not contact",
+        "don't contact me",
+        "stop messaging me",
+        "stop sending messages",
+        "no more messages",
+        "remove my number",
+        "delete my number",
+        "take me off the list",
+        "take me off your list",
+        "do not message me"
+      ],
+      "keywords": [
+        "stop",
+        "unsubscribe",
+        "cancel",
+        "remove",
+        "block"
+      ],
+      "regex": [
+        "\\bdo\\s*not\\s*(contact|message)\\b",
+        "\\bstop\\s*(messag(e|ing)|sending)\\b",
+        "\\b(remove|delete|take)\\s+my\\s+number\\b"
+      ]
+    },
+    "es": {
+      "phrases": [
+        "no me contactes",
+        "no me escribas mas",
+        "no me escribas más",
+        "deja de enviar",
+        "deja de mandarme",
+        "no mas mensajes",
+        "no más mensajes",
+        "eliminar mi numero",
+        "eliminar mi número",
+        "borrar mi contacto",
+        "quitarme de la lista"
+      ],
+      "keywords": [
+        "alto",
+        "basta",
+        "cancelar",
+        "eliminar",
+        "borrar",
+        "quitar"
+      ],
+      "regex": [
+        "\\bno\\s*me\\s*(contactes|escribas)\\b",
+        "\\bdeja\\s*de\\s*(enviar|mandar(me)?)\\b",
+        "\\b(no\\s*m[aá]s\\s*mensajes)\\b",
+        "\\b(eliminar|borrar)\\s*mi\\s*(n[uú]mero|contacto)\\b"
+      ]
+    }
+  },
+  "risk_terms": [
+    "golpe",
+    "fraude",
+    "crime",
+    "policia",
+    "polícia",
+    "vou denunciar",
+    "denunciar",
+    "denuncia",
+    "advogado",
+    "processo",
+    "procon",
+    "anpd",
+    "scam",
+    "spam",
+    "mensagem automatica",
+    "mensagens automaticas",
+    "mensagem automática",
+    "mensagens automáticas",
+    "bot",
+    "robo",
+    "robô",
+    "funil",
+    "phishing"
+  ]
+}

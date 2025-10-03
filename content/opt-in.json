@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "config": {
+    "case_insensitive": true,
+    "accent_insensitive": true,
+    "strip_urls": true,
+    "strip_emojis": true,
+    "collapse_whitespace": true,
+    "trim": true
+  },
+  "match_if_any": ["phrases", "keywords", "regex"],
+  "exceptions": {
+    "ambiguous_single_tokens": ["ok", "blz", "beleza", "certo", "ta", "tá", "sim", "yeah", "yep", "aham", "uhum", "👍", "👎"],
+    "notes": [
+      "Tokens acima, sozinhos, não devem contar como retomada.",
+      "Frases curtas explícitas como 'bora', 'segue' e 'vamos' PODEM contar isoladamente (já estão em keywords)."
+    ]
+  },
+  "allowlists": {
+    "pt": {
+      "phrases": [
+        "pode continuar",
+        "pode mandar",
+        "pode seguir",
+        "pode prosseguir",
+        "pode enviar",
+        "pode ir",
+        "pode tocar",
+        "pode chamar",
+        "segue ai",
+        "segue aí",
+        "segue o jogo",
+        "manda ver",
+        "manda ai",
+        "manda aí",
+        "pode sim continuar",
+        "pode sim mandar",
+        "vamos continuar",
+        "vamos seguir",
+        "bora continuar",
+        "bora seguir",
+        "vamo nessa",
+        "vamos nessa",
+        "vamos em frente",
+        "segue"
+      ],
+      "keywords": [
+        "bora",
+        "vamos",
+        "segue"
+      ],
+      "regex": [
+        "\\bpode\\s+(continuar|mandar|seguir|prosseguir|enviar)\\b",
+        "\\b(bora|vamos)\\s+(continuar|seguir|prosseguir|em\\s+frente|nessa)\\b",
+        "\\b(segue|manda)\\s+(a[ií])?\\b",
+        "\\bsegue\\s+o\\s+jogo\\b",
+        "\\bmanda\\s+ver\\b",
+        "\\bpode\\s+sim(\\s+(continuar|mandar|seguir|prosseguir))?\\b"
+      ]
+    },
+    "en": {
+      "phrases": [
+        "you can continue",
+        "go ahead",
+        "you may continue",
+        "keep going",
+        "carry on",
+        "please continue",
+        "you can send",
+        "send it",
+        "send away",
+        "go on"
+      ],
+      "keywords": [
+        "continue",
+        "proceed"
+      ],
+      "regex": [
+        "\\b(go\\s*ahead|go\\s*on)\\b",
+        "\\b(you\\s*(can|may)\\s*)?(continue|proceed|keep\\s*going|carry\\s*on)\\b",
+        "\\bsend\\s*(it|away)\\b"
+      ]
+    },
+    "es": {
+      "phrases": [
+        "puedes continuar",
+        "podés continuar",
+        "puedes seguir",
+        "sigamos",
+        "vamos a seguir",
+        "vamos a continuar",
+        "dale seguimos",
+        "puedes mandar",
+        "manda nomas",
+        "manda no mas",
+        "mandame",
+        "envíame",
+        "envia nomas",
+        "sigue"
+      ],
+      "keywords": [
+        "vamos",
+        "dale",
+        "sigue"
+      ],
+      "regex": [
+        "\\b(puedes|pod[ée]s)\\s+(continuar|seguir|mandar|enviar)\\b",
+        "\\b(vamos)\\s+(a\\s+)?(seguir|continuar)\\b",
+        "\\b(sigue|sigamos)\\b",
+        "\\bmanda(r|\\s+no\\s*m[aá]s|\\s*nom[aá]s)?\\b",
+        "\\benv[ií]a(me)?\\b"
+      ]
+    }
+  }
+}
