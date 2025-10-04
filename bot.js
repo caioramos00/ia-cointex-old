@@ -326,13 +326,33 @@ function truncate(s, n = 600) {
 }
 
 function extractTextForLog(data) {
-    return (
-        (typeof data?.output_text === 'string' && data.output_text) ||
-        (typeof data?.output?.[0]?.content?.[0]?.text === 'string' && data.output[0].content[0].text) ||
-        (typeof data?.choices?.[0]?.message?.content === 'string' && data.choices[0].message.content) ||
-        (typeof data?.result === 'string' && data.result) ||
-        (typeof data === 'string' ? data : JSON.stringify(data))
-    );
+    try {
+        // 1) Campo “convenience” se vier preenchido
+        if (typeof data?.output_text === 'string' && data.output_text.trim()) return data.output_text;
+
+        // 2) Novo Responses: varrer todos os blocos e pegar o 'output_text'
+        if (Array.isArray(data?.output)) {
+            for (const blk of data.output) {
+                if (blk?.type === 'message' && Array.isArray(blk.content)) {
+                    // prioriza o chunk de saída
+                    const out = blk.content.find(c => c?.type === 'output_text' && typeof c?.text === 'string' && c.text.trim());
+                    if (out) return out.text;
+                    // fallback: primeiro content com texto não-vazio
+                    const any = blk.content.find(c => typeof c?.text === 'string' && c.text.trim());
+                    if (any) return any.text;
+                }
+            }
+        }
+
+        // 3) Fallbacks antigos (chat.completions / result)
+        const cc = data?.choices?.[0]?.message?.content;
+        if (typeof cc === 'string' && cc.trim()) return cc;
+        if (typeof data?.result === 'string' && data.result.trim()) return data.result;
+
+        return '';
+    } catch {
+        return '';
+    }
 }
 
 function isSendStage(stage) { return /:send$/.test(String(stage || '')); }
@@ -387,6 +407,15 @@ async function finalizeOptOutBatchAtEnd(st) {
                     validateStatus: () => true
                 }
             );
+
+            if (r.status >= 200 && r.status < 300) {
+                const hasAny =
+                    (typeof r.data?.output_text === 'string' && r.data.output_text.trim()) ||
+                    (Array.isArray(r.data?.output) && r.data.output.some(b => b?.type === 'message' && Array.isArray(b.content) && b.content.some(c => typeof c?.text === 'string' && c.text.trim())));
+                if (!hasAny) {
+                    console.log(`[OPTOUT][IA][RAW][200] ${truncate(JSON.stringify(r.data), 1200)}`);
+                }
+            }
 
             console.log(
                 `[${st.contato}] [OPTOUT][IA][DEBUG] http=${r.status}` +
