@@ -878,6 +878,13 @@ async function processarMensagensPendentes(contato) {
 
         if (st.etapa === 'abertura:wait') {
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
+
+            const _prev = st.etapa;
+            st.etapa = 'interesse:send';
+            console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+        }
+
+        if (st.etapa === 'interesse:send') {
             const interessePath = path.join(__dirname, 'content', 'interesse.json');
             let interesseData = null;
             const loadInteresse = () => {
@@ -887,15 +894,35 @@ async function processarMensagensPendentes(contato) {
                 return interesseData;
             };
             const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
-            const composeInteresseMsg = () => { const c = loadInteresse(); const g1 = pick(c?.msg?.g1); const g2 = pick(c?.msg?.g2); const g3 = pick(c?.msg?.g3); const g4 = pick(c?.msg?.g4); const g5 = pick(c?.msg?.g5); return `${[g1, g2].filter(Boolean).join(', ')}... ${[g3, g4, g5].filter(Boolean).join(', ')}`.replace(/\s+,/g, ','); };
+            const composeInteresseMsg = () => {
+                const c = loadInteresse();
+                const g1 = pick(c?.msg?.g1);
+                const g2 = pick(c?.msg?.g2);
+                const g3 = pick(c?.msg?.g3);
+                const g4 = pick(c?.msg?.g4);
+                const g5 = pick(c?.msg?.g5);
+                return `${[g1, g2].filter(Boolean).join(', ')}... ${[g3, g4, g5].filter(Boolean).join(', ')}`.replace(/\s+,/g, ',');
+            };
 
             const mi = chooseUnique(composeInteresseMsg, st) || composeInteresseMsg();
+
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-            if (mi) await sendMessage(st.contato, mi);
+            if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-pre-single' };
+
+            let r = { ok: true };
+            if (mi) r = await sendMessage(st.contato, mi);
+
+            if (!r?.ok) {
+                st.mensagensPendentes = [];
+                return { ok: true, paused: r?.reason || 'send-skipped' };
+            }
+
+            if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-post-single' };
 
             st.mensagensPendentes = [];
             st.mensagensDesdeSolicitacao = [];
             st.lastClassifiedIdx.interesse = 0;
+
             const _prev = st.etapa;
             st.etapa = 'interesse:wait';
             console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
@@ -1645,11 +1672,13 @@ async function processarMensagensPendentes(contato) {
                         return { ok: true, classe: 'aguardando_imagem' };
                     }
                     if (!st.saquePediuPrint) {
-                        const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
-                        const composeMsgPrint = () => pick(saqueMsgPrint);
                         const m = chooseUnique(composeMsgPrint, st) || composeMsgPrint();
                         await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-                        if (m) await sendMessage(st.contato, m);
+                        let r = { ok: true };
+                        if (m) r = await sendMessage(st.contato, m);
+
+                        if (!r?.ok) return { ok: true, paused: r?.reason || 'send-skipped' };
+
                         st.saquePediuPrint = true;
                         return { ok: true, classe: 'relevante' };
                     }
@@ -1989,9 +2018,9 @@ async function sendImage(contato, imageUrl, caption, opts = {}) {
 }
 
 const KNOWN_ETAPAS = new Set([
-    'none',
     'abertura:send',
     'abertura:wait',
+    'interesse:send',
     'interesse:wait',
     'instrucoes:send',
     'instrucoes:wait',
