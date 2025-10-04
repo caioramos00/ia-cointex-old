@@ -378,6 +378,13 @@ async function finalizeOptOutBatchAtEnd(st) {
                 { model: 'gpt-5', input: structuredPrompt, max_output_tokens: maxTok, reasoning: { effort: 'low' } },
                 { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 15000, validateStatus: () => true }
             );
+            console.log(
+                `[${st.contato}] [OPTOUT][IA][DEBUG] http=${r.status}` +
+                ` output_text="${truncate(r.data?.output_text, 300)}"` +
+                ` content0="${truncate(JSON.stringify(r.data?.output?.[0]?.content || ''), 300)}"` +
+                ` choices0="${truncate(r.data?.choices?.[0]?.message?.content || '', 300)}"` +
+                ` result="${truncate(r.data?.result || '', 300)}"`
+            );
             let rawText = extractTextForLog(r.data) || '';
             rawText = String(rawText).trim();
             let picked = null;
@@ -391,6 +398,12 @@ async function finalizeOptOutBatchAtEnd(st) {
             return { status: r.status, picked };
         } catch (e) {
             console.log(`[${st.contato}] [OPTOUT][IA] erro="${e?.message || e}"`);
+            if (e?.response) {
+                const d = e.response.data;
+                console.log(
+                    `[${st.contato}] [OPTOUT][IA][DEBUG] http=${e.response.status} body="${truncate(typeof d === 'string' ? d : JSON.stringify(d), 400)}"`
+                );
+            }
             return { status: 0, picked: null };
         }
     };
