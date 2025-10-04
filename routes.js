@@ -512,6 +512,17 @@ function setupRoutes(
 
     return res.status(200).json({ ok: true });
   });
+
+  app.post('/webhook/confirm-image-sent', express.json(), async (req, res) => {
+    const { contact, status, image_url } = req.body;
+    if (status === 'sent') {
+      const contato = normalizeContato(contact);
+      console.log(`[${contato}] Imagem confirmada enviada via ManyChat: ${image_url}`);
+      await processarMensagensPendentes(contato);
+    }
+    res.status(200).json({ ok: true });
+  });
+
   app.post('/admin/set-etapa', checkAuth, express.json(), express.urlencoded({ extended: true }), async (req, res) => {
     try {
       const contato = (req.body.contato || req.query.contato || '').replace(/\D/g, '');
