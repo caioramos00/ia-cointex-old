@@ -378,26 +378,16 @@ async function finalizeOptOutBatchAtEnd(st) {
                 {
                     model: 'gpt-5',
                     input: structuredPrompt,
-                    temperature: 0,
                     max_output_tokens: maxTok,
-                    response_format: {
-                        type: "json_schema",
-                        json_schema: {
-                            name: "opt_out_label",
-                            schema: {
-                                type: "object",
-                                additionalProperties: false,
-                                properties: {
-                                    label: { type: "string", enum: ["OPTOUT", "CONTINUAR"] }
-                                },
-                                required: ["label"]
-                            }
-                        }
-                    },
                     reasoning: { effort: 'low' }
                 },
-                { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 15000, validateStatus: () => true }
+                {
+                    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                    timeout: 15000,
+                    validateStatus: () => true
+                }
             );
+
             console.log(
                 `[${st.contato}] [OPTOUT][IA][DEBUG] http=${r.status}` +
                 ` output_text="${truncate(r.data?.output_text, 300)}"` +
@@ -405,32 +395,36 @@ async function finalizeOptOutBatchAtEnd(st) {
                 ` choices0="${truncate(r.data?.choices?.[0]?.message?.content || '', 300)}"` +
                 ` result="${truncate(r.data?.result || '', 300)}"`
             );
+
+            // opcional: log bruto quando der 4xx/5xx
+            if (!(r.status >= 200 && r.status < 300)) {
+                console.log(`[OPTOUT][IA][RAW] ${truncate(JSON.stringify(r.data), 800)}`);
+            }
+
+            // === mesma estratégia de parsing usada nas :wait ===
             let rawText = extractTextForLog(r.data) || '';
             rawText = String(rawText).trim();
-            let picked = r.data?.output?.[0]?.content?.find?.(c => c.type === 'output_json')?.json?.label || null;
-            if (!picked) {
-                let rawText = extractTextForLog(r.data) || '';
-                rawText = String(rawText).trim();
-                try { picked = JSON.parse(rawText)?.label || null; } catch { }
-                if (!picked) picked = pickLabelFromResponseData(r.data, ['OPTOUT', 'CONTINUAR']);
-            }
-            picked = picked ? String(picked).toUpperCase() : null;
-            console.log(`[OPTOUT][IA][RAW] ${truncate(JSON.stringify(r.data), 800)}`);
-            try { const parsed = JSON.parse(rawText); picked = String(parsed?.label || '').toUpperCase(); }
-            catch {
+
+            let picked = null;
+            try {
+                const parsed = JSON.parse(rawText);
+                picked = parsed?.label ? String(parsed.label).toUpperCase() : null;
+            } catch {
                 const m = /"label"\s*:\s*"([^"]+)"/i.exec(rawText);
                 if (m && m[1]) picked = String(m[1]).toUpperCase();
             }
             if (!picked) picked = String(pickLabelFromResponseData(r.data, ['OPTOUT', 'CONTINUAR']) || '').toUpperCase();
-            console.log(`[${st.contato}] [OPTOUT][BATCH->IA] stage=${st.etapa} size=${size} picked=${picked || 'null'} sample="${truncate(joined, 200)}"`);
+
+            console.log(
+                `[${st.contato}] [OPTOUT][BATCH->IA] stage=${st.etapa} size=${size} picked=${picked || 'null'} sample="${truncate(joined, 200)}"`
+            );
+
             return { status: r.status, picked };
         } catch (e) {
             console.log(`[${st.contato}] [OPTOUT][IA] erro="${e?.message || e}"`);
             if (e?.response) {
                 const d = e.response.data;
-                console.log(
-                    `[${st.contato}] [OPTOUT][IA][DEBUG] http=${e.response.status} body="${truncate(typeof d === 'string' ? d : JSON.stringify(d), 400)}"`
-                );
+                console.log(`[${st.contato}] [OPTOUT][IA][DEBUG] http=${e.response.status} body="${truncate(typeof d === 'string' ? d : JSON.stringify(d), 400)}"`);
             }
             return { status: 0, picked: null };
         }
