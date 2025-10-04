@@ -358,6 +358,13 @@ function enterStageOptOutResetIfNeeded(st) {
 }
 
 async function finalizeOptOutBatchAtEnd(st) {
+    await preflightOptOut(st);
+    for (let i = 0; i < 2; i++) {
+        const seen = st._optoutSeenIdx;
+        await delay(50);
+        await preflightOptOut(st);
+        if (st._optoutSeenIdx === seen) break;
+    }
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey || typeof promptClassificaOptOut !== 'function') {
         st.optoutBuffer = [];
@@ -1008,7 +1015,7 @@ async function processarMensagensPendentes(contato) {
                     st.reoptinBuffer = [];
                     st.reoptinCount = (st.reoptinCount || 0) + 1;
                     st.mensagensDesdeSolicitacao = [];
-                    st._reoptinInitTs = 0; 
+                    st._reoptinInitTs = 0;
 
                     const iMsgs = loadOptInMsgs();
                     const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
@@ -1031,7 +1038,7 @@ async function processarMensagensPendentes(contato) {
                         st.etapa = 'encerrado:wait';
                         st.reoptinBuffer = [];
                         st.reoptinActive = false;
-                        st._reoptinInitTs = 0; 
+                        st._reoptinInitTs = 0;
                         return { ok: true, paused: true, ended: true };
                     }
                     return { ok: true, paused: true };
