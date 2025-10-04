@@ -80,103 +80,64 @@ const promptClassificaRelevancia = (mensagensTexto, temMidia) => `
 
 function promptClassificaOptOut(texto) {
   return `
-Você é um CLASSIFICADOR BINÁRIO. Decida se a mensagem do usuário é um pedido explícito para PARAR de receber mensagens. 
-Responda **somente** com uma das palavras abaixo (sem pontuação, sem frases, sem espaços extras).
-Priorize segurança: em caso de dúvida ou conflito entre sinais, devolva **OPTOUT**.
+Você é um CLASSIFICADOR BINÁRIO de opt-out.
 
-REGRAS DE AVALIAÇÃO (siga em ordem):
-1) Normalize mentalmente: minúsculas, sem acentos, ignore emojis, hashtags, URLs e ruído.
-2) Se houver um pedido explícito para parar, bloquear, excluir, remover, cancelar, sair, **ou** menções de denúncia/polícia/golpe/crime → **OPTOUT**.
-3) Se for apenas recusa momentânea (ex.: “agora não”, “depois”), dúvida, perguntas gerais, silêncio, mídia sem texto → **CONTINUAR**.
-4) Em mensagens com múltiplas frases, foque na intenção dominante do **trecho mais recente e assertivo**.
-5) Se houver tanto aceite quanto rejeição/ameaça (“vou querer sim … é golpe / polícia”), a rejeição prevalece → **OPTOUT**.
-6) Considere variações, gírias e abreviações em PT/EN/ES (ex.: “pare”, “para”, “parar”, “remove”, “unsubscribe”, “stop”, “block”, “spam”).
-7) Não explique nada. **Apenas o rótulo**.
+Entrada:
+- Você receberá UM OU MAIS trechos de mensagens do usuário, na ordem em que chegaram, separados por " | ".
+- Considere o CONJUNTO como um todo, dando PESO MAIOR às mensagens MAIS RECENTES.
 
-Saídas válidas (uma palavra):
-- OPTOUT  → quando houver pedido claro para parar, bloquear, remover, cancelar, sair, "não me chame", "não quero", "pare", "stop", "unsubscribe", "remova", "me tira", "excluir", etc., inclusive variações em pt/en, com gírias e abreviações; também quando citar “golpe”, “polícia”, “denunciar”, “crime”, “processo”, “advogado”, etc.
-- CONTINUAR → quando for só recusa momentânea ("agora não", "talvez depois"), dúvida, silêncio, ou qualquer outra coisa que NÃO seja pedido claro de parar.
+Objetivo:
+- Decidir se há um pedido explícito para PARAR de receber mensagens (opt-out).
 
-Exemplos (→ saída):
-"não quero" → OPTOUT
-"não quero mais" → OPTOUT
-"não quero mais mensagem" → OPTOUT
-"pare de me mandar msg" → OPTOUT
-"remove meu número" → OPTOUT
-"stop" → OPTOUT
-"apaga" → OPTOUT
-"unsubscribe" → OPTOUT
-"não dá ruim pra mim?" → OPTOUT
-"tenho medo" → OPTOUT
-"to com medo" → OPTOUT
-"medo" → OPTOUT
-"vai dar ruim pra mim" → OPTOUT
-"polícia" → OPTOUT
-"chamar a polícia" → OPTOUT
-"federal" → OPTOUT
-"civil" → OPTOUT
-"funil" → OPTOUT
-"clonou" → OPTOUT
-"bot" → OPTOUT
-"mensagem automática" → OPTOUT
-"denunciar" → OPTOUT
-"denúncia" → OPTOUT
-"crime" → OPTOUT
-"isso é errado" → OPTOUT
-"não me chame mais" → OPTOUT
-"não vou fazer isso" → OPTOUT
-"to esperando até hoje" → OPTOUT
-"de novo isso?" → OPTOUT
-"você de novo?" → OPTOUT
-"golpe" → OPTOUT
-"acho que não vou querer mais" → OPTOUT
-"acho que não quero mais" → OPTOUT
-"não quero mais não" → OPTOUT
-"já caí nesse golpe" → OPTOUT
-"não posso agora" → CONTINUAR
-"depois eu vejo" → CONTINUAR
-"quem é?" → CONTINUAR
-"não" (sem pedir para parar) → CONTINUAR
+Princípios (em ordem):
+1) Normalize mentalmente: minúsculas, sem acentos; ignore emojis/URLs/hashtags/ruído.
+2) Se houver pedido para parar, bloquear, excluir, remover, cancelar, sair; ou menções de denúncia/polícia/golpe/fraude/crime/advogado → OPTOUT.
+3) Recusa momentânea, dúvida, silêncio, mídia sem texto → CONTINUAR.
+4) Se houver conflito, prevalece a rejeição/ameaça mais RECENTE → OPTOUT.
+5) Considere variações/gírias/abreviações em PT/EN/ES (ex.: pare/para/remova/unsubscribe/stop/block/spam/etc.).
+6) Segurança primeiro: EM CASO DE DÚVIDA real, devolva OPTOUT.
 
-Exemplos adicionais (reforço; não substituem os anteriores):
-"para com isso" → OPTOUT
-"me tira da lista" → OPTOUT
-"excluir meu contato" → OPTOUT
-"bloquearam?" (apenas pergunta) → CONTINUAR
-"talvez depois" → CONTINUAR
-"tá me spamando" → OPTOUT
-"isso é fraude" → OPTOUT
-"vou denunciar" → OPTOUT
-"vou falar com meu advogado" → OPTOUT
-"não manda mais nada" → OPTOUT
-"só curiosidade, como funciona?" → CONTINUAR
+FORMATO DE SAÍDA (obrigatório, somente JSON):
+{"label":"OPTOUT"} ou {"label":"CONTINUAR"}
 
-Texto do usuário:
+Exemplos rápidos (→ saída):
+"pare" → {"label":"OPTOUT"}
+"stop" → {"label":"OPTOUT"}
+"me tira da lista" → {"label":"OPTOUT"}
+"isso é golpe" → {"label":"OPTOUT"}
+"agora não" → {"label":"CONTINUAR"}
+"depois eu vejo" → {"label":"CONTINUAR"}
+
+Mensagens do usuário (separadas por " | "):
 ${texto}
-Saída:`;
+
+Saída apenas em JSON:`;
 }
 
 function promptClassificaReoptin(texto) {
   return `
-Tarefa: Classifique se a última mensagem do usuário indica RETOMAR/CONTINUAR a conversa.
+Tarefa: Dizer se o usuário está RETOMANDO/ACEITANDO continuar a conversa (re-opt-in).
 
-Responda APENAS com UMA palavra:
-- REOPTIN  → quando houver intenção clara de continuar/retomar/aceitar (“bora”, “pode continuar”, “pode seguir”, “pode mandar”, “mudei de ideia”, “segue”, “vamos”, “manda”, “ok pode mandar”, “retoma”, “pode falar”, “pode prosseguir”, “quero sim”, “sim”, “fechou”, “vamo”, “manda aí”, “pode ir”, “toca”, “vai”, “continua”, “voltei”, “pode enviar”, “prossegue”, “segue o baile”, “marcha”, “tô dentro”, “topo”, “aceito”, “faço sim”, beleza então”, etc.). Considere variações/gírias/erros.
-- CONTINUAR → qualquer outra coisa que NÃO seja um convite claro para retomar (respostas neutras como “ok”, “entendi”, “?”, “hum” sem contexto de aceite; dúvidas; recusas).
+Entrada:
+- Você receberá ATÉ 3 mensagens, separadas por " | ", na ordem em que chegaram.
+- Dê peso MAIOR à MENSAGEM MAIS RECENTE.
 
-Exemplos (→ saída):
-"bora" → REOPTIN
-"pode continuar" → REOPTIN
-"pode mandar" → REOPTIN
-"segue" → REOPTIN
-"vamos" → REOPTIN
-"ok" → CONTINUAR
-"?" → CONTINUAR
-"talvez" → CONTINUAR
+Rótulos:
+- optin      → há intenção CLARA de continuar/retomar/aceitar (ex.: "bora", "pode continuar", "pode mandar", "segue", "vamos", "manda", "ok pode mandar", "pode falar", "pode prosseguir", "quero sim", "sim" quando indica aceite, "fechou", "tô dentro", "topo", "aceito", "retoma", "prossegue", "pode enviar", "continua", etc.). Considere variações/gírias/erros.
+- nao_optin  → qualquer outra coisa (neutra, dúvida, recusa, silêncio). "ok", "blz", "entendi" SOZINHOS não contam como aceite.
 
-Texto do usuário:
+Regras:
+1) Avalie o conjunto; prevalece a intenção da ÚLTIMA mensagem quando houver conflito.
+2) Seja conservador: só marque optin se estiver CLARO.
+3) Responda SOMENTE em JSON válido.
+
+FORMATO DE SAÍDA:
+{"label":"optin"} ou {"label":"nao_optin"}
+
+Mensagens do usuário (separadas por " | "):
 ${texto}
-Saída:`;
+
+Saída apenas em JSON:`;
 }
 
 module.exports = { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, promptClassificaOptOut, promptClassificaReoptin };

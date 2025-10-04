@@ -6,7 +6,14 @@ const axios = require('axios');
 const estadoContatos = require('./state.js');
 const { getActiveTransport } = require('./lib/transport');
 const { getContatoByPhone, setManychatSubscriberId } = require('./db');
-const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia } = require('./prompts');
+const {
+    promptClassificaAceite,
+    promptClassificaAcesso,
+    promptClassificaConfirmacao,
+    promptClassificaRelevancia,
+    promptClassificaOptOut,
+    promptClassificaReoptin
+} = require('./prompts');
 
 let log = console;
 
@@ -193,51 +200,81 @@ function isOptIn(textRaw) {
 async function preflightOptOut(st) {
     if (!Array.isArray(st.mensagensPendentes) || !st.mensagensPendentes.length) return false;
 
-    const hadOptOut = st.mensagensPendentes.some(m => isOptOut(m?.texto || ''));
-    if (!hadOptOut) return false;
+    const pend = st.mensagensPendentes;
+    let hardMatched = false;
+    let hardText = '';
 
-    st.mensagensPendentes = [];
-    st.mensagensDesdeSolicitacao = [];
-    st.optOutCount = (st.optOutCount || 0) + 1;
-    st.reoptinActive = false;
-    st.reoptinLotsTried = 0;
-    st.reoptinBuffer = [];
-    if (st.optOutCount >= 3) {
-        st.permanentlyBlocked = true;
-        if (st.etapa !== 'encerrado:wait') {
-            const _prev = st.etapa;
-            st.etapa = 'encerrado:wait';
-            console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+    // 1) Verificação hard-coded por mensagem (sempre ligada)
+    for (const m of pend) {
+        const t = safeStr(m?.texto || '');
+        if (!t) continue;
+        const res = isOptOut(t);
+        console.log(`[${st.contato}] [OPTOUT][HARD] check="${truncate(t, 140)}" -> ${res ? 'MATCH' : 'nope'}`);
+        if (res) { hardMatched = true; hardText = t; break; }
+    }
+
+    // 2) Se deu match hard-coded, aplica bloqueio/resposta
+    if (hardMatched) {
+        console.log(`[${st.contato}] [OPTOUT] HARD-MATCH acionado. texto="${truncate(hardText, 140)}"`);
+        st.mensagensPendentes = [];
+        st.mensagensDesdeSolicitacao = [];
+        st.optOutCount = (st.optOutCount || 0) + 1;
+        st.reoptinActive = false;
+        st.reoptinLotsTried = 0;
+        st.reoptinBuffer = [];
+        st.optoutBuffer = [];
+        st.optoutLotsTried = 0;
+
+        if (st.optOutCount >= 3) {
+            st.permanentlyBlocked = true;
+            if (st.etapa !== 'encerrado:wait') {
+                const _prev = st.etapa;
+                st.etapa = 'encerrado:wait';
+                console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+            }
+        }
+
+        const oMsgs = loadOptOutMsgs();
+        const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
+        let texto = '';
+        if (st.optOutCount === 1) {
+            const p = oMsgs?.msg1 || {};
+            texto = [pick(p.msg1b1), pick(p.msg1b2)].filter(Boolean).join(', ') + (pick(p.msg1b3) ? `. ${pick(p.msg1b3)}` : '');
+        } else if (st.optOutCount === 2) {
+            const p = oMsgs?.msg2 || {};
+            texto =
+                [pick(p.msg2b1), pick(p.msg2b2)].filter(Boolean).join(', ') +
+                (pick(p.msg2b3) ? ` ${pick(p.msg2b3)}` : '') +
+                (pick(p.msg2b4) ? `. ${pick(p.msg2b4)}` : '') +
+                (pick(p.msg2b5) ? `, ${pick(p.msg2b5)}` : '');
+        }
+        if (texto) {
+            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+            await sendMessage(st.contato, texto, { force: true });
+        }
+        return true;
+    }
+
+    // 3) Sem hard-match: acumula no buffer SOMENTE se etapa atual for ":send"
+    if (isSendStage(st.etapa)) {
+        for (const m of pend) {
+            const t = safeStr(m?.texto || '').trim();
+            if (t) {
+                st.optoutBuffer.push(t);
+                console.log(`[${st.contato}] [OPTOUT][BATCH][PUSH] stage=${st.etapa} size=${st.optoutBuffer.length} msg="${truncate(t, 140)}"`);
+            }
+        }
+    } else {
+        // em etapas :wait não acumulamos lote (apenas hard-coded)
+        for (const m of pend) {
+            const t = safeStr(m?.texto || '').trim();
+            if (t) {
+                console.log(`[${st.contato}] [OPTOUT][WAIT] ignorando lote; só hard-coded. msg="${truncate(t, 140)}"`);
+            }
         }
     }
-
-    const oMsgs = loadOptOutMsgs();
-    const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
-    let texto = '';
-    if (st.optOutCount === 1) {
-        const p = oMsgs?.msg1 || {};
-        const b1 = pick(p.msg1b1);
-        const b2 = pick(p.msg1b2);
-        const b3 = pick(p.msg1b3);
-        texto = [b1, b2].filter(Boolean).join(', ') + (b3 ? `. ${b3}` : '');
-    } else if (st.optOutCount === 2) {
-        const p = oMsgs?.msg2 || {};
-        const b1 = pick(p.msg2b1);
-        const b2 = pick(p.msg2b2);
-        const b3 = pick(p.msg2b3);
-        const b4 = pick(p.msg2b4);
-        const b5 = pick(p.msg2b5);
-        texto =
-            [b1, b2].filter(Boolean).join(', ') +
-            (b3 ? ` ${b3}` : '') +
-            (b4 ? `. ${b4}` : '') +
-            (b5 ? `, ${b5}` : '');
-    }
-    if (texto) {
-        await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-        await sendMessage(st.contato, texto, { force: true });
-    }
-    return true;
+    // Quem chamou decide o fluxo e quando finalizar o lote (finalizeOptOutBatchAtEnd)
+    return false;
 }
 
 function randomInt(min, max) {
@@ -284,6 +321,120 @@ function extractTextForLog(data) {
         (typeof data?.result === 'string' && data.result) ||
         (typeof data === 'string' ? data : JSON.stringify(data))
     );
+}
+
+function isSendStage(stage) { return /:send$/.test(String(stage || '')); }
+
+function enterSendStageOptOutResetIfNeeded(st) {
+    if (!isSendStage(st.etapa)) return;
+    if (st.optoutBatchStage !== st.etapa) {
+        st.optoutBatchStage = st.etapa;
+        st.optoutBuffer = [];
+        st.optoutLotsTried = 0;
+        console.log(`[${st.contato}] [OPTOUT][BATCH][RESET] stage=${st.etapa}`);
+    }
+}
+
+async function finalizeOptOutBatchAtEnd(st) {
+    // Só roda no final da etapa :send, antes de trocar p/ :wait
+    if (!isSendStage(st.etapa)) return false;
+
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey || typeof promptClassificaOptOut !== 'function') {
+        st.optoutBuffer = [];
+        return false;
+    }
+
+    // 1 chamada por etapa de envio
+    if ((st.optoutLotsTried || 0) >= 1) {
+        st.optoutBuffer = [];
+        return false;
+    }
+
+    const size = Array.isArray(st.optoutBuffer) ? st.optoutBuffer.length : 0;
+    if (size === 0) {
+        return false;
+    }
+
+    const joined = st.optoutBuffer.join(' | ');
+    const structuredPrompt =
+        `${promptClassificaOptOut(joined)}\n\n` +
+        `Output only valid JSON as {"label":"OPTOUT"} or {"label":"CONTINUAR"}`;
+
+    const ask = async (maxTok) => {
+        try {
+            const r = await axios.post(
+                'https://api.openai.com/v1/responses',
+                { model: 'gpt-5', input: structuredPrompt, max_output_tokens: maxTok, reasoning: { effort: 'low' } },
+                { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 15000, validateStatus: () => true }
+            );
+            let rawText = extractTextForLog(r.data) || '';
+            rawText = String(rawText).trim();
+            let picked = null;
+            try { const parsed = JSON.parse(rawText); picked = String(parsed?.label || '').toUpperCase(); }
+            catch {
+                const m = /"label"\s*:\s*"([^"]+)"/i.exec(rawText);
+                if (m && m[1]) picked = String(m[1]).toUpperCase();
+            }
+            if (!picked) picked = String(pickLabelFromResponseData(r.data, ['OPTOUT', 'CONTINUAR']) || '').toUpperCase();
+            console.log(`[${st.contato}] [OPTOUT][BATCH->IA] stage=${st.etapa} size=${size} picked=${picked || 'null'} sample="${truncate(joined, 200)}"`);
+            return { status: r.status, picked };
+        } catch (e) {
+            console.log(`[${st.contato}] [OPTOUT][IA] erro="${e?.message || e}"`);
+            return { status: 0, picked: null };
+        }
+    };
+
+    st.optoutLotsTried = 1;
+    let resp = await ask(64);
+    if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) resp = await ask(128);
+
+    // Zera buffer SEMPRE ao final da tentativa por etapa
+    st.optoutBuffer = [];
+
+    const aiOptOut = (resp.status >= 200 && resp.status < 300 && resp.picked === 'OPTOUT');
+
+    if (!aiOptOut) {
+        console.log(`[${st.contato}] [OPTOUT][IA] decisão=CONTINUAR (fim da etapa ${st.etapa})`);
+        return false;
+    }
+
+    // === Aplicar bloqueio e mensagens (mesmo fluxo do hard-coded) ===
+    st.mensagensPendentes = [];
+    st.mensagensDesdeSolicitacao = [];
+    st.optOutCount = (st.optOutCount || 0) + 1;
+    st.reoptinActive = false;
+    st.reoptinLotsTried = 0;
+    st.reoptinBuffer = [];
+    st.optoutLotsTried = 0;
+
+    if (st.optOutCount >= 3) {
+        st.permanentlyBlocked = true;
+        if (st.etapa !== 'encerrado:wait') {
+            const _prev = st.etapa;
+            st.etapa = 'encerrado:wait';
+            console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+        }
+    }
+
+    const oMsgs = loadOptOutMsgs();
+    const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
+    let texto = '';
+    if (st.optOutCount === 1) {
+        const p = oMsgs?.msg1 || {};
+        texto = [pick(p.msg1b1), pick(p.msg1b2)].filter(Boolean).join(', ') + (pick(p.msg1b3) ? `. ${pick(p.msg1b3)}` : '');
+    } else if (st.optOutCount === 2) {
+        const p = oMsgs?.msg2 || {};
+        texto = [pick(p.msg2b1), pick(p.msg2b2)].filter(Boolean).join(', ')
+            + (pick(p.msg2b3) ? ` ${pick(p.msg2b3)}` : '')
+            + (pick(p.msg2b4) ? `. ${pick(p.msg2b4)}` : '')
+            + (pick(p.msg2b5) ? `, ${pick(p.msg2b5)}` : '');
+    }
+    if (texto) {
+        await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+        await sendMessage(st.contato, texto, { force: true });
+    }
+    return true; // bloqueou
 }
 
 function ensureEstado(contato) {
@@ -338,7 +489,9 @@ function ensureEstado(contato) {
         if (!Array.isArray(st.reoptinBuffer)) st.reoptinBuffer = [];
         if (typeof st.reoptinCount !== 'number') st.reoptinCount = 0;
         if (!st.stageCursor || typeof st.stageCursor !== 'object') st.stageCursor = {};
-
+        if (typeof st.optoutLotsTried !== 'number') st.optoutLotsTried = 0;
+        if (!Array.isArray(st.optoutBuffer)) st.optoutBuffer = [];
+        if (!('optoutBatchStage' in st)) st.optoutBatchStage = null;
     }
     return estadoContatos[key];
 }
@@ -687,76 +840,83 @@ async function processarMensagensPendentes(contato) {
 
         if (st.optOutCount > 0 && !st.reoptinActive) {
             if (Array.isArray(st.mensagensPendentes) && st.mensagensPendentes.length) {
+                console.log(`[${st.contato}] [REOPTIN] pend=${st.mensagensPendentes.length} lotsTried=${st.reoptinLotsTried} buf=${st.reoptinBuffer.length}`);
+
                 let matched = false;
                 let matchedText = '';
+
+                // 1) Hard-coded (imediato)
                 for (const m of st.mensagensPendentes) {
                     const t = m?.texto || '';
                     if (!t) continue;
-                    if (isOptIn(t)) {
-                        matched = true;
-                        matchedText = t;
-                        break;
-                    }
+                    const hard = isOptIn(t);
+                    console.log(`[${st.contato}] [REOPTIN][HARD] check="${truncate(t, 140)}" -> ${hard ? 'MATCH' : 'nope'}`);
+                    if (hard) { matched = true; matchedText = t; }
+                    if (matched) break;
                 }
 
+                // 2) Se não houve hard, acumula e dispare IA de 3 em 3 mensagens, até 3 lotes
                 if (!matched) {
+                    const apiKey = process.env.OPENAI_API_KEY;
+                    const canIa = apiKey && typeof promptClassificaReoptin === 'function';
+
                     for (const m of st.mensagensPendentes) {
                         const t = safeStr(m?.texto || '').trim();
-                        if (t) st.reoptinBuffer.push(t);
-                    }
-                    st.mensagensPendentes = [];
+                        if (!t) continue;
+                        st.reoptinBuffer.push(t);
+                        console.log(`[${st.contato}] [REOPTIN][BATCH][PUSH] size=${st.reoptinBuffer.length} msg="${truncate(t, 140)}"`);
 
-                    let promptClassificaReoptin = null;
-                    try { ({ promptClassificaReoptin } = require('./prompts')); } catch (_) { }
+                        if (st.reoptinBuffer.length === 3 && st.reoptinLotsTried < 3 && canIa) {
+                            const joined = st.reoptinBuffer.join(' | ');
+                            const structuredPrompt =
+                                `${promptClassificaReoptin(joined)}\n\n` +
+                                `Output only valid JSON as {"label": "optin"} or {"label": "nao_optin"}`;
 
-                    const apiKey = process.env.OPENAI_API_KEY;
-                    const canAsk =
-                        apiKey &&
-                        typeof promptClassificaReoptin === 'function' &&
-                        st.reoptinBuffer.length >= 3 &&
-                        st.reoptinLotsTried < 3;
-
-                    if (canAsk) {
-                        const structuredPrompt =
-                            `${promptClassificaReoptin(st.reoptinBuffer.slice(-3))}\n\n` +
-                            `Output only valid JSON as {"label": "optin"} or {"label": "nao_optin"}`;
-
-                        const ask = async (maxTok) => {
-                            try {
-                                const r = await axios.post('https://api.openai.com/v1/responses', {
-                                    model: 'gpt-5',
-                                    input: structuredPrompt,
-                                    max_output_tokens: maxTok,
-                                    reasoning: { effort: 'low' }
-                                }, {
-                                    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-                                    timeout: 15000,
-                                    validateStatus: () => true
-                                });
-                                let rawText = extractTextForLog(r.data) || '';
-                                rawText = String(rawText).trim();
-                                let picked = null;
+                            const ask = async (maxTok) => {
                                 try {
-                                    const parsed = JSON.parse(rawText);
-                                    picked = String(parsed?.label || '').toLowerCase();
-                                } catch {
-                                    const m = /"label"\s*:\s*"([^"]+)"/i.exec(rawText);
-                                    if (m && m[1]) picked = m[1].toLowerCase();
+                                    const r = await axios.post('https://api.openai.com/v1/responses', {
+                                        model: 'gpt-5',
+                                        input: structuredPrompt,
+                                        max_output_tokens: maxTok,
+                                        reasoning: { effort: 'low' }
+                                    }, {
+                                        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                                        timeout: 15000,
+                                        validateStatus: () => true
+                                    });
+                                    let rawText = extractTextForLog(r.data) || '';
+                                    rawText = String(rawText).trim();
+                                    let picked = null;
+                                    try { const parsed = JSON.parse(rawText); picked = String(parsed?.label || '').toLowerCase(); }
+                                    catch {
+                                        const mm = /"label"\s*:\s*"([^"]+)"/i.exec(rawText);
+                                        if (mm && mm[1]) picked = mm[1].toLowerCase();
+                                    }
+                                    if (!picked) picked = pickLabelFromResponseData(r.data, ['optin', 'nao_optin']);
+                                    console.log(`[${st.contato}] [REOPTIN][BATCH->IA] try #${st.reoptinLotsTried + 1} size=3 picked=${picked || 'null'} sample="${truncate(joined, 200)}"`);
+                                    return picked || null;
+                                } catch (e) {
+                                    console.log(`[${st.contato}] [REOPTIN][IA] erro="${e?.message || e}"`);
+                                    return null;
                                 }
-                                if (!picked) picked = pickLabelFromResponseData(r.data, ['optin', 'nao_optin']);
-                                return picked || null;
-                            } catch { return null; }
-                        };
+                            };
 
-                        let out = await ask(48);
-                        if (!out) out = await ask(128);
-                        const tail = st.reoptinBuffer[st.reoptinBuffer.length - 1] || '';
-                        st.reoptinLotsTried += 1;
-                        matched = (out === 'optin');
-                        if (matched) matchedText = tail;
-                        st.reoptinBuffer = [];
+                            let out = await ask(48);
+                            if (!out) out = await ask(128);
+
+                            st.reoptinLotsTried += 1;
+                            matched = (out === 'optin');
+                            matchedText = matched ? (st.reoptinBuffer[st.reoptinBuffer.length - 1] || '') : '';
+                            st.reoptinBuffer = []; // limpa o lote SEMPRE entre tentativas
+
+                            if (matched) break;
+                            if (st.reoptinLotsTried >= 3) break; // atingiu o limite
+                        }
                     }
                 }
+
+                // 3) Decisão
+                st.mensagensPendentes = [];
 
                 if (matched) {
                     console.log(`[${st.contato}] re-opt-in DETECTADO: "${truncate(matchedText, 140)}"`);
@@ -764,7 +924,6 @@ async function processarMensagensPendentes(contato) {
                     st.reoptinLotsTried = 0;
                     st.reoptinBuffer = [];
                     st.reoptinCount = (st.reoptinCount || 0) + 1;
-                    st.mensagensPendentes = [];
                     st.mensagensDesdeSolicitacao = [];
 
                     const iMsgs = loadOptInMsgs();
@@ -782,12 +941,21 @@ async function processarMensagensPendentes(contato) {
                         await sendMessage(st.contato, texto, { force: true });
                     }
                 } else {
+                    // Se chegou a 3 tentativas e não detectou -> encerrar e parar análises
+                    if (st.reoptinLotsTried >= 3) {
+                        console.log(`[${st.contato}] [REOPTIN][STOP] 3 lotes sem opt-in -> encerrado:wait`);
+                        st.etapa = 'encerrado:wait';
+                        st.reoptinBuffer = [];
+                        st.reoptinActive = false;
+                        return { ok: true, paused: true, ended: true };
+                    }
                     return { ok: true, paused: true };
                 }
             }
         }
 
         if (st.etapa === 'abertura:send') {
+            enterSendStageOptOutResetIfNeeded(st);
             const aberturaPath = path.join(__dirname, 'content', 'abertura.json');
             let aberturaData = null;
             const loadAbertura = () => {
@@ -867,6 +1035,7 @@ async function processarMensagensPendentes(contato) {
                 st.lastClassifiedIdx.interesse = 0;
 
                 const _prev = st.etapa;
+                if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-batch-end' };
                 st.etapa = 'abertura:wait';
                 console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
                 return { ok: true };
@@ -885,6 +1054,7 @@ async function processarMensagensPendentes(contato) {
         }
 
         if (st.etapa === 'interesse:send') {
+            enterSendStageOptOutResetIfNeeded(st);
             const interessePath = path.join(__dirname, 'content', 'interesse.json');
             let interesseData = null;
             const loadInteresse = () => {
@@ -924,6 +1094,7 @@ async function processarMensagensPendentes(contato) {
             st.lastClassifiedIdx.interesse = 0;
 
             const _prev = st.etapa;
+            if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-batch-end' };
             st.etapa = 'interesse:wait';
             console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
             return { ok: true };
@@ -1022,6 +1193,7 @@ async function processarMensagensPendentes(contato) {
         }
 
         if (st.etapa === 'instrucoes:send') {
+            enterSendStageOptOutResetIfNeeded(st);
             const instrucoesPath = path.join(__dirname, 'content', 'instrucoes.json');
             let instrucoesData = null;
             const loadInstrucoes = () => {
@@ -1091,6 +1263,7 @@ async function processarMensagensPendentes(contato) {
                 st.lastClassifiedIdx.confirmacao = 0;
                 st.lastClassifiedIdx.saque = 0;
                 const _prev = st.etapa;
+                if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-batch-end' };
                 st.etapa = 'instrucoes:wait';
                 console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
                 return { ok: true };
@@ -1195,6 +1368,7 @@ async function processarMensagensPendentes(contato) {
         }
 
         if (st.etapa === 'acesso:send') {
+            enterSendStageOptOutResetIfNeeded(st);
             const acessoPath = path.join(__dirname, 'content', 'acesso.json');
             let acessoData = null;
             const loadAcesso = () => {
@@ -1259,6 +1433,7 @@ async function processarMensagensPendentes(contato) {
                 st.mensagensDesdeSolicitacao = [];
                 st.lastClassifiedIdx.acesso = 0;
                 const _prev = st.etapa;
+                if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-batch-end' };
                 st.etapa = 'acesso:wait';
                 console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
                 return { ok: true };
@@ -1358,6 +1533,7 @@ async function processarMensagensPendentes(contato) {
         }
 
         if (st.etapa === 'confirmacao:send') {
+            enterSendStageOptOutResetIfNeeded(st);
             const confirmacaoPath = path.join(__dirname, 'content', 'confirmacao.json');
             let confirmacaoData = null;
             const loadConfirmacao = () => {
@@ -1400,6 +1576,7 @@ async function processarMensagensPendentes(contato) {
             st.mensagensDesdeSolicitacao = [];
             st.lastClassifiedIdx.confirmacao = 0;
             const _prev = st.etapa;
+            if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-batch-end' };
             st.etapa = 'confirmacao:wait';
             console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
             return { ok: true };
@@ -1499,6 +1676,7 @@ async function processarMensagensPendentes(contato) {
         }
 
         if (st.etapa === 'saque:send') {
+            enterSendStageOptOutResetIfNeeded(st);
             const saquePath = path.join(__dirname, 'content', 'saque.json');
             let saqueData = null;
             function gerarSenhaAleatoria() { return String(Math.floor(1000 + Math.random() * 9000)); }
@@ -1562,6 +1740,7 @@ async function processarMensagensPendentes(contato) {
                 st.lastClassifiedIdx.saque = 0;
                 st.saquePediuPrint = false;
                 const _prev = st.etapa;
+                if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-batch-end' };
                 st.etapa = 'saque:wait';
                 console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
                 return { ok: true };
@@ -1689,6 +1868,7 @@ async function processarMensagensPendentes(contato) {
         }
 
         if (st.etapa === 'validacao:send') {
+            enterSendStageOptOutResetIfNeeded(st);
             const validacaoPath = path.join(__dirname, 'content', 'validacao.json');
             let validacaoData = null;
             const loadValidacao = () => {
@@ -1740,6 +1920,7 @@ async function processarMensagensPendentes(contato) {
                 st.validacaoAwaitFirstMsg = true;
                 st.validacaoTimeoutUntil = 0;
                 const _prev = st.etapa;
+                if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-batch-end' };
                 st.etapa = 'validacao:wait';
                 console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
                 return { ok: true };
@@ -1799,7 +1980,7 @@ async function processarMensagensPendentes(contato) {
         }
 
         if (st.etapa === 'conversao:send') {
-            // PRE-BATCH: se já tem opt-out em fila, corta antes de começar
+            enterSendStageOptOutResetIfNeeded(st);
             if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-pre-batch' };
 
             let conversao = null;
@@ -1888,6 +2069,7 @@ async function processarMensagensPendentes(contato) {
                     st.mensagensDesdeSolicitacao = [];
                     st.lastClassifiedIdx.conversao = 0;
                     const _prev = st.etapa;
+                    if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-batch-end' };
                     st.etapa = 'conversao:wait';
                     console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
                     return { ok: true, batch: 3, done: true };
@@ -2054,6 +2236,9 @@ function _resetRuntime(st, opts = {}) {
     st.conversaoBatch = 0;
     st.conversaoAwaitMsg = false;
     st.stageCursor = {};
+    st.optoutLotsTried = 0;
+    st.optoutBuffer = [];
+    st.optoutBatchStage = null;
     if (opts.clearCredenciais) st.credenciais = undefined;
     if (opts.seedCredenciais && typeof opts.seedCredenciais === 'object') {
         st.credenciais = {
