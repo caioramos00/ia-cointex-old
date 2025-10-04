@@ -798,29 +798,82 @@ async function processarMensagensPendentes(contato) {
                 return aberturaData;
             };
             const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
-            const composeAberturaMsg1 = () => { const c = loadAbertura(); const g1 = pick(c?.msg1?.grupo1); const g2 = pick(c?.msg1?.grupo2); const g3 = pick(c?.msg1?.grupo3); return [g1, g2, g3].filter(Boolean).join(', '); };
-            const composeAberturaMsg2 = () => { const c = loadAbertura(); const g1 = pick(c?.msg2?.grupo1); const g2 = pick(c?.msg2?.grupo2); const g3 = pick(c?.msg2?.grupo3); const head = [g1, g2].filter(Boolean).join(' '); return [head, g3].filter(Boolean).join(', '); };
+            const composeAberturaMsg1 = () => {
+                const c = loadAbertura();
+                const g1 = pick(c?.msg1?.grupo1);
+                const g2 = pick(c?.msg1?.grupo2);
+                const g3 = pick(c?.msg1?.grupo3);
+                return [g1, g2, g3].filter(Boolean).join(', ');
+            };
+            const composeAberturaMsg2 = () => {
+                const c = loadAbertura();
+                const g1 = pick(c?.msg2?.grupo1);
+                const g2 = pick(c?.msg2?.grupo2);
+                const g3 = pick(c?.msg2?.grupo3);
+                const head = [g1, g2].filter(Boolean).join(' ');
+                return [head, g3].filter(Boolean).join(', ');
+            };
 
-            await delay(FIRST_REPLY_DELAY_MS);
+            // gere as duas mensagens (mantém "unique" quando possível)
+            const m1 = chooseUnique(composeAberturaMsg1, st) || composeAberturaMsg1();
+            const m2 = chooseUnique(composeAberturaMsg2, st) || composeAberturaMsg2();
+            const msgs = [m1, m2];
 
-            let m1 = chooseUnique(composeAberturaMsg1, st) || composeAberturaMsg1();
-            let m2 = chooseUnique(composeAberturaMsg2, st) || composeAberturaMsg2();
+            // retoma exatamente de onde parou
+            let cur = Number(st.stageCursor?.[st.etapa] || 0);
 
-            if (m1) await sendMessage(st.contato, m1);
-            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-            if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-mid-batch' };
-            if (m2) await sendMessage(st.contato, m2);
+            for (let i = cur; i < msgs.length; i++) {
+                // se entrou um opt-out agora, não avança etapa nem cursor
+                if (await preflightOptOut(st)) {
+                    return { ok: true, interrupted: 'optout-pre-batch' };
+                }
 
-            if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-post-batch' };
+                if (!msgs[i]) {
+                    // msg vazia: considere como enviada para fins de cursor
+                    st.stageCursor[st.etapa] = i + 1;
+                    continue;
+                }
 
-            st.mensagensPendentes = [];
-            st.mensagensDesdeSolicitacao = [];
-            st.lastClassifiedIdx.interesse = 0;
+                // delays do fluxo original
+                if (i === 0) {
+                    await delay(FIRST_REPLY_DELAY_MS);
+                } else {
+                    await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+                }
 
-            const _prev = st.etapa;
-            st.etapa = 'abertura:wait';
-            console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
-            return { ok: true };
+                // tentativa de envio (NÃO avançar cursor/etapa se skip)
+                const r = await sendMessage(st.contato, msgs[i]);
+
+                if (!r?.ok) {
+                    // aqui pega "paused-by-optout" e similares — não muda etapa
+                    return { ok: true, paused: r?.reason || 'send-skipped', idx: i };
+                }
+
+                // enviado com sucesso -> atualiza cursor
+                st.stageCursor[st.etapa] = i + 1;
+
+                // se rolou opt-out depois do envio, ainda assim não avançamos etapa
+                if (await preflightOptOut(st)) {
+                    return { ok: true, interrupted: 'optout-mid-batch' };
+                }
+            }
+
+            // só chega aqui se as DUAS mensagens saíram com ok:true
+            if ((st.stageCursor[st.etapa] || 0) >= msgs.length) {
+                if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-post-batch' };
+                st.stageCursor[st.etapa] = 0;
+                st.mensagensPendentes = [];
+                st.mensagensDesdeSolicitacao = [];
+                st.lastClassifiedIdx.interesse = 0;
+
+                const _prev = st.etapa;
+                st.etapa = 'abertura:wait';
+                console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+                return { ok: true };
+            }
+
+            // envio parcial (ficou travado entre m1 e m2 por opt-out)
+            return { ok: true, partial: true };
         }
 
         if (st.etapa === 'abertura:wait') {
@@ -1297,10 +1350,25 @@ async function processarMensagensPendentes(contato) {
                 const b3 = pick(c?.msg1?.bloco3);
                 return [b1, b2, b3].filter(Boolean).join(', ');
             };
+
             const m = chooseUnique(composeConfirmacaoMsg, st) || composeConfirmacaoMsg();
+
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-            if (m) await sendMessage(st.contato, m);
+
+            // se houver opt-out agora, não envia e não avança
+            if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-pre-single' };
+
+            let r = { ok: true };
+            if (m) r = await sendMessage(st.contato, m);
+
+            // ENVIO FALHOU/FOI SKIPPED -> NÃO AVANÇA ETAPA
+            if (!r?.ok) {
+                return { ok: true, paused: r?.reason || 'send-skipped' };
+            }
+
             if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-post-single' };
+
+            // só avança se enviou com sucesso
             st.mensagensPendentes = [];
             st.mensagensDesdeSolicitacao = [];
             st.lastClassifiedIdx.confirmacao = 0;
