@@ -957,6 +957,7 @@ async function processarMensagensPendentes(contato) {
                                         timeout: 15000,
                                         validateStatus: () => true
                                     });
+                                    console.log(`[IA][RAW] http=${r.status} req=${r.headers?.['x-request-id']||''} body=${truncate(JSON.stringify(r.data), 20000)}`);
                                     let rawText = extractTextForLog(r.data) || '';
                                     rawText = String(rawText).trim();
                                     let picked = null;
