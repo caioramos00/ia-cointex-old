@@ -513,12 +513,22 @@ function setupRoutes(
   });
 
   app.post('/webhook/confirm-image-sent', express.json(), async (req, res) => {
+    // Log detalhado do body recebido (EXATAMENTE como vem do ManyChat)
+    console.log(`[ConfirmImage] Received full request: Method=${req.method}, Headers=${JSON.stringify(req.headers, null, 2)}, Body=${JSON.stringify(req.body, null, 2)}`);
+
     res.status(200).json({ ok: true });  // Responda logo
-    const { contact, status, image_url } = req.body;
+
+    const { contact, status, image_url } = req.body;  // Ou 'contato' se for mismatch
+    const normalized = normalizeContato(contact);  // Ajuste para 'contato' se necessário
+
+    if (!normalized || normalized.length < 10 || (image_url && image_url.includes('{{'))) {
+      console.error(`[ConfirmImage] Invalid body (unresolved variables?): ${JSON.stringify(req.body, null, 2)}`);
+      return;
+    }
+
     if (status === 'sent') {
-      const contato = normalizeContato(contact);
-      console.log(`[${contato}] Imagem confirmada: ${image_url}`);
-      await processarMensagensPendentes(contato);
+      console.log(`[${normalized}] Imagem confirmada: ${image_url}`);
+      await processarMensagensPendentes(normalized);
     }
   });
 
