@@ -130,13 +130,16 @@ function isOptOut(textRaw) {
             .filter(k => k === 'phrases' || k === 'keywords' || k === 'risk_terms')
     );
 
-    // Match helpers (tudo normalizado conforme config do JSON)
-    const hasAny = (arr) => arr.some(tok => tok && s.includes(tok));
+    const padded = (x) => ` ${x} `;
+    const hasAnySafe = (arr, S) => {
+        const P = padded(S);
+        return arr.some(tok => tok && P.includes(padded(tok)));
+    };
 
     // Aplica as regras declaradas no JSON (sem regex em código)
-    if (shouldCheck.has('phrases') && hasAny(phrases)) return true;
-    if (shouldCheck.has('keywords') && hasAny(keywords)) return true;
-    if (shouldCheck.has('risk_terms') && hasAny(riskTerms)) return true;
+    if (shouldCheck.has('phrases') && hasAnySafe(phrases, s)) return true;
+    if (shouldCheck.has('keywords') && hasAnySafe(keywords, s)) return true;
+    if (shouldCheck.has('risk_terms') && hasAnySafe(riskTerms, s)) return true;
 
     return false;
 }
@@ -176,12 +179,16 @@ function isOptIn(textRaw) {
     // 3) Regras declarativas do JSON
     const rule = Array.isArray(data?.match_if_any) ? data.match_if_any : ['phrases', 'keywords', 'regex'];
     const shouldCheck = new Set(rule.map(x => String(x || '').toLowerCase()));
-    const hasAny = (arr) => arr.some(tok => tok && s.includes(tok));
+    const padded = (x) => ` ${x} `;
+    const hasAnySafe = (arr, S) => {
+        const P = padded(S);
+        return arr.some(tok => tok && P.includes(padded(tok)));
+    };
 
-    if (shouldCheck.has('phrases') && hasAny(phrases)) return true;
+    if (shouldCheck.has('phrases') && hasAnySafe(phrases, s)) return true;
     if (shouldCheck.has('regex') && regexList.some(rx => rx.test(s))) return true;
 
-    if (shouldCheck.has('keywords') && hasAny(keywords)) {
+    if (shouldCheck.has('keywords') && hasAnySafe(keywords, s)) {
         const POS = new RegExp(
             '\\b(' +
             'pode(?:\\s+sim)?\\s*(?:continuar|mandar|seguir|prosseguir|enviar)|' +
@@ -1850,6 +1857,11 @@ async function processarMensagensPendentes(contato) {
                     if (!Array.isArray(saqueMsgPrint) || saqueMsgPrint.length === 0) {
                         return { ok: true, classe: 'aguardando_imagem' };
                     }
+
+                    // helpers locais
+                    const pickLocal = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
+                    const composeMsgPrint = () => pickLocal(saqueMsgPrint);
+
                     if (!st.saquePediuPrint) {
                         const m = chooseUnique(composeMsgPrint, st) || composeMsgPrint();
                         await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
