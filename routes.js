@@ -17,9 +17,8 @@ function checkAuth(req, res, next) {
   else res.redirect('/login');
 }
 
-function norm(s = '') {
-  return s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
-}
+function safeStr(v) { return (v === null || v === undefined) ? '' : String(v); }
+function normalizeContato(raw) { return safeStr(raw).replace(/\D/g, ''); }
 
 function onlyDigits(v) {
   return String(v || '').replace(/\D/g, '');
