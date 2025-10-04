@@ -375,7 +375,27 @@ async function finalizeOptOutBatchAtEnd(st) {
         try {
             const r = await axios.post(
                 'https://api.openai.com/v1/responses',
-                { model: 'gpt-5', input: structuredPrompt, max_output_tokens: maxTok, reasoning: { effort: 'low' } },
+                {
+                    model: 'gpt-5',
+                    input: structuredPrompt,
+                    temperature: 0,
+                    max_output_tokens: maxTok,
+                    response_format: {
+                        type: "json_schema",
+                        json_schema: {
+                            name: "opt_out_label",
+                            schema: {
+                                type: "object",
+                                additionalProperties: false,
+                                properties: {
+                                    label: { type: "string", enum: ["OPTOUT", "CONTINUAR"] }
+                                },
+                                required: ["label"]
+                            }
+                        }
+                    },
+                    reasoning: { effort: 'low' }
+                },
                 { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 15000, validateStatus: () => true }
             );
             console.log(
@@ -387,7 +407,15 @@ async function finalizeOptOutBatchAtEnd(st) {
             );
             let rawText = extractTextForLog(r.data) || '';
             rawText = String(rawText).trim();
-            let picked = null;
+            let picked = r.data?.output?.[0]?.content?.find?.(c => c.type === 'output_json')?.json?.label || null;
+            if (!picked) {
+                let rawText = extractTextForLog(r.data) || '';
+                rawText = String(rawText).trim();
+                try { picked = JSON.parse(rawText)?.label || null; } catch { }
+                if (!picked) picked = pickLabelFromResponseData(r.data, ['OPTOUT', 'CONTINUAR']);
+            }
+            picked = picked ? String(picked).toUpperCase() : null;
+            console.log(`[OPTOUT][IA][RAW] ${truncate(JSON.stringify(r.data), 800)}`);
             try { const parsed = JSON.parse(rawText); picked = String(parsed?.label || '').toUpperCase(); }
             catch {
                 const m = /"label"\s*:\s*"([^"]+)"/i.exec(rawText);
