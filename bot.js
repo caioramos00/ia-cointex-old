@@ -229,6 +229,7 @@ async function preflightOptOut(st) {
     // 2) Se deu match hard-coded, aplica bloqueio/resposta
     if (hardMatched) {
         console.log(`[${st.contato}] [OPTOUT] HARD-MATCH acionado. texto="${truncate(hardText, 140)}"`);
+        st.optedOutAtTs = Date.now();
         st.mensagensPendentes = [];
         st.mensagensDesdeSolicitacao = [];
         st.optOutCount = (st.optOutCount || 0) + 1;
@@ -461,6 +462,7 @@ async function finalizeOptOutBatchAtEnd(st) {
     }
 
     // === Aplicar bloqueio e mensagens (mesmo fluxo do hard-coded) ===
+    st.optedOutAtTs = Date.now();
     st.mensagensPendentes = [];
     st.mensagensDesdeSolicitacao = [];
     st.optOutCount = (st.optOutCount || 0) + 1;
@@ -526,6 +528,8 @@ function ensureEstado(contato) {
             reoptinLotsTried: 0,      // lotes IA já usados (máx 3)
             reoptinBuffer: [],        // acumula 1..3 msgs antes de consultar IA
             reoptinCount: 0,          // quantas retomadas já realizadas (máx 2)
+            optedOutAtTs: 0,
+            _reoptinInitTs: 0,
             stageCursor: {}
         };
     } else {
@@ -554,6 +558,8 @@ function ensureEstado(contato) {
         if (!Array.isArray(st.optoutBuffer)) st.optoutBuffer = [];
         if (!('optoutBatchStage' in st)) st.optoutBatchStage = null;
         if (typeof st._optoutSeenIdx !== 'number') st._optoutSeenIdx = 0;
+        if (typeof st.optedOutAtTs !== 'number') st.optedOutAtTs = 0;
+        if (typeof st._reoptinInitTs !== 'number') st._reoptinInitTs = 0;
     }
     return estadoContatos[key];
 }
@@ -900,6 +906,10 @@ async function processarMensagensPendentes(contato) {
         }
 
         if (st.optOutCount > 0 && !st.reoptinActive) {
+            if (st.reoptinLotsTried === 0 && st.reoptinBuffer.length > 0) {
+                st.reoptinBuffer = [];
+            }
+            const cutoffTs = Number(st.optedOutAtTs || 0);
             if (Array.isArray(st.mensagensPendentes) && st.mensagensPendentes.length) {
                 console.log(`[${st.contato}] [REOPTIN] pend=${st.mensagensPendentes.length} lotsTried=${st.reoptinLotsTried} buf=${st.reoptinBuffer.length}`);
 
@@ -923,7 +933,9 @@ async function processarMensagensPendentes(contato) {
 
                     for (const m of st.mensagensPendentes) {
                         const t = safeStr(m?.texto || '').trim();
+                        const mts = Number(m?.ts || 0);
                         if (!t) continue;
+                        if (cutoffTs && mts && mts <= cutoffTs) continue;
                         st.reoptinBuffer.push(t);
                         console.log(`[${st.contato}] [REOPTIN][BATCH][PUSH] size=${st.reoptinBuffer.length} msg="${truncate(t, 140)}"`);
 
@@ -946,7 +958,7 @@ async function processarMensagensPendentes(contato) {
                                         validateStatus: () => true
                                     });
                                     console.log(
-                                        `${tsNow()} [${st.contato}] [OPTOUT][IA][RAW] http=${r.status} ` +
+                                        `${tsNow()} [${st.contato}] [REOPTIN][IA][RAW] http=${r.status} ` +
                                         `req=${r.headers?.['x-request-id'] || ''} ` +
                                         `body=${truncate(JSON.stringify(r.data), 20000)}`
                                     );
