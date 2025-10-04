@@ -68,7 +68,20 @@
         "nao me incomode",
         "não me incomode",
         "nao perturbe",
-        "não perturbe"
+        "não perturbe",
+        "já vi isso antes",
+        "ja vi isso antes",
+        "isso é fake",
+        "isso e fake",
+        "isso é fakezada",
+        "isso e fakezada",
+        "isso é enganação",
+        "isso e enganacao",
+        "tá tentando me enganar",
+        "ta tentando me enganar",
+        "isso não cola",
+        "isso nao cola",
+        "papo furado"
       ],
       "keywords": [
         "cancela",
@@ -83,14 +96,35 @@
         "bloquear",
         "bloqueia",
         "chega",
-        "basta"
+        "basta",
+        "enganar",
+        "enganacao",
+        "enganação",
+        "enganacaozinha",
+        "enganaçãozinha",
+        "picaretagem",
+        "falcatrua",
+        "fraudulento",
+        "falso",
+        "forjado",
+        "fakezada",
+        "truque",
+        "armadilha",
+        "treta",
+        "lorota"
       ],
       "regex": [
         "\\bpare\\s+de\\s+(me\\s+)?(enviar|mandar)(\\s+mensagens?)?\\b",
         "\\bpara\\s+com\\s+(isso|essas\\s+mensagens?)\\b",
         "\\bna[oã]\\s+me\\s+(chame|ligue|incomode|perturbe|contate|contacte|mande|envie)\\b",
         "\\b(remove|remova|exclu(i|a|ir)|apaga(r)?)\\s+(meu\\s+|o\\s+meu\\s+)?(n[uú]mero|contato)\\b",
-        "\\bna[oã]\\s+quero\\s+(mais\\s+)?(mensagens?|receber)\\b"
+        "\\bna[oã]\\s+quero\\s+(mais\\s+)?(mensagens?|receber)\\b",
+        "(t[áa]\\s*)?tent(ando|a)\\s*me\\s*enganar",
+        "isso\\s*n[aã]o\\s*cola",
+        "papo\\s*furado",
+        "fake(zada)?\\b",
+        "engana(c|ç)\\w*",
+        "ja\\s*vi\\s*isso\\s*antes|j[aá]\\s*vi\\s*isso\\s*antes"
       ]
     },
     "en": {
@@ -104,19 +138,33 @@
         "delete my number",
         "take me off the list",
         "take me off your list",
-        "do not message me"
+        "do not message me",
+        "this is fake",
+        "i've seen this before",
+        "this looks like a scam",
+        "you are trying to trick me"
       ],
       "keywords": [
         "stop",
         "unsubscribe",
         "cancel",
         "remove",
-        "block"
+        "block",
+        "scam",
+        "fraud",
+        "fake",
+        "bogus",
+        "rip-off",
+        "shady",
+        "phishing",
+        "trick"
       ],
       "regex": [
         "\\bdo\\s*not\\s*(contact|message)\\b",
         "\\bstop\\s*(messag(e|ing)|sending)\\b",
-        "\\b(remove|delete|take)\\s+my\\s+number\\b"
+        "\\b(remove|delete|take)\\s+my\\s+number\\b",
+        "i('|\\s*)ve\\s*seen\\s*this\\s*before",
+        "trying\\s*to\\s*(trick|scam)\\s*me"
       ]
     },
     "es": {
@@ -131,7 +179,11 @@
         "eliminar mi numero",
         "eliminar mi número",
         "borrar mi contacto",
-        "quitarme de la lista"
+        "quitarme de la lista",
+        "ya vi esto antes",
+        "esto es falso",
+        "esto parece una estafa",
+        "estas tratando de engañarme"
       ],
       "keywords": [
         "alto",
@@ -139,13 +191,20 @@
         "cancelar",
         "eliminar",
         "borrar",
-        "quitar"
+        "quitar",
+        "engaño",
+        "estafa",
+        "falso",
+        "trampa",
+        "fraude"
       ],
       "regex": [
         "\\bno\\s*me\\s*(contactes|escribas)\\b",
         "\\bdeja\\s*de\\s*(enviar|mandar(me)?)\\b",
         "\\b(no\\s*m[aá]s\\s*mensajes)\\b",
-        "\\b(eliminar|borrar)\\s*mi\\s*(n[uú]mero|contacto)\\b"
+        "\\b(eliminar|borrar)\\s*mi\\s*(n[uú]mero|contacto)\\b",
+        "ya\\s*vi\\s*esto\\s*antes",
+        "trat(and|a)o\\s*de\\s*enga[nñ]arme"
       ]
     }
   },
@@ -174,17 +233,40 @@
     "funil",
     "phishing",
     "golpista",
-    "golpe",
     "fake",
-    "é golpe",
-    "fraude",
     "mentira",
     "mentiraiada",
     "não confio",
+    "nao confio",
     "sai fora",
     "para de mandar",
     "não me chama",
+    "nao me chama",
     "me remove",
-    "bloqueia/pare"
+    "bloqueia/pare",
+    "enganar",
+    "enganação",
+    "enganacao",
+    "picaretagem",
+    "falcatrua",
+    "falso",
+    "forjado",
+    "fakezada",
+    "truque",
+    "armadilha",
+    "papo furado",
+    "isso não cola",
+    "isso nao cola",
+    "já vi isso antes",
+    "ja vi isso antes",
+    "tá tentando me enganar",
+    "ta tentando me enganar",
+    "rip-off",
+    "bogus",
+    "shady",
+    "trick",
+    "engaño",
+    "estafa",
+    "trampa"
   ]
 }
