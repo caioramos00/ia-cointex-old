@@ -32,7 +32,13 @@ function extraGlobalDelay() {
 }
 function delayRange(minMs, maxMs) { const d = Math.floor(minMs + Math.random() * (maxMs - minMs)); return delay(d); }
 
-// ===== Normalização p/ matching de opt-in/out =====
+function tsNow() {
+    const d = new Date();
+    const p2 = n => String(n).padStart(2, '0');
+    const p3 = n => String(n).padStart(3, '0');
+    return `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}.${p3(d.getMilliseconds())}`;
+}
+
 const URL_RX = /https?:\/\/\S+/gi;
 const EMOJI_RX = /([\u203C-\u3299]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDD00-\uDFFF])/g;
 
@@ -237,7 +243,7 @@ async function preflightOptOut(st) {
             if (st.etapa !== 'encerrado:wait') {
                 const _prev = st.etapa;
                 st.etapa = 'encerrado:wait';
-                console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+                console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
             }
         }
 
@@ -417,7 +423,7 @@ async function finalizeOptOutBatchAtEnd(st) {
         if (st.etapa !== 'encerrado:wait') {
             const _prev = st.etapa;
             st.etapa = 'encerrado:wait';
-            console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+            console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
         }
     }
 
@@ -650,7 +656,7 @@ async function handleIncomingNormalizedMessage(normalized) {
 
     const st = ensureEstado(contato);
     const msg = hasText ? safeStr(texto).trim() : '[mídia]';
-    log.info(`[${st.contato}] Mensagem recebida: ${msg}`);
+    log.info(`${tsNow()} [${st.contato}] Mensagem recebida: ${msg}`);
     st.lastIncomingTs = ts || Date.now();
 
     // >>> ENFILEIRA para que preflightOptOut()/processamento consigam detectar
@@ -737,7 +743,7 @@ async function processarMensagensPendentes(contato) {
                 if (st.etapa !== 'encerrado:wait') {
                     const _prev = st.etapa;
                     st.etapa = 'encerrado:wait';
-                    console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+                    console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
                 }
             }
 
@@ -776,22 +782,20 @@ async function processarMensagensPendentes(contato) {
 
     st.enviandoMensagens = true;
     try {
-        console.log(`[${st.contato}] etapa=${st.etapa} pendentes=${st.mensagensPendentes.length}`);
+        console.log(`${tsNow()} [${st.contato}] etapa=${st.etapa} pendentes=${st.mensagensPendentes.length}`);
 
-        // ======= BLOQUEIO PERMANENTE =======
         if (st.permanentlyBlocked || st.optOutCount >= 3) {
             st.permanentlyBlocked = true;
             if (st.etapa !== 'encerrado:wait') {
                 const _prev = st.etapa;
                 st.etapa = 'encerrado:wait';
-                console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+                console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
             }
             st.mensagensPendentes = [];
             st.mensagensDesdeSolicitacao = [];
             return { ok: true, noop: 'permanently-blocked' };
         }
 
-        // ======= DETECÇÃO DE OPT-OUT AGORA =======
         if (Array.isArray(st.mensagensPendentes) && st.mensagensPendentes.length) {
             const hadOptOut = st.mensagensPendentes.some(m => isOptOut(m?.texto || ''));
             if (hadOptOut) {
@@ -1042,7 +1046,7 @@ async function processarMensagensPendentes(contato) {
                 const _prev = st.etapa;
                 if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-batch-end' };
                 st.etapa = 'abertura:wait';
-                console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+                console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
                 return { ok: true };
             }
 
@@ -1055,7 +1059,7 @@ async function processarMensagensPendentes(contato) {
 
             const _prev = st.etapa;
             st.etapa = 'interesse:send';
-            console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+            console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
         }
 
         if (st.etapa === 'interesse:send') {
@@ -1101,7 +1105,7 @@ async function processarMensagensPendentes(contato) {
             const _prev = st.etapa;
             if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-batch-end' };
             st.etapa = 'interesse:wait';
-            console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+            console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
             return { ok: true };
         }
 
@@ -1191,7 +1195,7 @@ async function processarMensagensPendentes(contato) {
                 st.lastClassifiedIdx.interesse = 0;
                 const _prev = st.etapa;
                 st.etapa = 'instrucoes:send';
-                console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+                console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
             } else {
                 return { ok: true, classe };
             }
@@ -1270,7 +1274,7 @@ async function processarMensagensPendentes(contato) {
                 const _prev = st.etapa;
                 if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-batch-end' };
                 st.etapa = 'instrucoes:wait';
-                console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+                console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
                 return { ok: true };
             }
             return { ok: true, partial: true };
@@ -1365,7 +1369,7 @@ async function processarMensagensPendentes(contato) {
                 st.lastClassifiedIdx.saque = 0;
                 const _prev = st.etapa;
                 st.etapa = 'acesso:send';
-                console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+                console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
             } else {
                 st.mensagensPendentes = [];
                 return { ok: true, classe };
@@ -1440,7 +1444,7 @@ async function processarMensagensPendentes(contato) {
                 const _prev = st.etapa;
                 if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-batch-end' };
                 st.etapa = 'acesso:wait';
-                console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+                console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
                 return { ok: true };
             }
             return { ok: true, partial: true };
@@ -1530,7 +1534,7 @@ async function processarMensagensPendentes(contato) {
                 st.lastClassifiedIdx.acesso = 0;
                 const _prev = st.etapa;
                 st.etapa = 'confirmacao:send';
-                console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+                console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
             } else {
                 const ultima = classes[classes.length - 1] || 'neutro';
                 return { ok: true, classe: ultima };
@@ -1583,7 +1587,7 @@ async function processarMensagensPendentes(contato) {
             const _prev = st.etapa;
             if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-batch-end' };
             st.etapa = 'confirmacao:wait';
-            console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+            console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
             return { ok: true };
         }
 
@@ -1674,7 +1678,7 @@ async function processarMensagensPendentes(contato) {
                 st.lastClassifiedIdx.saque = 0;
                 const _prev = st.etapa;
                 st.etapa = 'saque:send';
-                console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+                console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
             } else {
                 return { ok: true, classe: 'standby' };
             }
@@ -1747,7 +1751,7 @@ async function processarMensagensPendentes(contato) {
                 const _prev = st.etapa;
                 if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-batch-end' };
                 st.etapa = 'saque:wait';
-                console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+                console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
                 return { ok: true };
             }
             return { ok: true, partial: true };
@@ -1780,7 +1784,7 @@ async function processarMensagensPendentes(contato) {
                 st.saquePediuPrint = false;
                 const _prev = st.etapa;
                 st.etapa = 'validacao:send';
-                console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+                console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
             } else {
                 let relevante = false;
                 if (apiKey) {
@@ -1932,7 +1936,7 @@ async function processarMensagensPendentes(contato) {
                 const _prev = st.etapa;
                 if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-batch-end' };
                 st.etapa = 'validacao:wait';
-                console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+                console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
                 return { ok: true };
             }
             return { ok: true, partial: true };
@@ -1958,7 +1962,7 @@ async function processarMensagensPendentes(contato) {
                 }, rnd + 100);
                 const _prev = st.etapa;
                 st.etapa = 'validacao:cooldown';
-                console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+                console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
                 return { ok: true, started: rnd };
             }
             st.mensagensPendentes = [];
@@ -1986,7 +1990,7 @@ async function processarMensagensPendentes(contato) {
             st.lastClassifiedIdx.conversao = 0;
             const _prev = st.etapa;
             st.etapa = 'conversao:send';
-            console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+            console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
         }
 
         if (st.etapa === 'conversao:send') {
@@ -2081,7 +2085,7 @@ async function processarMensagensPendentes(contato) {
                     const _prev = st.etapa;
                     if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-batch-end' };
                     st.etapa = 'conversao:wait';
-                    console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+                    console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
                     return { ok: true, batch: 3, done: true };
                 }
             }
@@ -2147,7 +2151,7 @@ async function sendMessage(contato, texto, opts = {}) {
                 .replace(/\n{3,}/g, '\n\n')
                 .trim();
             await mod.sendText({ subscriberId, text: finalText }, settings);
-            console.log(`[${contato}] envio=ok provider=manychat msg="${finalText}"`);
+            console.log(`${tsNow()} [${contato}] Mensagem enviada: ${finalText}`);
             return { ok: true, provider };
         }
         console.log(`[${contato}] envio=fail provider=${provider} reason=unsupported msg="${msg}"`);
