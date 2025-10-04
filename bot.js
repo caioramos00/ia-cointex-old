@@ -202,17 +202,36 @@ async function preflightOptOut(st) {
     st.reoptinActive = false;
     st.reoptinLotsTried = 0;
     st.reoptinBuffer = [];
-    if (st.optOutCount >= 3) st.permanentlyBlocked = true;
+    if (st.optOutCount >= 3) {
+        st.permanentlyBlocked = true;
+        if (st.etapa !== 'encerrado:wait') {
+            const _prev = st.etapa;
+            st.etapa = 'encerrado:wait';
+            console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+        }
+    }
 
     const oMsgs = loadOptOutMsgs();
     const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
     let texto = '';
     if (st.optOutCount === 1) {
         const p = oMsgs?.msg1 || {};
-        texto = [pick(p.msg1b1), pick(p.msg1b2)].filter(Boolean).join(', ');
+        const b1 = pick(p.msg1b1);
+        const b2 = pick(p.msg1b2);
+        const b3 = pick(p.msg1b3);
+        texto = [b1, b2].filter(Boolean).join(', ') + (b3 ? `. ${b3}` : '');
     } else if (st.optOutCount === 2) {
         const p = oMsgs?.msg2 || {};
-        texto = [pick(p.msg2b1), pick(p.msg2b2)].filter(Boolean).join(', ');
+        const b1 = pick(p.msg2b1);
+        const b2 = pick(p.msg2b2);
+        const b3 = pick(p.msg2b3);
+        const b4 = pick(p.msg2b4);
+        const b5 = pick(p.msg2b5);
+        texto =
+            [b1, b2].filter(Boolean).join(', ') +
+            (b3 ? ` ${b3}` : '') +
+            (b4 ? `. ${b4}` : '') +
+            (b5 ? `, ${b5}` : '');
     }
     if (texto) {
         await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
@@ -272,7 +291,7 @@ function ensureEstado(contato) {
     if (!estadoContatos[key]) {
         estadoContatos[key] = {
             contato: key,
-            etapa: 'none',
+            etapa: 'abertura:send',
             createdAt: Date.now(),
             updatedAt: Date.now(),
             mensagensPendentes: [],
@@ -555,7 +574,14 @@ async function processarMensagensPendentes(contato) {
             st.reoptinLotsTried = 0;
             st.reoptinBuffer = [];
 
-            if (st.optOutCount >= 3) st.permanentlyBlocked = true;
+            if (st.optOutCount >= 3) {
+                st.permanentlyBlocked = true;
+                if (st.etapa !== 'encerrado:wait') {
+                    const _prev = st.etapa;
+                    st.etapa = 'encerrado:wait';
+                    console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+                }
+            }
 
             // Confirmação de opt-out (1ª e 2ª vezes)
             const oMsgs = loadOptOutMsgs();
@@ -563,10 +589,22 @@ async function processarMensagensPendentes(contato) {
             let texto = '';
             if (st.optOutCount === 1) {
                 const p = oMsgs?.msg1 || {};
-                texto = [pick(p.msg1b1), pick(p.msg1b2)].filter(Boolean).join(', ');
+                const b1 = pick(p.msg1b1);
+                const b2 = pick(p.msg1b2);
+                const b3 = pick(p.msg1b3);
+                texto = [b1, b2].filter(Boolean).join(', ') + (b3 ? `. ${b3}` : '');
             } else if (st.optOutCount === 2) {
                 const p = oMsgs?.msg2 || {};
-                texto = [pick(p.msg2b1), pick(p.msg2b2)].filter(Boolean).join(', ');
+                const b1 = pick(p.msg2b1);
+                const b2 = pick(p.msg2b2);
+                const b3 = pick(p.msg2b3);
+                const b4 = pick(p.msg2b4);
+                const b5 = pick(p.msg2b5);
+                texto =
+                    [b1, b2].filter(Boolean).join(', ') +
+                    (b3 ? ` ${b3}` : '') +
+                    (b4 ? `. ${b4}` : '') +
+                    (b5 ? `, ${b5}` : '');
             }
             if (texto) {
                 await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
@@ -585,6 +623,11 @@ async function processarMensagensPendentes(contato) {
         // ======= BLOQUEIO PERMANENTE =======
         if (st.permanentlyBlocked || st.optOutCount >= 3) {
             st.permanentlyBlocked = true;
+            if (st.etapa !== 'encerrado:wait') {
+                const _prev = st.etapa;
+                st.etapa = 'encerrado:wait';
+                console.log(`[${st.contato}] ${_prev} -> ${st.etapa}`);
+            }
             st.mensagensPendentes = [];
             st.mensagensDesdeSolicitacao = [];
             return { ok: true, noop: 'permanently-blocked' };
@@ -605,7 +648,9 @@ async function processarMensagensPendentes(contato) {
 
                 if (st.optOutCount >= 3) {
                     st.permanentlyBlocked = true;
-                    console.log(`[${st.contato}] opt-out #${st.optOutCount} => bloqueio permanente`);
+                    const _prev = st.etapa;
+                    st.etapa = 'encerrado:wait';
+                    console.log(`[${st.contato}] opt-out #${st.optOutCount} => bloqueio permanente | ${_prev} -> ${st.etapa}`);
                     return { ok: true, status: 'blocked-forever' };
                 }
 
@@ -615,10 +660,22 @@ async function processarMensagensPendentes(contato) {
                 let texto = '';
                 if (st.optOutCount === 1) {
                     const p = oMsgs?.msg1 || {};
-                    texto = [pick(p.msg1b1), pick(p.msg1b2)].filter(Boolean).join(', ');
+                    const b1 = pick(p.msg1b1);
+                    const b2 = pick(p.msg1b2);
+                    const b3 = pick(p.msg1b3);
+                    texto = [b1, b2].filter(Boolean).join(', ') + (b3 ? `. ${b3}` : '');
                 } else if (st.optOutCount === 2) {
                     const p = oMsgs?.msg2 || {};
-                    texto = [pick(p.msg2b1), pick(p.msg2b2)].filter(Boolean).join(', ');
+                    const b1 = pick(p.msg2b1);
+                    const b2 = pick(p.msg2b2);
+                    const b3 = pick(p.msg2b3);
+                    const b4 = pick(p.msg2b4);
+                    const b5 = pick(p.msg2b5);
+                    texto =
+                        [b1, b2].filter(Boolean).join(', ') +
+                        (b3 ? ` ${b3}` : '') +
+                        (b4 ? `. ${b4}` : '') +
+                        (b5 ? `, ${b5}` : '');
                 }
                 if (texto) {
                     await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
@@ -730,7 +787,7 @@ async function processarMensagensPendentes(contato) {
             }
         }
 
-        if (st.etapa === 'none') {
+        if (st.etapa === 'abertura:send') {
             const aberturaPath = path.join(__dirname, 'content', 'abertura.json');
             let aberturaData = null;
             const loadAbertura = () => {
@@ -1865,6 +1922,7 @@ async function sendImage(contato, imageUrl, caption, opts = {}) {
 
 const KNOWN_ETAPAS = new Set([
     'none',
+    'abertura:send',
     'abertura:wait',
     'interesse:wait',
     'instrucoes:send',
@@ -1880,6 +1938,7 @@ const KNOWN_ETAPAS = new Set([
     'validacao:cooldown',
     'conversao:send',
     'conversao:wait',
+    'encerrado:wait'
 ]);
 
 function _resetRuntime(st, opts = {}) {
@@ -1915,7 +1974,7 @@ function _resetRuntime(st, opts = {}) {
 }
 
 async function setEtapa(contato, etapa, opts = {}) {
-    const target = String(etapa || '').trim();
+    const target = _canonicalizeEtapa(String(etapa || '').trim());
     if (!KNOWN_ETAPAS.has(target)) {
         throw new Error(`etapa inválida: "${target}"`);
     }
