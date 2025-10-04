@@ -453,7 +453,11 @@ async function finalizeOptOutBatchAtEnd(st) {
             console.log(`[${st.contato}] [OPTOUT][IA] erro="${e?.message || e}"`);
             if (e?.response) {
                 const d = e.response.data;
-                console.log(`[${st.contato}] [OPTOUT][IA][DEBUG] http=${e.response.status} body="${truncate(typeof d === 'string' ? d : JSON.stringify(d), 400)}"`);
+                console.log(`[${st.contato}] [OPTOUT][IA][DEBUG] http=${e.response.status} body="${truncate(typeof d === 'string' ? d : JSON.stringify(d), 400)}"`); console.log(
+                    `${tsNow()} [${st.contato}] [OPTOUT][IA][RAW][ERR] http=${e.response.status} ` +
+                    `req=${e.response?.headers?.['x-request-id'] || ''} ` +
+                    `body=${truncate(typeof d === 'string' ? d : JSON.stringify(d), 20000)}`
+                );
             }
             return { status: 0, picked: null };
         }
@@ -957,7 +961,11 @@ async function processarMensagensPendentes(contato) {
                                         timeout: 15000,
                                         validateStatus: () => true
                                     });
-                                    console.log(`[IA][RAW] http=${r.status} req=${r.headers?.['x-request-id']||''} body=${truncate(JSON.stringify(r.data), 20000)}`);
+                                    console.log(
+                                        `${tsNow()} [${st.contato}] [OPTOUT][IA][RAW] http=${r.status} ` +
+                                        `req=${r.headers?.['x-request-id'] || ''} ` +
+                                        `body=${truncate(JSON.stringify(r.data), 20000)}`
+                                    );
                                     let rawText = extractTextForLog(r.data) || '';
                                     rawText = String(rawText).trim();
                                     let picked = null;
