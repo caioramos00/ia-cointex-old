@@ -2213,6 +2213,56 @@ async function processarMensagensPendentes(contato) {
     }
 }
 
+async function sendMessage(contato, texto, opts = {}) {
+    await extraGlobalDelay();
+    const msg = safeStr(texto);
+    try {
+        const st = ensureEstado(contato);
+        if (await preflightOptOut(st)) {
+            console.log(`[${contato}] envio=cancelado por opt-out em tempo real`);
+            return { ok: false, reason: 'paused-by-optout' };
+        }
+        const forced = opts && opts.force === true;
+        const paused = (st.permanentlyBlocked === true) || (st.optOutCount >= 3) || (st.optOutCount > 0 && !st.reoptinActive);
+        if (paused && !forced) {
+            console.log(`[${contato}] envio=skip reason=paused-by-optout msg="${safeStr(texto).slice(0, 140)}"`);
+            return { ok: false, reason: 'paused-by-optout' };
+        }
+
+        const { mod, settings } = await getActiveTransport();
+        const provider = mod?.name || 'unknown';
+        if (provider === 'manychat') {
+            let subscriberId = null;
+            try {
+                const c = await getContatoByPhone(contato);
+                if (c?.manychat_subscriber_id) subscriberId = String(c.manychat_subscriber_id);
+                else if (c?.subscriber_id) subscriberId = String(c.subscriber_id);
+            } catch (e) {
+                console.warn(`[${contato}] DB lookup subscriber_id falhou: ${e.message}`);
+            }
+            if (!subscriberId) {
+                subscriberId = await resolveManychatSubscriberId(contato, mod, settings);
+            }
+            if (!subscriberId) {
+                console.log(`[${contato}] envio=fail provider=manychat reason=no-subscriber-id`);
+                return { ok: false, reason: 'no-subscriber-id' };
+            }
+            let finalText = String(msg ?? '')
+                .replace(/\r\n/g, '\n')
+                .replace(/\n{3,}/g, '\n\n')
+                .trim();
+            await mod.sendText({ subscriberId, text: finalText }, settings);
+            console.log(`${tsNow()} [${contato}] Mensagem enviada: ${finalText}`);
+            return { ok: true, provider };
+        }
+        console.log(`[${contato}] envio=fail provider=${provider} reason=unsupported msg="${msg}"`);
+        return { ok: false, reason: 'unsupported' };
+    } catch (e) {
+        console.log(`[${contato}] envio=fail provider=unknown reason="${e.message}" msg="${msg}"`);
+        return { ok: false, error: e.message };
+    }
+}
+
 async function sendImage(contato, imageUrl, caption, opts = {}) {
   await extraGlobalDelay();
   const url = safeStr(imageUrl).trim();
@@ -2230,7 +2280,7 @@ async function sendImage(contato, imageUrl, caption, opts = {}) {
         return { ok: false, reason: 'paused-by-optout' };
     }
     const { mod, settings } = await getActiveTransport();
-    const flowNs = 'content20251004_SendImageFlow';
+    const flowNs = 'content20251004_SendImageFlow';  // Mude para o NS real do seu flow
     await triggerManyChatFlow(contato, flowNs, url, caption, settings);
     console.log(`[${contato}] Image trigger sent to ManyChat flow`);
     return { ok: true };
@@ -2238,57 +2288,6 @@ async function sendImage(contato, imageUrl, caption, opts = {}) {
     console.log(`[${contato}] Image trigger fail: ${e.message}`);
     return { ok: false, error: e.message };
   }
-}
-
-async function sendImage(contato, imageUrl, caption, opts = {}) {
-    await extraGlobalDelay();
-    const url = safeStr(imageUrl).trim();
-    if (!url) return { ok: false, reason: 'empty-image-url' };
-    try {
-        const st = ensureEstado(contato);
-        if (await preflightOptOut(st)) {
-            console.log(`[${contato}] envio-imagem=cancelado por opt-out em tempo real`);
-            return { ok: false, reason: 'paused-by-optout' };
-        }
-        const forced = opts && opts.force === true;
-        const paused = (st.permanentlyBlocked === true) || (st.optOutCount >= 3) || (st.optOutCount > 0 && !st.reoptinActive);
-        if (paused && !forced) {
-            console.log(`[${contato}] envio-imagem=skip reason=paused-by-optout url="${url}"`);
-            return { ok: false, reason: 'paused-by-optout' };
-        }
-
-        const { mod, settings } = await getActiveTransport();
-        const provider = mod?.name || 'unknown';
-        if (provider === 'manychat') {
-            const token = (settings && settings.manychat_api_token) || process.env.MANYCHAT_API_TOKEN || '';
-            if (!token) {
-                console.log(`[${contato}] envio=fail provider=manychat reason=no-api-token image="${url}"`);
-                return { ok: false, reason: 'no-api-token' };
-            }
-            let subscriberId = null;
-            try {
-                const c = await getContatoByPhone(contato);
-                if (c?.manychat_subscriber_id) subscriberId = String(c.manychat_subscriber_id);
-            } catch (e) {
-                console.warn(`[${contato}] DB lookup subscriber_id falhou: ${e.message}`);
-            }
-            if (!subscriberId) {
-                subscriberId = await resolveManychatWaSubscriberId(contato, mod, settings);
-            }
-            if (!subscriberId) {
-                console.log(`[${contato}] envio=fail provider=manychat reason=no-wa-subscriber-id image="${url}"`);
-                return { ok: false, reason: 'no-wa-subscriber-id' };
-            }
-            await mod.sendImage({ subscriberId, imageUrl: url, caption }, settings, opts);
-            console.log(`[${contato}] envio=ok provider=manychat endpoint=/fb/sending/sendContent image="${url}"`);
-            return { ok: true, provider };
-        }
-        console.log(`[${contato}] envio=fail provider=${provider} reason=unsupported image="${url}"`);
-        return { ok: false, reason: 'unsupported' };
-    } catch (e) {
-        console.log(`[${contato}] envio=fail provider=unknown reason="${e.message}" image="${url}"`);
-        return { ok: false, error: e.message };
-    }
 }
 
 async function triggerManyChatFlow(contato, flowNs, imageUrl, caption, settings) {
