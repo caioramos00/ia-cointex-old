@@ -86,14 +86,8 @@ function loadOptInMsgs() {
     return _optInMsgs;
 }
 
-function anyMatch(haystack, needles = []) {
-    const s = String(haystack || '');
-    for (const x of (needles || [])) {
-        const n = String(x || '').trim();
-        if (!n) continue;
-        if (s.includes(n)) return true;
-    }
-    return false;
+function _canonicalizeEtapa(etapa) {
+    return etapa.toLowerCase().trim();
 }
 
 function isOptOut(textRaw) {
@@ -2264,59 +2258,59 @@ async function sendMessage(contato, texto, opts = {}) {
 }
 
 async function sendImage(contato, imageUrl, caption, opts = {}) {
-  await extraGlobalDelay();
-  const url = safeStr(imageUrl).trim();
-  if (!url) return { ok: false, reason: 'empty-image-url' };
-  try {
-    const st = ensureEstado(contato);
-    if (await preflightOptOut(st)) {
-        console.log(`[${contato}] envio-imagem=cancelado por opt-out em tempo real`);
-        return { ok: false, reason: 'paused-by-optout' };
+    await extraGlobalDelay();
+    const url = safeStr(imageUrl).trim();
+    if (!url) return { ok: false, reason: 'empty-image-url' };
+    try {
+        const st = ensureEstado(contato);
+        if (await preflightOptOut(st)) {
+            console.log(`[${contato}] envio-imagem=cancelado por opt-out em tempo real`);
+            return { ok: false, reason: 'paused-by-optout' };
+        }
+        const forced = opts && opts.force === true;
+        const paused = (st.permanentlyBlocked === true) || (st.optOutCount >= 3) || (st.optOutCount > 0 && !st.reoptinActive);
+        if (paused && !forced) {
+            console.log(`[${contato}] envio-imagem=skip reason=paused-by-optout url="${url}"`);
+            return { ok: false, reason: 'paused-by-optout' };
+        }
+        const { mod, settings } = await getActiveTransport();
+        const flowNs = 'content20251004203041_009700';  // Mude para o NS real do seu flow
+        await triggerManyChatFlow(contato, flowNs, url, caption, settings);
+        console.log(`[${contato}] Image trigger sent to ManyChat flow`);
+        return { ok: true };
+    } catch (e) {
+        console.log(`[${contato}] Image trigger fail: ${e.message}`);
+        return { ok: false, error: e.message };
     }
-    const forced = opts && opts.force === true;
-    const paused = (st.permanentlyBlocked === true) || (st.optOutCount >= 3) || (st.optOutCount > 0 && !st.reoptinActive);
-    if (paused && !forced) {
-        console.log(`[${contato}] envio-imagem=skip reason=paused-by-optout url="${url}"`);
-        return { ok: false, reason: 'paused-by-optout' };
-    }
-    const { mod, settings } = await getActiveTransport();
-    const flowNs = 'content20251004203041_009700';  // Mude para o NS real do seu flow
-    await triggerManyChatFlow(contato, flowNs, url, caption, settings);
-    console.log(`[${contato}] Image trigger sent to ManyChat flow`);
-    return { ok: true };
-  } catch (e) {
-    console.log(`[${contato}] Image trigger fail: ${e.message}`);
-    return { ok: false, error: e.message };
-  }
 }
 
 async function triggerManyChatFlow(contato, flowNs, imageUrl, caption, settings) {
-  const token = (settings && settings.manychat_api_token) || process.env.MANYCHAT_API_TOKEN || '';
-  if (!token) throw new Error('ManyChat API token ausente');
+    const token = (settings && settings.manychat_api_token) || process.env.MANYCHAT_API_TOKEN || '';
+    if (!token) throw new Error('ManyChat API token ausente');
 
-  const subscriberId = await resolveManychatWaSubscriberId(contato);
-  if (!subscriberId) throw new Error('No subscriber ID');
+    const subscriberId = await resolveManychatWaSubscriberId(contato);
+    if (!subscriberId) throw new Error('No subscriber ID');
 
-  const payload = {
-    subscriber_id: subscriberId,
-    flow_ns: flowNs,  // ex: 'content20251004_SendImageFlow'
-    variables: {  // Parâmetros dinâmicos
-      image_url: imageUrl,
-      caption: caption || '',
-      contact: contato  // Envie o número do celular
+    const payload = {
+        subscriber_id: subscriberId,
+        flow_ns: flowNs,  // ex: 'content20251004_SendImageFlow'
+        variables: {  // Parâmetros dinâmicos
+            image_url: imageUrl,
+            caption: caption || '',
+            contact: contato  // Envie o número do celular
+        }
+    };
+
+    const r = await axios.post('https://api.manychat.com/fb/sending/sendFlow', payload, {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        validateStatus: () => true
+    });
+
+    if (r.status >= 200 && r.status < 300 && r.data.status === 'success') {
+        console.log(`[${contato}] Triggered flow ${flowNs} with image ${imageUrl}`);
+        return { ok: true };
     }
-  };
-
-  const r = await axios.post('https://api.manychat.com/fb/sending/sendFlow', payload, {
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    validateStatus: () => true
-  });
-
-  if (r.status >= 200 && r.status < 300 && r.data.status === 'success') {
-    console.log(`[${contato}] Triggered flow ${flowNs} with image ${imageUrl}`);
-    return { ok: true };
-  }
-  throw new Error(`Trigger flow falhou: ${JSON.stringify(r.data)}`);
+    throw new Error(`Trigger flow falhou: ${JSON.stringify(r.data)}`);
 }
 
 const KNOWN_ETAPAS = new Set([
