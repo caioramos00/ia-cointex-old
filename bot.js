@@ -346,10 +346,7 @@ function extractTextForLog(data) {
     }
 }
 
-function isSendStage(stage) { return /:send$/.test(String(stage || '')); }
-
-function enterSendStageOptOutResetIfNeeded(st) {
-    if (!isSendStage(st.etapa)) return;
+function enterStageOptOutResetIfNeeded(st) {
     if (st.optoutBatchStage !== st.etapa) {
         st.optoutBatchStage = st.etapa;
         st.optoutBuffer = [];
@@ -778,7 +775,7 @@ async function handleManyChatWebhook(body) {
 async function processarMensagensPendentes(contato) {
     const st = ensureEstado(contato);
     if (st.enviandoMensagens) {
-        // Mesmo "ocupado", checa opt-out para interromper imediatamente
+        await preflightOptOut(st);
         const pend = Array.isArray(st.mensagensPendentes) ? st.mensagensPendentes : [];
         const hadOptOut = pend.some(m => isOptOut(m?.texto || ''));
 
@@ -837,6 +834,7 @@ async function processarMensagensPendentes(contato) {
     st.enviandoMensagens = true;
     try {
         console.log(`${tsNow()} [${st.contato}] etapa=${st.etapa} pendentes=${st.mensagensPendentes.length}`);
+        enterStageOptOutResetIfNeeded(st);
 
         if (st.permanentlyBlocked || st.optOutCount >= 3) {
             st.permanentlyBlocked = true;
@@ -1023,7 +1021,7 @@ async function processarMensagensPendentes(contato) {
         }
 
         if (st.etapa === 'abertura:send') {
-            enterSendStageOptOutResetIfNeeded(st);
+            enterStageOptOutResetIfNeeded(st);
             const aberturaPath = path.join(__dirname, 'content', 'abertura.json');
             let aberturaData = null;
             const loadAbertura = () => {
@@ -1124,7 +1122,7 @@ async function processarMensagensPendentes(contato) {
         }
 
         if (st.etapa === 'interesse:send') {
-            enterSendStageOptOutResetIfNeeded(st);
+            enterStageOptOutResetIfNeeded(st);
             const interessePath = path.join(__dirname, 'content', 'interesse.json');
             let interesseData = null;
             const loadInteresse = () => {
@@ -1265,7 +1263,7 @@ async function processarMensagensPendentes(contato) {
         }
 
         if (st.etapa === 'instrucoes:send') {
-            enterSendStageOptOutResetIfNeeded(st);
+            enterStageOptOutResetIfNeeded(st);
             const instrucoesPath = path.join(__dirname, 'content', 'instrucoes.json');
             let instrucoesData = null;
             const loadInstrucoes = () => {
@@ -1442,7 +1440,7 @@ async function processarMensagensPendentes(contato) {
         }
 
         if (st.etapa === 'acesso:send') {
-            enterSendStageOptOutResetIfNeeded(st);
+            enterStageOptOutResetIfNeeded(st);
             const acessoPath = path.join(__dirname, 'content', 'acesso.json');
             let acessoData = null;
             const loadAcesso = () => {
@@ -1609,7 +1607,7 @@ async function processarMensagensPendentes(contato) {
         }
 
         if (st.etapa === 'confirmacao:send') {
-            enterSendStageOptOutResetIfNeeded(st);
+            enterStageOptOutResetIfNeeded(st);
             const confirmacaoPath = path.join(__dirname, 'content', 'confirmacao.json');
             let confirmacaoData = null;
             const loadConfirmacao = () => {
@@ -1754,7 +1752,7 @@ async function processarMensagensPendentes(contato) {
         }
 
         if (st.etapa === 'saque:send') {
-            enterSendStageOptOutResetIfNeeded(st);
+            enterStageOptOutResetIfNeeded(st);
             const saquePath = path.join(__dirname, 'content', 'saque.json');
             let saqueData = null;
             function gerarSenhaAleatoria() { return String(Math.floor(1000 + Math.random() * 9000)); }
@@ -1953,7 +1951,7 @@ async function processarMensagensPendentes(contato) {
         }
 
         if (st.etapa === 'validacao:send') {
-            enterSendStageOptOutResetIfNeeded(st);
+            enterStageOptOutResetIfNeeded(st);
             const validacaoPath = path.join(__dirname, 'content', 'validacao.json');
             let validacaoData = null;
             const loadValidacao = () => {
@@ -2043,6 +2041,9 @@ async function processarMensagensPendentes(contato) {
         }
 
         if (st.etapa === 'validacao:cooldown') {
+            if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-cooldown' };
+            if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-cooldown' };
+
             const now = Date.now();
             if (st.validacaoTimeoutUntil > 0 && now < st.validacaoTimeoutUntil) {
                 if (st.mensagensPendentes.length > 0) {
@@ -2067,7 +2068,7 @@ async function processarMensagensPendentes(contato) {
         }
 
         if (st.etapa === 'conversao:send') {
-            enterSendStageOptOutResetIfNeeded(st);
+            enterStageOptOutResetIfNeeded(st);
             if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-pre-batch' };
 
             let conversao = null;
