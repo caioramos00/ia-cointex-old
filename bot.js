@@ -268,24 +268,15 @@ async function preflightOptOut(st) {
         return true;
     }
 
-    if (isSendStage(st.etapa)) {
-        const start = Math.max(0, st._optoutSeenIdx || 0);
-        for (let i = start; i < pend.length; i++) {
-            const t = safeStr(pend[i]?.texto || '').trim();
-            if (t) {
-                st.optoutBuffer.push(t);
-                console.log(`[${st.contato}] [OPTOUT][BATCH][PUSH] stage=${st.etapa} size=${st.optoutBuffer.length} msg="${truncate(t, 140)}"`);
-            }
-        }
-        st._optoutSeenIdx = pend.length;
-    } else {
-        for (const m of pend) {
-            const t = safeStr(m?.texto || '').trim();
-            if (t) {
-                console.log(`[${st.contato}] [OPTOUT][WAIT] ignorando lote; só hard-coded. msg="${truncate(t, 140)}"`);
-            }
+    const start = Math.max(0, st._optoutSeenIdx || 0);
+    for (let i = start; i < pend.length; i++) {
+        const t = safeStr(pend[i]?.texto || '').trim();
+        if (t) {
+            st.optoutBuffer.push(t);
+            console.log(`[${st.contato}] [OPTOUT][BATCH][PUSH] stage=${st.etapa} size=${st.optoutBuffer.length} msg="${truncate(t, 140)}"`);
         }
     }
+    st._optoutSeenIdx = pend.length;
     return false;
 }
 
@@ -369,8 +360,6 @@ function enterSendStageOptOutResetIfNeeded(st) {
 }
 
 async function finalizeOptOutBatchAtEnd(st) {
-    if (!isSendStage(st.etapa)) return false;
-
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey || typeof promptClassificaOptOut !== 'function') {
         st.optoutBuffer = [];
@@ -1125,6 +1114,8 @@ async function processarMensagensPendentes(contato) {
         }
 
         if (st.etapa === 'abertura:wait') {
+            if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
+            if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
 
             const _prev = st.etapa;
@@ -1180,6 +1171,8 @@ async function processarMensagensPendentes(contato) {
         }
 
         if (st.etapa === 'interesse:wait') {
+            if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
+            if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
             const total = st.mensagensDesdeSolicitacao.length;
             const startIdx = Math.max(0, st.lastClassifiedIdx?.interesse || 0);
@@ -1351,6 +1344,8 @@ async function processarMensagensPendentes(contato) {
         }
 
         if (st.etapa === 'instrucoes:wait') {
+            if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
+            if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
             const total = st.mensagensDesdeSolicitacao.length;
             const startIdx = Math.max(0, st.lastClassifiedIdx?.acesso || 0);
@@ -1521,6 +1516,8 @@ async function processarMensagensPendentes(contato) {
         }
 
         if (st.etapa === 'acesso:wait') {
+            if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
+            if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
             const total = st.mensagensDesdeSolicitacao.length;
             const startIdx = Math.max(0, st.lastClassifiedIdx?.acesso || 0);
@@ -1662,6 +1659,8 @@ async function processarMensagensPendentes(contato) {
         }
 
         if (st.etapa === 'confirmacao:wait') {
+            if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
+            if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
             const total = st.mensagensDesdeSolicitacao.length;
             const startIdx = Math.max(0, st.lastClassifiedIdx?.confirmacao || 0);
@@ -1828,6 +1827,8 @@ async function processarMensagensPendentes(contato) {
         }
 
         if (st.etapa === 'saque:wait') {
+            if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
+            if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
             const total = st.mensagensDesdeSolicitacao.length;
             const startIdx = Math.max(0, st.lastClassifiedIdx?.saque || 0);
@@ -2013,6 +2014,8 @@ async function processarMensagensPendentes(contato) {
         }
 
         if (st.etapa === 'validacao:wait') {
+            if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
+            if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
             if (st.validacaoAwaitFirstMsg && st.validacaoTimeoutUntil === 0) {
                 const FOUR = 4 * 60 * 1000;
@@ -2174,6 +2177,8 @@ async function processarMensagensPendentes(contato) {
         }
 
         if (st.etapa === 'conversao:wait') {
+            if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
+            if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
             st.mensagensPendentes = [];
             return { ok: true, noop: 'idle' };
         }
