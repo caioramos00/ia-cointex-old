@@ -96,7 +96,6 @@ function anyMatch(haystack, needles = []) {
     return false;
 }
 
-// heurística segura para opt-out
 function isOptOut(textRaw) {
     const data = loadOptOutData();
     const cfg = data?.config || {};
