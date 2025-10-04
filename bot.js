@@ -906,8 +906,13 @@ async function processarMensagensPendentes(contato) {
         }
 
         if (st.optOutCount > 0 && !st.reoptinActive) {
-            if (st.reoptinLotsTried === 0 && st.reoptinBuffer.length > 0) {
+            // Inicializa UMA vez por janela de re-opt-in (logo após o último opt-out)
+            const isNewWindow = !st._reoptinInitTs || st._reoptinInitTs < (st.optedOutAtTs || 0);
+            if (isNewWindow) {
+                st._reoptinInitTs = Date.now();
                 st.reoptinBuffer = [];
+                st.reoptinLotsTried = 0;
+                console.log(`[${st.contato}] [REOPTIN][INIT] nova janela pós opt-out @${st._reoptinInitTs}`);
             }
             const cutoffTs = Number(st.optedOutAtTs || 0);
             if (Array.isArray(st.mensagensPendentes) && st.mensagensPendentes.length) {
@@ -1003,6 +1008,7 @@ async function processarMensagensPendentes(contato) {
                     st.reoptinBuffer = [];
                     st.reoptinCount = (st.reoptinCount || 0) + 1;
                     st.mensagensDesdeSolicitacao = [];
+                    st._reoptinInitTs = 0; 
 
                     const iMsgs = loadOptInMsgs();
                     const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
@@ -1025,6 +1031,7 @@ async function processarMensagensPendentes(contato) {
                         st.etapa = 'encerrado:wait';
                         st.reoptinBuffer = [];
                         st.reoptinActive = false;
+                        st._reoptinInitTs = 0; 
                         return { ok: true, paused: true, ended: true };
                     }
                     return { ok: true, paused: true };

@@ -80,22 +80,26 @@ const promptClassificaRelevancia = (mensagensTexto, temMidia) => `
 
 function promptClassificaOptOut(texto) {
   return `
-Você é um CLASSIFICADOR BINÁRIO de opt-out.
+Você é um **CLASSIFICADOR BINÁRIO de opt-out**.
 
 Entrada:
 - Você receberá UM OU MAIS trechos de mensagens do usuário, na ordem em que chegaram, separados por " | ".
 - Considere o CONJUNTO como um todo, dando PESO MAIOR às mensagens MAIS RECENTES.
 
 Objetivo:
-- Decidir se há um pedido explícito para PARAR de receber mensagens (opt-out).
+- Decidir se há um pedido explícito para PARAR de receber mensagens (opt-out) OU se há ACUSAÇÃO/SUSPEITA de golpe/engano/falsidade que indique rejeição hostil ao contato. Em ambos os casos → OPTOUT.
 
 Princípios (em ordem):
 1) Normalize mentalmente: minúsculas, sem acentos; ignore emojis/URLs/hashtags/ruído.
-2) Se houver pedido para parar, bloquear, excluir, remover, cancelar, sair; ou menções de denúncia/polícia/golpe/fraude/crime/advogado → OPTOUT.
-3) Recusa momentânea, dúvida, silêncio, mídia sem texto → CONTINUAR.
-4) Se houver conflito, prevalece a rejeição/ameaça mais RECENTE → OPTOUT.
-5) Considere variações/gírias/abreviações em PT/EN/ES (ex.: pare/para/remova/unsubscribe/stop/block/spam/etc.).
-6) Segurança primeiro: EM CASO DE DÚVIDA real, devolva OPTOUT.
+2) Pedido explícito de parar (ex.: parar, pare, para, stop, unsubscribe, remover, tirar da lista, cancelar, sair, bloquear) → OPTOUT.
+3) Ameaça/denúncia/autoridades (ex.: denunciar, polícia, procon, advogado, golpe, fraude, crime, scam, spam) → OPTOUT.
+4) Acusação/suspeita de ENGANO/FAKE/GOLPE mesmo sem “pare” → OPTOUT.
+   - Gatilhos PT (indicativos, não exaustivos): enganar, enrolar, passar a perna, papo furado, truque, armadilha, golpe, picaretagem, fraude, piramide, esquema, treta, fake, fakezada, falso, mentira, forjado, “isso não cola”, enganação, “já vi isso antes” (quando implica golpe), “isso é fake?”, “tá tentando me enganar?”.
+   - EN: scam, fraud, fake, phishing, shady, trick, rip-off, bogus.
+   - ES: estafa, fraude, timo, engaño, trampa, falso.
+5) Recusa momentânea, dúvida neutra ou curiosidade (ex.: “agora não”, “depois vejo”, “é real?”, “tem garantia?”) SEM acusação/ameaça → CONTINUAR.
+6) Conflito: prevalece a rejeição/ameaça/acusação MAIS RECENTE → OPTOUT.
+7) Segurança primeiro: EM CASO DE DÚVIDA real, devolva OPTOUT.
 
 FORMATO DE SAÍDA (obrigatório, somente JSON):
 {"label":"OPTOUT"} ou {"label":"CONTINUAR"}
@@ -105,6 +109,9 @@ Exemplos rápidos (→ saída):
 "stop" → {"label":"OPTOUT"}
 "me tira da lista" → {"label":"OPTOUT"}
 "isso é golpe" → {"label":"OPTOUT"}
+"já vi isso antes, papo furado" → {"label":"OPTOUT"}
+"tá tentando me enganar?" → {"label":"OPTOUT"}
+"isso não é fakezada não?" → {"label":"OPTOUT"}
 "agora não" → {"label":"CONTINUAR"}
 "depois eu vejo" → {"label":"CONTINUAR"}
 
