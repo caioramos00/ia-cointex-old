@@ -2280,7 +2280,7 @@ async function sendImage(contato, imageUrl, caption, opts = {}) {
         return { ok: false, reason: 'paused-by-optout' };
     }
     const { mod, settings } = await getActiveTransport();
-    const flowNs = 'content20251004_SendImageFlow';  // Mude para o NS real do seu flow
+    const flowNs = 'content20251004203041_009700';  // Mude para o NS real do seu flow
     await triggerManyChatFlow(contato, flowNs, url, caption, settings);
     console.log(`[${contato}] Image trigger sent to ManyChat flow`);
     return { ok: true };
