@@ -262,17 +262,17 @@ async function preflightOptOut(st) {
         return true;
     }
 
-    // 3) Sem hard-match: acumula no buffer SOMENTE se etapa atual for ":send"
     if (isSendStage(st.etapa)) {
-        for (const m of pend) {
-            const t = safeStr(m?.texto || '').trim();
+        const start = Math.max(0, st._optoutSeenIdx || 0);
+        for (let i = start; i < pend.length; i++) {
+            const t = safeStr(pend[i]?.texto || '').trim();
             if (t) {
                 st.optoutBuffer.push(t);
                 console.log(`[${st.contato}] [OPTOUT][BATCH][PUSH] stage=${st.etapa} size=${st.optoutBuffer.length} msg="${truncate(t, 140)}"`);
             }
         }
+        st._optoutSeenIdx = pend.length;
     } else {
-        // em etapas :wait não acumulamos lote (apenas hard-coded)
         for (const m of pend) {
             const t = safeStr(m?.texto || '').trim();
             if (t) {
@@ -280,7 +280,6 @@ async function preflightOptOut(st) {
             }
         }
     }
-    // Quem chamou decide o fluxo e quando finalizar o lote (finalizeOptOutBatchAtEnd)
     return false;
 }
 
@@ -338,12 +337,12 @@ function enterSendStageOptOutResetIfNeeded(st) {
         st.optoutBatchStage = st.etapa;
         st.optoutBuffer = [];
         st.optoutLotsTried = 0;
+        st._optoutSeenIdx = 0;
         console.log(`[${st.contato}] [OPTOUT][BATCH][RESET] stage=${st.etapa}`);
     }
 }
 
 async function finalizeOptOutBatchAtEnd(st) {
-    // Só roda no final da etapa :send, antes de trocar p/ :wait
     if (!isSendStage(st.etapa)) return false;
 
     const apiKey = process.env.OPENAI_API_KEY;
@@ -351,19 +350,17 @@ async function finalizeOptOutBatchAtEnd(st) {
         st.optoutBuffer = [];
         return false;
     }
-
-    // 1 chamada por etapa de envio
     if ((st.optoutLotsTried || 0) >= 1) {
         st.optoutBuffer = [];
         return false;
     }
 
-    const size = Array.isArray(st.optoutBuffer) ? st.optoutBuffer.length : 0;
-    if (size === 0) {
-        return false;
-    }
+    const uniq = Array.from(new Set((st.optoutBuffer || []).map(s => safeStr(s))));
 
-    const joined = st.optoutBuffer.join(' | ');
+    const size = uniq.length;
+    if (size === 0) { st.optoutBuffer = []; return false; }
+
+    const joined = uniq.join(' | ');
     const structuredPrompt =
         `${promptClassificaOptOut(joined)}\n\n` +
         `Output only valid JSON as {"label":"OPTOUT"} or {"label":"CONTINUAR"}`;
@@ -499,6 +496,7 @@ function ensureEstado(contato) {
         if (typeof st.optoutLotsTried !== 'number') st.optoutLotsTried = 0;
         if (!Array.isArray(st.optoutBuffer)) st.optoutBuffer = [];
         if (!('optoutBatchStage' in st)) st.optoutBatchStage = null;
+        if (typeof st._optoutSeenIdx !== 'number') st._optoutSeenIdx = 0;
     }
     return estadoContatos[key];
 }
