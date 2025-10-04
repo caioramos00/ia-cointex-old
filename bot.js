@@ -17,6 +17,9 @@ const {
 
 let log = console;
 
+const https = require('https');
+axios.defaults.httpsAgent = new https.Agent({ keepAlive: true });
+
 function safeStr(v) { return (v === null || v === undefined) ? '' : String(v); }
 function normalizeContato(raw) { return safeStr(raw).replace(/\D/g, ''); }
 const delay = (ms) => new Promise(r => setTimeout(r, ms));
@@ -660,6 +663,7 @@ async function resolveManychatSubscriberId(contato, modOpt, settingsOpt) {
 
 async function resolveManychatWaSubscriberId(contato, modOpt, settingsOpt) {
     const phone = String(contato || '').replace(/\D/g, '');
+    console.log(`Debug resolve: phone=${phone}`);
     const st = ensureEstado(phone);
     let subscriberId = null;
     try {
@@ -2303,6 +2307,7 @@ async function triggerManyChatFlow(contato, flowNs, imageUrl, caption, settings)
 
     const r = await axios.post('https://api.manychat.com/fb/sending/sendFlow', payload, {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        timeout: 60000,  // 60s
         validateStatus: () => true
     });
 
