@@ -408,17 +408,14 @@ async function finalizeOptOutBatchAtEnd(st) {
                 }
             );
 
-            if (r.status >= 200 && r.status < 300) {
-                const hasAny =
-                    (typeof r.data?.output_text === 'string' && r.data.output_text.trim()) ||
-                    (Array.isArray(r.data?.output) && r.data.output.some(b => b?.type === 'message' && Array.isArray(b.content) && b.content.some(c => typeof c?.text === 'string' && c.text.trim())));
-                if (!hasAny) {
-                    console.log(`[OPTOUT][IA][RAW][200] ${truncate(JSON.stringify(r.data), 1200)}`);
-                }
-            }
+            const reqId = (r.headers?.['x-request-id'] || r.headers?.['X-Request-Id'] || '');
+            console.log(
+                `${tsNow()} [${st.contato}] [OPTOUT][IA][RAW] http=${r.status} ` +
+                `req=${reqId} body=${truncate(JSON.stringify(r.data), 20000)}`
+            );
 
             console.log(
-                `[${st.contato}] [OPTOUT][IA][DEBUG] http=${r.status}` +
+                `[${st.contato}] [OPTOUT][IA][DEBUG] http=${r.status} req=${reqId}` +
                 ` output_text="${truncate(r.data?.output_text, 300)}"` +
                 ` content0="${truncate(JSON.stringify(r.data?.output?.[0]?.content || ''), 300)}"` +
                 ` choices0="${truncate(r.data?.choices?.[0]?.message?.content || '', 300)}"` +
