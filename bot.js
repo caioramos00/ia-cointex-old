@@ -167,7 +167,7 @@ function isOptIn(textRaw) {
         .filter(Boolean);
 
     // 3) Regras declarativas do JSON
-    const rule = Array.isArray(data?.match_if_any) ? data.match_if_any : ['phrases','keywords','regex'];
+    const rule = Array.isArray(data?.match_if_any) ? data.match_if_any : ['phrases', 'keywords', 'regex'];
     const shouldCheck = new Set(rule.map(x => String(x || '').toLowerCase()));
     const hasAny = (arr) => arr.some(tok => tok && s.includes(tok));
 
@@ -631,10 +631,15 @@ async function processarMensagensPendentes(contato) {
         if (st.optOutCount > 0 && !st.reoptinActive) {
             if (Array.isArray(st.mensagensPendentes) && st.mensagensPendentes.length) {
                 let matched = false;
+                let matchedText = '';
                 for (const m of st.mensagensPendentes) {
                     const t = m?.texto || '';
                     if (!t) continue;
-                    if (isOptIn(t)) { matched = true; break; }
+                    if (isOptIn(t)) {
+                        matched = true;
+                        matchedText = t;
+                        break;
+                    }
                 }
 
                 if (!matched) {
@@ -688,18 +693,22 @@ async function processarMensagensPendentes(contato) {
 
                         let out = await ask(48);
                         if (!out) out = await ask(128);
+                        const tail = st.reoptinBuffer[st.reoptinBuffer.length - 1] || '';
                         st.reoptinLotsTried += 1;
-                        st.reoptinBuffer = [];
                         matched = (out === 'optin');
+                        if (matched) matchedText = tail;
+                        st.reoptinBuffer = [];
                     }
                 }
 
                 if (matched) {
-                    console.log(`[${st.contato}] re-opt-in DETECTADO: "${t}"`);
+                    console.log(`[${st.contato}] re-opt-in DETECTADO: "${truncate(matchedText, 140)}"`);
                     st.reoptinActive = true;
                     st.reoptinLotsTried = 0;
                     st.reoptinBuffer = [];
                     st.reoptinCount = (st.reoptinCount || 0) + 1;
+                    st.mensagensPendentes = [];
+                    st.mensagensDesdeSolicitacao = [];
 
                     const iMsgs = loadOptInMsgs();
                     const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
