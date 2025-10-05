@@ -2322,7 +2322,7 @@ async function sendImage(contato, imageUrl, caption = '', opts = {}) {
     }
 
     // 2) seta a URL da imagem (isso dispara o fluxo no ManyChat)
-    const okImg = await updateManyChatCustomFieldByName({ token, subscriberId, fieldName: 'image_url', fieldValue: url });
+    const okImg = await updateManyChatCustomFieldByName({ token, subscriberId, fieldName: 'image', fieldValue: url });
     if (!okImg) return { ok: false, reason: 'set-field-failed' };
 
     console.log(`[${contato}] ManyChat: image_url atualizado -> fluxo disparado. url="${url}" caption_len=${(caption || '').length}`);
