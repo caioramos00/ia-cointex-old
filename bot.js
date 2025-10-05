@@ -2261,31 +2261,76 @@ async function sendMessage(contato, texto, opts = {}) {
     }
 }
 
-async function sendImage(contato, imageUrl, caption, opts = {}) {
-    await extraGlobalDelay();
-    const url = safeStr(imageUrl).trim();
-    if (!url) return { ok: false, reason: 'empty-image-url' };
+async function updateManyChatCustomFieldByName({ token, subscriberId, fieldName, fieldValue }) {
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  const tries = [
+    // endpoint WA atual
+    { url: 'https://api.manychat.com/whatsapp/subscribers/setCustomFieldByName', body: { subscriber_id: subscriberId, field_name: fieldName, field_value: fieldValue } },
+    // fallback legado (algumas contas WA ainda aceitam pelo path fb/*)
+    { url: 'https://api.manychat.com/fb/subscriber/setCustomFieldByName', body: { subscriber_id: subscriberId, field_name: fieldName, field_value: fieldValue } },
+  ];
+
+  for (const t of tries) {
     try {
-        const st = ensureEstado(contato);
-        if (await preflightOptOut(st)) {
-            console.log(`[${contato}] envio-imagem=cancelado por opt-out em tempo real`);
-            return { ok: false, reason: 'paused-by-optout' };
-        }
-        const forced = opts && opts.force === true;
-        const paused = (st.permanentlyBlocked === true) || (st.optOutCount >= 3) || (st.optOutCount > 0 && !st.reoptinActive);
-        if (paused && !forced) {
-            console.log(`[${contato}] envio-imagem=skip reason=paused-by-optout url="${url}"`);
-            return { ok: false, reason: 'paused-by-optout' };
-        }
-        const { mod, settings } = await getActiveTransport();
-        const flowNs = 'content20251005164000_207206';  // Mude para o NS real do seu flow
-        await triggerManyChatFlow(contato, flowNs, url, caption, settings);
-        console.log(`[${contato}] Image trigger sent to ManyChat flow`);
-        return { ok: true };
+      const r = await axios.post(t.url, t.body, { headers, timeout: 15000, validateStatus: () => true });
+      console.log(`[ManyChat][setField:${fieldName}] ${r.status} -> ${JSON.stringify(r.data)}`);
+      if (r.status >= 200 && r.status < 300 && (r.data?.status === 'success' || r.data?.code === 200)) {
+        return true;
+      }
     } catch (e) {
-        console.log(`[${contato}] Image trigger fail: ${e.message}`);
-        return { ok: false, error: e.message };
+      console.log(`[ManyChat][setField:${fieldName}] erro @ ${t.url}: ${e?.message || e}`);
     }
+  }
+  return false;
+}
+
+
+async function sendImage(contato, imageUrl, caption = '', opts = {}) {
+  await extraGlobalDelay();
+  const url = safeStr(imageUrl).trim();
+  if (!url) return { ok: false, reason: 'empty-image-url' };
+
+  try {
+    const st = ensureEstado(contato);
+
+    if (await preflightOptOut(st)) {
+      console.log(`[${contato}] envio-imagem=cancelado por opt-out em tempo real`);
+      return { ok: false, reason: 'paused-by-optout' };
+    }
+
+    const forced = opts && opts.force === true;
+    const paused = (st.permanentlyBlocked === true) || (st.optOutCount >= 3) || (st.optOutCount > 0 && !st.reoptinActive);
+    if (paused && !forced) {
+      console.log(`[${contato}] envio-imagem=skip reason=paused-by-optout url="${url}"`);
+      return { ok: false, reason: 'paused-by-optout' };
+    }
+
+    const { mod, settings } = await getActiveTransport();
+    if ((mod?.name || '') !== 'manychat') {
+      return { ok: false, reason: 'unsupported' };
+    }
+
+    const token = (settings && settings.manychat_api_token) || process.env.MANYCHAT_API_TOKEN || '';
+    if (!token) return { ok: false, reason: 'missing-token' };
+
+    const subscriberId = await resolveManychatWaSubscriberId(contato, mod, settings);
+    if (!subscriberId) return { ok: false, reason: 'no-subscriber-id' };
+
+    // 1) seta a legenda primeiro (para já estar disponível quando o gatilho disparar)
+    if (typeof caption === 'string') {
+      await updateManyChatCustomFieldByName({ token, subscriberId, fieldName: 'caption', fieldValue: caption || '' });
+    }
+
+    // 2) seta a URL da imagem (isso dispara o fluxo no ManyChat)
+    const okImg = await updateManyChatCustomFieldByName({ token, subscriberId, fieldName: 'image_url', fieldValue: url });
+    if (!okImg) return { ok: false, reason: 'set-field-failed' };
+
+    console.log(`[${contato}] ManyChat: image_url atualizado -> fluxo disparado. url="${url}" caption_len=${(caption || '').length}`);
+    return { ok: true, provider: 'manychat' };
+  } catch (e) {
+    console.log(`[${contato}] Image send fail: ${e.message}`);
+    return { ok: false, error: e.message };
+  }
 }
 
 async function triggerManyChatFlow(contato, flowNs, imageUrl, caption, settings) {
