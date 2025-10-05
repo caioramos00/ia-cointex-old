@@ -2264,9 +2264,6 @@ async function sendMessage(contato, texto, opts = {}) {
 async function updateManyChatCustomFieldByName({ token, subscriberId, fieldName, fieldValue }) {
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
   const tries = [
-    // endpoint WA atual
-    { url: 'https://api.manychat.com/whatsapp/subscribers/setCustomFieldByName', body: { subscriber_id: subscriberId, field_name: fieldName, field_value: fieldValue } },
-    // fallback legado (algumas contas WA ainda aceitam pelo path fb/*)
     { url: 'https://api.manychat.com/fb/subscriber/setCustomFieldByName', body: { subscriber_id: subscriberId, field_name: fieldName, field_value: fieldValue } },
   ];
 
@@ -2342,7 +2339,7 @@ async function triggerManyChatFlow(contato, flowNs, imageUrl, caption, settings)
 
     const payload = {
         subscriber_id: subscriberId,
-        flow_ns: flowNs,  // ex: 'content20251004203041_009700'
+        flow_ns: 'content20251005164000_207206',  // ex: 'content20251004203041_009700'
         variables: {  // Parâmetros dinâmicos
             contact_: contato,  // Envie o número do celular
             image_url_: imageUrl,
