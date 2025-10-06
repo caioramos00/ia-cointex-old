@@ -2376,8 +2376,10 @@ async function sendImage(contato, image, captionOrOpts = '', maybeOpts = {}) {
 
     // ===== 2) Guardas e opt-out =====
     await extraGlobalDelay();
-    if (!items.length || !items[0].url) return { ok: false, reason: 'empty-image-url' };
-
+    const allowNoUrl = !!((typeof captionOrOpts === 'object' ? captionOrOpts : maybeOpts)?.flowNs);
+    if (!items.length || (!items[0].url && !allowNoUrl)) {
+        return { ok: false, reason: 'empty-image-url' };
+    }
     try {
         const st = ensureEstado(contato);
         if (await preflightOptOut(st)) return { ok: false, reason: 'paused-by-optout' };
@@ -2438,15 +2440,14 @@ async function sendImage(contato, image, captionOrOpts = '', maybeOpts = {}) {
             return { ok: false, reason: 'flow-send-failed', details: r.data };
         };
 
-        const sender = (opts.mechanism === 'flow') ? sendOneByFlow : sendOneByFields;
+        const sender =
+            (opts.mechanism === 'flow' || (!!opts.flowNs)) ? sendOneByFlow : sendOneByFields;
 
         // ===== 6) Suporte a múltiplas imagens (replicável em qualquer etapa) =====
         const results = [];
         for (let i = 0; i < items.length; i++) {
             const { url, caption } = items[i];
-            if (!url) { results.push({ ok: false, reason: 'empty-image-url' }); continue; }
-
-            const r = await sender({ url, caption });
+            const r = await sender({ url: url || '', caption });
             results.push(r);
 
             // checagem de opt-out entre envios
