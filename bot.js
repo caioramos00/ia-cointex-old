@@ -2271,131 +2271,54 @@ async function sendManychatWaFlow(contato, flowNs, dataOpt = {}) {
     }
 }
 
-// bot.js — substitua a função sendImage inteira por esta
-
-async function sendImage(contato, image, captionOrOpts = '', maybeOpts = {}) {
-  // ===== 1) Normalização de argumentos =====
-  // Usos aceitos:
-  //   sendImage(contato, 'https://img...', 'Legenda')
-  //   sendImage(contato, 'https://img...', { mechanism:'manychat_fields', caption:'...' })
-  //   sendImage(contato, [{ url, caption }, { url, caption }], { delayBetweenMs:[12000,16000] })
-  const isArray = Array.isArray(image);
-  const items = isArray
-    ? image.map(it => ({ url: safeStr(it?.url).trim(), caption: safeStr(it?.caption || '') }))
-    : [{ url: safeStr(image).trim(), caption: (typeof captionOrOpts === 'string' ? captionOrOpts : safeStr(captionOrOpts?.caption || '')) }];
-
-  const baseOpts = (typeof captionOrOpts === 'object' && !isArray) ? captionOrOpts : maybeOpts;
-  const opts = {
-    // mecanismo padrão: o mesmo do /admin/test-image (set custom fields)
-    mechanism: (baseOpts.mechanism || 'manychat_fields'),
-    // nomes dos campos no ManyChat (pode sobrescrever se quiser)
-    fields: { image: (baseOpts.fields?.image || 'image'), caption: (baseOpts.fields?.caption || 'caption') },
-    // para quem quiser ainda acionar flow direto:
-    flowNs: baseOpts.flowNs || null,        // ex: 'content20251005164000_207206'
-    flowVars: baseOpts.flowVars || {},      // vars extras para o flow
-    // comportamento geral:
-    force: baseOpts.force === true,
-    alsoSendAsFile: baseOpts.alsoSendAsFile === true, // reservado p/ outros providers futuramente
-    delayBetweenMs: Array.isArray(baseOpts.delayBetweenMs) ? baseOpts.delayBetweenMs : [BETWEEN_MIN_MS, BETWEEN_MAX_MS],
-  };
-
-  // ===== 2) Guardas e opt-out =====
-  await extraGlobalDelay();
-  if (!items.length || !items[0].url) return { ok: false, reason: 'empty-image-url' };
-
-  try {
-    const st = ensureEstado(contato);
-    if (await preflightOptOut(st)) return { ok: false, reason: 'paused-by-optout' };
-
-    const paused = (st.permanentlyBlocked === true) || (st.optOutCount >= 3) || (st.optOutCount > 0 && !st.reoptinActive);
-    if (paused && !opts.force) return { ok: false, reason: 'paused-by-optout' };
-
-    // ===== 3) Provider ativo =====
-    const { mod, settings } = await getActiveTransport();
-    const provider = mod?.name || 'unknown';
-
-    if (provider !== 'manychat') {
-      // hoje só damos suporte completo a ManyChat p/ imagem
-      return { ok: false, reason: 'unsupported' };
-    }
-
-    // ===== 4) Credenciais/Subscriber =====
-    const token = (settings && settings.manychat_api_token) || process.env.MANYCHAT_API_TOKEN || '';
-    if (!token) return { ok: false, reason: 'missing-token' };
-
-    const subscriberId = await resolveManychatWaSubscriberId(contato, mod, settings);
-    if (!subscriberId) return { ok: false, reason: 'no-subscriber-id' };
-
-    // ===== 5) Estratégias de envio no ManyChat =====
-    const sendOneByFields = async ({ url, caption }) => {
-      // (A) mesmo mecanismo do /admin/test-image: 1) set caption 2) set image
-      if (typeof caption === 'string') {
-        await updateManyChatCustomFieldByName({ token, subscriberId, fieldName: opts.fields.caption, fieldValue: caption || '' });
-      }
-      const okImg = await updateManyChatCustomFieldByName({ token, subscriberId, fieldName: opts.fields.image, fieldValue: url });
-      if (!okImg) return { ok: false, reason: 'set-field-failed' };
-      console.log(`[${contato}] ManyChat: ${opts.fields.image} atualizado -> fluxo disparado. url="${url}" caption_len=${(caption || '').length}`);
-      return { ok: true, provider: 'manychat', mechanism: 'manychat_fields' };
-    };
-
-    const sendOneByFlow = async ({ url, caption }) => {
-      // (B) alternativa: acionar diretamente um flow com variáveis
-      if (!opts.flowNs) return { ok: false, reason: 'missing-flow-ns' };
-      const payload = {
-        subscriber_id: subscriberId,
-        flow_ns: opts.flowNs,
-        variables: {
-          contact_: contato,
-          image_url_: url,
-          caption_: caption || '',
-          ...opts.flowVars,
+async function sendMessage(contato, texto, opts = {}) {
+    await extraGlobalDelay();
+    const msg = safeStr(texto);
+    try {
+        const st = ensureEstado(contato);
+        if (await preflightOptOut(st)) {
+            console.log(`[${contato}] envio=cancelado por opt-out em tempo real`);
+            return { ok: false, reason: 'paused-by-optout' };
         }
-      };
-      const r = await axios.post('https://api.manychat.com/fb/sending/sendFlow', payload, {
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        timeout: 60000,
-        validateStatus: () => true
-      });
-      console.log(`[ManyChat][sendFlow] http=${r.status} body=${JSON.stringify(r.data)}`);
-      if (r.status >= 200 && r.status < 300 && r.data?.status === 'success') {
-        return { ok: true, provider: 'manychat', mechanism: 'flow', flowNs: opts.flowNs };
-      }
-      return { ok: false, reason: 'flow-send-failed', details: r.data };
-    };
+        const forced = opts && opts.force === true;
+        const paused = (st.permanentlyBlocked === true) || (st.optOutCount >= 3) || (st.optOutCount > 0 && !st.reoptinActive);
+        if (paused && !forced) {
+            console.log(`[${contato}] envio=skip reason=paused-by-optout msg="${safeStr(texto).slice(0, 140)}"`);
+            return { ok: false, reason: 'paused-by-optout' };
+        }
 
-    const sender = (opts.mechanism === 'flow') ? sendOneByFlow : sendOneByFields;
-
-    // ===== 6) Suporte a múltiplas imagens (replicável em qualquer etapa) =====
-    const results = [];
-    for (let i = 0; i < items.length; i++) {
-      const { url, caption } = items[i];
-      if (!url) { results.push({ ok: false, reason: 'empty-image-url' }); continue; }
-
-      const r = await sender({ url, caption });
-      results.push(r);
-
-      // checagem de opt-out entre envios
-      if (await preflightOptOut(st)) {
-        results.push({ ok: false, reason: 'paused-by-optout-mid-batch' });
-        break;
-      }
-
-      // delay humano entre imagens do mesmo lote
-      if (i < items.length - 1) {
-        const [minMs, maxMs] = opts.delayBetweenMs;
-        await delayRange(minMs, maxMs);
-      }
+        const { mod, settings } = await getActiveTransport();
+        const provider = mod?.name || 'unknown';
+        if (provider === 'manychat') {
+            let subscriberId = null;
+            try {
+                const c = await getContatoByPhone(contato);
+                if (c?.manychat_subscriber_id) subscriberId = String(c.manychat_subscriber_id);
+                else if (c?.subscriber_id) subscriberId = String(c.subscriber_id);
+            } catch (e) {
+                console.warn(`[${contato}] DB lookup subscriber_id falhou: ${e.message}`);
+            }
+            if (!subscriberId) {
+                subscriberId = await resolveManychatSubscriberId(contato, mod, settings);
+            }
+            if (!subscriberId) {
+                console.log(`[${contato}] envio=fail provider=manychat reason=no-subscriber-id`);
+                return { ok: false, reason: 'no-subscriber-id' };
+            }
+            let finalText = String(msg ?? '')
+                .replace(/\r\n/g, '\n')
+                .replace(/\n{3,}/g, '\n\n')
+                .trim();
+            await mod.sendText({ subscriberId, text: finalText }, settings);
+            console.log(`${tsNow()} [${contato}] Mensagem enviada: ${finalText}`);
+            return { ok: true, provider };
+        }
+        console.log(`[${contato}] envio=fail provider=${provider} reason=unsupported msg="${msg}"`);
+        return { ok: false, reason: 'unsupported' };
+    } catch (e) {
+        console.log(`[${contato}] envio=fail provider=unknown reason="${e.message}" msg="${msg}"`);
+        return { ok: false, error: e.message };
     }
-
-    // retorno compacto quando for 1 item, ou detalhado para lote
-    if (!isArray) return results[0];
-    const okAll = results.every(r => r?.ok);
-    return { ok: okAll, results };
-
-  } catch (e) {
-    console.log(`[${contato}] Image send fail: ${e.message}`);
-    return { ok: false, error: e.message };
-  }
 }
 
 async function updateManyChatCustomFieldByName({ token, subscriberId, fieldName, fieldValue }) {
@@ -2418,49 +2341,125 @@ async function updateManyChatCustomFieldByName({ token, subscriberId, fieldName,
     return false;
 }
 
+async function sendImage(contato, image, captionOrOpts = '', maybeOpts = {}) {
+    // ===== 1) Normalização de argumentos =====
+    // Usos aceitos:
+    //   sendImage(contato, 'https://img...', 'Legenda')
+    //   sendImage(contato, 'https://img...', { mechanism:'manychat_fields', caption:'...' })
+    //   sendImage(contato, [{ url, caption }, { url, caption }], { delayBetweenMs:[12000,16000] })
+    const isArray = Array.isArray(image);
+    const items = isArray
+        ? image.map(it => ({ url: safeStr(it?.url).trim(), caption: safeStr(it?.caption || '') }))
+        : [{ url: safeStr(image).trim(), caption: (typeof captionOrOpts === 'string' ? captionOrOpts : safeStr(captionOrOpts?.caption || '')) }];
 
-async function sendImage(contato, imageUrl, caption = '', opts = {}) {
+    const baseOpts = (typeof captionOrOpts === 'object' && !isArray) ? captionOrOpts : maybeOpts;
+    const opts = {
+        // mecanismo padrão: o mesmo do /admin/test-image (set custom fields)
+        mechanism: (baseOpts.mechanism || 'manychat_fields'),
+        // nomes dos campos no ManyChat (pode sobrescrever se quiser)
+        fields: { image: (baseOpts.fields?.image || 'image'), caption: (baseOpts.fields?.caption || 'caption') },
+        // para quem quiser ainda acionar flow direto:
+        flowNs: baseOpts.flowNs || null,        // ex: 'content20251005164000_207206'
+        flowVars: baseOpts.flowVars || {},      // vars extras para o flow
+        // comportamento geral:
+        force: baseOpts.force === true,
+        alsoSendAsFile: baseOpts.alsoSendAsFile === true, // reservado p/ outros providers futuramente
+        delayBetweenMs: Array.isArray(baseOpts.delayBetweenMs) ? baseOpts.delayBetweenMs : [BETWEEN_MIN_MS, BETWEEN_MAX_MS],
+    };
+
+    // ===== 2) Guardas e opt-out =====
     await extraGlobalDelay();
-    const url = safeStr(imageUrl).trim();
-    if (!url) return { ok: false, reason: 'empty-image-url' };
+    if (!items.length || !items[0].url) return { ok: false, reason: 'empty-image-url' };
 
     try {
         const st = ensureEstado(contato);
+        if (await preflightOptOut(st)) return { ok: false, reason: 'paused-by-optout' };
 
-        if (await preflightOptOut(st)) {
-            console.log(`[${contato}] envio-imagem=cancelado por opt-out em tempo real`);
-            return { ok: false, reason: 'paused-by-optout' };
-        }
-
-        const forced = opts && opts.force === true;
         const paused = (st.permanentlyBlocked === true) || (st.optOutCount >= 3) || (st.optOutCount > 0 && !st.reoptinActive);
-        if (paused && !forced) {
-            console.log(`[${contato}] envio-imagem=skip reason=paused-by-optout url="${url}"`);
-            return { ok: false, reason: 'paused-by-optout' };
-        }
+        if (paused && !opts.force) return { ok: false, reason: 'paused-by-optout' };
 
+        // ===== 3) Provider ativo =====
         const { mod, settings } = await getActiveTransport();
-        if ((mod?.name || '') !== 'manychat') {
+        const provider = mod?.name || 'unknown';
+
+        if (provider !== 'manychat') {
+            // hoje só damos suporte completo a ManyChat p/ imagem
             return { ok: false, reason: 'unsupported' };
         }
 
+        // ===== 4) Credenciais/Subscriber =====
         const token = (settings && settings.manychat_api_token) || process.env.MANYCHAT_API_TOKEN || '';
         if (!token) return { ok: false, reason: 'missing-token' };
 
         const subscriberId = await resolveManychatWaSubscriberId(contato, mod, settings);
         if (!subscriberId) return { ok: false, reason: 'no-subscriber-id' };
 
-        // 1) seta a legenda primeiro (para já estar disponível quando o gatilho disparar)
-        if (typeof caption === 'string') {
-            await updateManyChatCustomFieldByName({ token, subscriberId, fieldName: 'caption', fieldValue: caption || '' });
+        // ===== 5) Estratégias de envio no ManyChat =====
+        const sendOneByFields = async ({ url, caption }) => {
+            // (A) mesmo mecanismo do /admin/test-image: 1) set caption 2) set image
+            if (typeof caption === 'string') {
+                await updateManyChatCustomFieldByName({ token, subscriberId, fieldName: opts.fields.caption, fieldValue: caption || '' });
+            }
+            const okImg = await updateManyChatCustomFieldByName({ token, subscriberId, fieldName: opts.fields.image, fieldValue: url });
+            if (!okImg) return { ok: false, reason: 'set-field-failed' };
+            console.log(`[${contato}] ManyChat: ${opts.fields.image} atualizado -> fluxo disparado. url="${url}" caption_len=${(caption || '').length}`);
+            return { ok: true, provider: 'manychat', mechanism: 'manychat_fields' };
+        };
+
+        const sendOneByFlow = async ({ url, caption }) => {
+            // (B) alternativa: acionar diretamente um flow com variáveis
+            if (!opts.flowNs) return { ok: false, reason: 'missing-flow-ns' };
+            const payload = {
+                subscriber_id: subscriberId,
+                flow_ns: opts.flowNs,
+                variables: {
+                    contact_: contato,
+                    image_url_: url,
+                    caption_: caption || '',
+                    ...opts.flowVars,
+                }
+            };
+            const r = await axios.post('https://api.manychat.com/fb/sending/sendFlow', payload, {
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                timeout: 60000,
+                validateStatus: () => true
+            });
+            console.log(`[ManyChat][sendFlow] http=${r.status} body=${JSON.stringify(r.data)}`);
+            if (r.status >= 200 && r.status < 300 && r.data?.status === 'success') {
+                return { ok: true, provider: 'manychat', mechanism: 'flow', flowNs: opts.flowNs };
+            }
+            return { ok: false, reason: 'flow-send-failed', details: r.data };
+        };
+
+        const sender = (opts.mechanism === 'flow') ? sendOneByFlow : sendOneByFields;
+
+        // ===== 6) Suporte a múltiplas imagens (replicável em qualquer etapa) =====
+        const results = [];
+        for (let i = 0; i < items.length; i++) {
+            const { url, caption } = items[i];
+            if (!url) { results.push({ ok: false, reason: 'empty-image-url' }); continue; }
+
+            const r = await sender({ url, caption });
+            results.push(r);
+
+            // checagem de opt-out entre envios
+            if (await preflightOptOut(st)) {
+                results.push({ ok: false, reason: 'paused-by-optout-mid-batch' });
+                break;
+            }
+
+            // delay humano entre imagens do mesmo lote
+            if (i < items.length - 1) {
+                const [minMs, maxMs] = opts.delayBetweenMs;
+                await delayRange(minMs, maxMs);
+            }
         }
 
-        // 2) seta a URL da imagem (isso dispara o fluxo no ManyChat)
-        const okImg = await updateManyChatCustomFieldByName({ token, subscriberId, fieldName: 'image', fieldValue: url });
-        if (!okImg) return { ok: false, reason: 'set-field-failed' };
+        // retorno compacto quando for 1 item, ou detalhado para lote
+        if (!isArray) return results[0];
+        const okAll = results.every(r => r?.ok);
+        return { ok: okAll, results };
 
-        console.log(`[${contato}] ManyChat: image_url atualizado -> fluxo disparado. url="${url}" caption_len=${(caption || '').length}`);
-        return { ok: true, provider: 'manychat' };
     } catch (e) {
         console.log(`[${contato}] Image send fail: ${e.message}`);
         return { ok: false, error: e.message };
