@@ -2114,7 +2114,7 @@ async function processarMensagensPendentes(contato) {
                 await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                 {
                     const FLOW_NS_IMAGEM = 'content20251005164000_207206';
-                    const r2 = await sendManychatWaFlow(st.contato, FLOW_NS_IMAGEM);
+                    const r2 = await sendManychatWaFlow(st.contato, FLOW_NS_IMAGEM /*, { ...vars opcionais }*/);
                     if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-mid-batch' };
                     if (!r2?.ok) return { ok: false, reason: r2?.reason || 'flow-send-failed' };
                 }
@@ -2341,6 +2341,7 @@ async function updateManyChatCustomFieldByName({ token, subscriberId, fieldName,
     return false;
 }
 
+
 async function sendImage(contato, imageUrl, caption = '', opts = {}) {
     await extraGlobalDelay();
     const url = safeStr(imageUrl).trim();
@@ -2355,11 +2356,7 @@ async function sendImage(contato, imageUrl, caption = '', opts = {}) {
         }
 
         const forced = opts && opts.force === true;
-        const paused =
-            (st.permanentlyBlocked === true) ||
-            (st.optOutCount >= 3) ||
-            (st.optOutCount > 0 && !st.reoptinActive);
-
+        const paused = (st.permanentlyBlocked === true) || (st.optOutCount >= 3) || (st.optOutCount > 0 && !st.reoptinActive);
         if (paused && !forced) {
             console.log(`[${contato}] envio-imagem=skip reason=paused-by-optout url="${url}"`);
             return { ok: false, reason: 'paused-by-optout' };
@@ -2376,29 +2373,57 @@ async function sendImage(contato, imageUrl, caption = '', opts = {}) {
         const subscriberId = await resolveManychatWaSubscriberId(contato, mod, settings);
         if (!subscriberId) return { ok: false, reason: 'no-subscriber-id' };
 
-        const manychatProvider = require('./manychat');
-        const sendResp = await manychatProvider.sendImage(
-            { subscriberId, imageUrl: url, caption: safeStr(caption) },
-            settings,
-            { alsoSendAsFile: opts.alsoSendAsFile === true }
-        );
-
-        const ok = !!(sendResp && (sendResp.ok !== false));
-        if (!ok) {
-            const reason = sendResp && sendResp.reason ? sendResp.reason : 'send-failed';
-            console.log(`[${contato}] ManyChat: falha ao enviar imagem via sendContent reason=${reason} url="${url}"`);
-            return { ok: false, reason };
+        // 1) seta a legenda primeiro (para já estar disponível quando o gatilho disparar)
+        if (typeof caption === 'string') {
+            await updateManyChatCustomFieldByName({ token, subscriberId, fieldName: 'caption', fieldValue: caption || '' });
         }
 
-        console.log(
-            `[${contato}] ManyChat: imagem enviada via sendContent. url="${url}" caption_len=${(safeStr(caption)).length}`
-        );
+        // 2) seta a URL da imagem (isso dispara o fluxo no ManyChat)
+        const okImg = await updateManyChatCustomFieldByName({ token, subscriberId, fieldName: 'image', fieldValue: url });
+        if (!okImg) return { ok: false, reason: 'set-field-failed' };
 
+        console.log(`[${contato}] ManyChat: image_url atualizado -> fluxo disparado. url="${url}" caption_len=${(caption || '').length}`);
         return { ok: true, provider: 'manychat' };
     } catch (e) {
-        console.log(`[${contato}] Image send fail: ${e?.message || e}`);
-        return { ok: false, error: e?.message || String(e) };
+        console.log(`[${contato}] Image send fail: ${e.message}`);
+        return { ok: false, error: e.message };
     }
+}
+
+async function triggerManyChatFlow(contato, flowNs, imageUrl, caption, settings) {
+    const token = (settings && settings.manychat_api_token) || process.env.MANYCHAT_API_TOKEN || '';
+    if (!token) throw new Error('ManyChat API token ausente');
+
+    const subscriberId = await resolveManychatWaSubscriberId(contato);
+    if (!subscriberId) throw new Error('No subscriber ID');
+
+    const payload = {
+        subscriber_id: subscriberId,
+        flow_ns: 'content20251005164000_207206',  // ex: 'content20251004203041_009700'
+        variables: {  // Parâmetros dinâmicos
+            contact_: contato,  // Envie o número do celular
+            image_url_: imageUrl,
+            caption_: caption || ''
+        }
+    };
+
+    // Log detalhado do payload enviado (EXATAMENTE o que vai para ManyChat)
+    console.log(`[ManyChat][sendFlow] Sending payload: ${JSON.stringify(payload, null, 2)}`);
+
+    const r = await axios.post('https://api.manychat.com/fb/sending/sendFlow', payload, {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        timeout: 60000,  // 60s
+        validateStatus: () => true
+    });
+
+    // Log da resposta completa do ManyChat
+    console.log(`[ManyChat][sendFlow] Response: Status=${r.status}, Body=${JSON.stringify(r.data, null, 2)}`);
+
+    if (r.status >= 200 && r.status < 300 && r.data.status === 'success') {
+        console.log(`[${contato}] Triggered flow ${flowNs} with image ${imageUrl}`);
+        return { ok: true };
+    }
+    throw new Error(`Trigger flow falhou: ${JSON.stringify(r.data)}`);
 }
 
 const KNOWN_ETAPAS = new Set([
