@@ -2341,7 +2341,6 @@ async function updateManyChatCustomFieldByName({ token, subscriberId, fieldName,
     return false;
 }
 
-
 async function sendImage(contato, imageUrl, caption = '', opts = {}) {
     await extraGlobalDelay();
     const url = safeStr(imageUrl).trim();
@@ -2350,18 +2349,24 @@ async function sendImage(contato, imageUrl, caption = '', opts = {}) {
     try {
         const st = ensureEstado(contato);
 
+        // trava por opt-out em tempo real
         if (await preflightOptOut(st)) {
             console.log(`[${contato}] envio-imagem=cancelado por opt-out em tempo real`);
             return { ok: false, reason: 'paused-by-optout' };
         }
 
         const forced = opts && opts.force === true;
-        const paused = (st.permanentlyBlocked === true) || (st.optOutCount >= 3) || (st.optOutCount > 0 && !st.reoptinActive);
+        const paused =
+            (st.permanentlyBlocked === true) ||
+            (st.optOutCount >= 3) ||
+            (st.optOutCount > 0 && !st.reoptinActive);
+
         if (paused && !forced) {
             console.log(`[${contato}] envio-imagem=skip reason=paused-by-optout url="${url}"`);
             return { ok: false, reason: 'paused-by-optout' };
         }
 
+        // usa o mesmo mecanismo do teste: ManyChat -> sendContent:image
         const { mod, settings } = await getActiveTransport();
         if ((mod?.name || '') !== 'manychat') {
             return { ok: false, reason: 'unsupported' };
@@ -2373,20 +2378,30 @@ async function sendImage(contato, imageUrl, caption = '', opts = {}) {
         const subscriberId = await resolveManychatWaSubscriberId(contato, mod, settings);
         if (!subscriberId) return { ok: false, reason: 'no-subscriber-id' };
 
-        // 1) seta a legenda primeiro (para já estar disponível quando o gatilho disparar)
-        if (typeof caption === 'string') {
-            await updateManyChatCustomFieldByName({ token, subscriberId, fieldName: 'caption', fieldValue: caption || '' });
+        // chama diretamente o provider ManyChat para enviar a imagem via sendContent
+        const manychatProvider = require('./manychat');
+        const sendResp = await manychatProvider.sendImage(
+            { subscriberId, imageUrl: url, caption: safeStr(caption) },
+            settings,
+            { alsoSendAsFile: opts.alsoSendAsFile === true }
+        );
+
+        // interpreta retorno (considera ok se não veio erro explícito)
+        const ok = !!(sendResp && (sendResp.ok !== false));
+        if (!ok) {
+            const reason = sendResp && sendResp.reason ? sendResp.reason : 'send-failed';
+            console.log(`[${contato}] ManyChat: falha ao enviar imagem via sendContent reason=${reason} url="${url}"`);
+            return { ok: false, reason };
         }
 
-        // 2) seta a URL da imagem (isso dispara o fluxo no ManyChat)
-        const okImg = await updateManyChatCustomFieldByName({ token, subscriberId, fieldName: 'image', fieldValue: url });
-        if (!okImg) return { ok: false, reason: 'set-field-failed' };
+        console.log(
+            `[${contato}] ManyChat: imagem enviada via sendContent. url="${url}" caption_len=${(safeStr(caption)).length}`
+        );
 
-        console.log(`[${contato}] ManyChat: image_url atualizado -> fluxo disparado. url="${url}" caption_len=${(caption || '').length}`);
         return { ok: true, provider: 'manychat' };
     } catch (e) {
-        console.log(`[${contato}] Image send fail: ${e.message}`);
-        return { ok: false, error: e.message };
+        console.log(`[${contato}] Image send fail: ${e?.message || e}`);
+        return { ok: false, error: e?.message || String(e) };
     }
 }
 
