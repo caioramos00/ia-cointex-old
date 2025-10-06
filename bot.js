@@ -2343,6 +2343,7 @@ async function updateManyChatCustomFieldByName({ token, subscriberId, fieldName,
 
 async function sendImage(contato, imageUrl, caption = '', opts = {}) {
     await extraGlobalDelay();
+
     const url = safeStr(imageUrl).trim();
     const cap = safeStr(caption);
     if (!url) return { ok: false, reason: 'empty-image-url' };
@@ -2367,7 +2368,7 @@ async function sendImage(contato, imageUrl, caption = '', opts = {}) {
             return { ok: false, reason: 'paused-by-optout' };
         }
 
-        // Usa o mesmo mecanismo do teste: ManyChat -> sendContent (v2) para WhatsApp
+        // Usa o MESMO mecanismo do /admin/test-image: ManyChat -> helper sendImage
         const { mod, settings } = await getActiveTransport();
         if ((mod?.name || '') !== 'manychat') {
             return { ok: false, reason: 'unsupported' };
@@ -2379,62 +2380,112 @@ async function sendImage(contato, imageUrl, caption = '', opts = {}) {
         const subscriberId = await resolveManychatWaSubscriberId(contato, mod, settings);
         if (!subscriberId) return { ok: false, reason: 'no-subscriber-id' };
 
-        const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-        const endpoint = 'https://api.manychat.com/fb/sending/sendContent';
+        // 1) Tenta usar o helper (mesmo do endpoint de teste)
+        try {
+            const manychatProvider = require('./manychat');
+            const sendResp = await manychatProvider.sendImage(
+                { subscriberId, imageUrl: url, caption: cap },
+                settings,
+                { alsoSendAsFile: opts.alsoSendAsFile === true }
+            );
+            const ok = !!(sendResp && (sendResp.ok !== false));
+            if (!ok) {
+                const reason = sendResp && sendResp.reason ? sendResp.reason : 'send-failed';
+                console.log(`[${contato}] ManyChat: falha via helper sendImage reason=${reason} url="${url}"`);
+                return { ok: false, reason };
+            }
+            console.log(`[${contato}] ManyChat: mídia enviada via helper sendImage. url="${url}" caption_len=${cap.length}`);
+            return { ok: true, provider: 'manychat' };
+        } catch (e) {
+            // 2) Fallback: mesmo payload do helper, direto no endpoint
+            console.log(`[${contato}] manychat helper ausente/erro="${e?.message || e}", usando fallback direto no sendContent`);
 
-        // helper interno para tentar envio com um tipo específico
-        const trySend = async (msgType) => {
-            const payload = {
+            const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+            const endpoint = 'https://api.manychat.com/fb/sending/sendContent';
+
+            // primeiro tenta como imagem (igual ao helper)
+            const payloadImage = {
                 subscriber_id: String(subscriberId),
                 data: {
                     version: 'v2',
                     content: {
                         type: 'whatsapp',
-                        messages: (msgType === 'file')
-                            ? [{ type: 'file', url }]
-                            : [{ type: 'image', url, ...(cap ? { caption: cap } : {}) }]
+                        messages: [{ type: 'image', url, ...(cap ? { caption: cap } : {}) }]
                     }
                 }
             };
 
-            try {
-                const r = await axios.post(endpoint, payload, { headers, timeout: 15000, validateStatus: () => true });
-                const ok = r.status >= 200 && r.status < 300 && (r.data?.status === 'success' || !r.data?.status);
-                console.log(
-                    `[ManyChat][sendContent:${msgType}] HTTP ${r.status} Body: ${safeStr(
-                        typeof r.data === 'string' ? r.data : JSON.stringify(r.data)
-                    ).slice(0, 400)}`
-                );
-                return { ok, status: r.status, body: r.data };
-            } catch (e) {
-                console.log(`[ManyChat][sendContent:${msgType}] erro="${e?.message || e}"`);
-                return { ok: false, error: e?.message || String(e) };
+            let r = await axios.post(endpoint, payloadImage, { headers, timeout: 15000, validateStatus: () => true });
+            let ok = r.status >= 200 && r.status < 300 && (r.data?.status === 'success' || !r.data?.status);
+
+            console.log(`[ManyChat][sendContent:image] HTTP ${r.status} Body: ${safeStr(typeof r.data === 'string' ? r.data : JSON.stringify(r.data)).slice(0, 400)}`);
+
+            // opcional: fallback como arquivo/documento se solicitado
+            if (!ok && opts.alsoSendAsFile === true) {
+                const payloadFile = {
+                    subscriber_id: String(subscriberId),
+                    data: {
+                        version: 'v2',
+                        content: {
+                            type: 'whatsapp',
+                            messages: [{ type: 'file', url }]
+                        }
+                    }
+                };
+                r = await axios.post(endpoint, payloadFile, { headers, timeout: 15000, validateStatus: () => true });
+                ok = r.status >= 200 && r.status < 300 && (r.data?.status === 'success' || !r.data?.status);
+                console.log(`[ManyChat][sendContent:file] HTTP ${r.status} Body: ${safeStr(typeof r.data === 'string' ? r.data : JSON.stringify(r.data)).slice(0, 400)}`);
             }
-        };
 
-        // 1) tenta como IMAGEM (igual ao teste, só que type: "image")
-        let resp = await trySend('image');
+            if (!ok) {
+                const reason = `send-failed:http-${r?.status || 0}`;
+                console.log(`[${contato}] ManyChat: falha no fallback direto reason=${reason} url="${url}"`);
+                return { ok: false, reason };
+            }
 
-        // 2) se falhar e pediram fallback, tenta como ARQUIVO (document)
-        if (!resp.ok && opts.alsoSendAsFile === true) {
-            console.log(`[${contato}] fallback: tentando enviar como arquivo (document) url="${url}"`);
-            resp = await trySend('file');
+            console.log(`[${contato}] ManyChat: mídia enviada via fallback direto. url="${url}" caption_len=${cap.length}`);
+            return { ok: true, provider: 'manychat' };
         }
-
-        if (!resp.ok) {
-            const reason = resp.error ? `send-error:${resp.error}` : `send-failed:http-${resp.status || 0}`;
-            console.log(`[${contato}] ManyChat: falha ao enviar mídia via sendContent reason=${reason} url="${url}"`);
-            return { ok: false, reason };
-        }
-
-        console.log(
-            `[${contato}] ManyChat: mídia enviada via sendContent. url="${url}" caption_len=${cap.length}`
-        );
-        return { ok: true, provider: 'manychat' };
     } catch (e) {
         console.log(`[${contato}] Image send fail: ${e?.message || e}`);
         return { ok: false, error: e?.message || String(e) };
     }
+}
+
+async function triggerManyChatFlow(contato, flowNs, imageUrl, caption, settings) {
+    const token = (settings && settings.manychat_api_token) || process.env.MANYCHAT_API_TOKEN || '';
+    if (!token) throw new Error('ManyChat API token ausente');
+
+    const subscriberId = await resolveManychatWaSubscriberId(contato);
+    if (!subscriberId) throw new Error('No subscriber ID');
+
+    const payload = {
+        subscriber_id: subscriberId,
+        flow_ns: 'content20251005164000_207206',  // ex: 'content20251004203041_009700'
+        variables: {  // Parâmetros dinâmicos
+            contact_: contato,  // Envie o número do celular
+            image_url_: imageUrl,
+            caption_: caption || ''
+        }
+    };
+
+    // Log detalhado do payload enviado (EXATAMENTE o que vai para ManyChat)
+    console.log(`[ManyChat][sendFlow] Sending payload: ${JSON.stringify(payload, null, 2)}`);
+
+    const r = await axios.post('https://api.manychat.com/fb/sending/sendFlow', payload, {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        timeout: 60000,  // 60s
+        validateStatus: () => true
+    });
+
+    // Log da resposta completa do ManyChat
+    console.log(`[ManyChat][sendFlow] Response: Status=${r.status}, Body=${JSON.stringify(r.data, null, 2)}`);
+
+    if (r.status >= 200 && r.status < 300 && r.data.status === 'success') {
+        console.log(`[${contato}] Triggered flow ${flowNs} with image ${imageUrl}`);
+        return { ok: true };
+    }
+    throw new Error(`Trigger flow falhou: ${JSON.stringify(r.data)}`);
 }
 
 const KNOWN_ETAPAS = new Set([
