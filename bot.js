@@ -2344,6 +2344,7 @@ async function updateManyChatCustomFieldByName({ token, subscriberId, fieldName,
 async function sendImage(contato, imageUrl, caption = '', opts = {}) {
     await extraGlobalDelay();
     const url = safeStr(imageUrl).trim();
+    const cap = safeStr(caption);
     if (!url) return { ok: false, reason: 'empty-image-url' };
 
     try {
@@ -2366,6 +2367,7 @@ async function sendImage(contato, imageUrl, caption = '', opts = {}) {
             return { ok: false, reason: 'paused-by-optout' };
         }
 
+        // Usa o mesmo mecanismo do teste: ManyChat -> sendContent (v2) para WhatsApp
         const { mod, settings } = await getActiveTransport();
         if ((mod?.name || '') !== 'manychat') {
             return { ok: false, reason: 'unsupported' };
@@ -2377,27 +2379,57 @@ async function sendImage(contato, imageUrl, caption = '', opts = {}) {
         const subscriberId = await resolveManychatWaSubscriberId(contato, mod, settings);
         if (!subscriberId) return { ok: false, reason: 'no-subscriber-id' };
 
-        // >>> usa o mesmo caminho do admin/test-image
-        const manychatProvider = require('./manychat');
-        const sendResp = await manychatProvider.sendImage(
-            { subscriberId, imageUrl: url, caption: safeStr(caption) },
-            settings,
-            { alsoSendAsFile: opts.alsoSendAsFile === true }
-        );
+        const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+        const endpoint = 'https://api.manychat.com/fb/sending/sendContent';
 
-        // considera ok se o provider não retornou erro explícito
-        const ok =
-            !!sendResp &&
-            (sendResp.ok !== false) &&
-            (sendResp.status === undefined || String(sendResp.status).toLowerCase() === 'success');
+        // helper interno para tentar envio com um tipo específico
+        const trySend = async (msgType) => {
+            const payload = {
+                subscriber_id: String(subscriberId),
+                data: {
+                    version: 'v2',
+                    content: {
+                        type: 'whatsapp',
+                        messages: (msgType === 'file')
+                            ? [{ type: 'file', url }]
+                            : [{ type: 'image', url, ...(cap ? { caption: cap } : {}) }]
+                    }
+                }
+            };
 
-        if (!ok) {
-            const reason = (sendResp && (sendResp.reason || sendResp.message || sendResp.error)) || 'send-failed';
-            console.log(`[${contato}] ManyChat: falha ao enviar imagem via sendContent reason=${reason} url="${url}"`);
+            try {
+                const r = await axios.post(endpoint, payload, { headers, timeout: 15000, validateStatus: () => true });
+                const ok = r.status >= 200 && r.status < 300 && (r.data?.status === 'success' || !r.data?.status);
+                console.log(
+                    `[ManyChat][sendContent:${msgType}] HTTP ${r.status} Body: ${safeStr(
+                        typeof r.data === 'string' ? r.data : JSON.stringify(r.data)
+                    ).slice(0, 400)}`
+                );
+                return { ok, status: r.status, body: r.data };
+            } catch (e) {
+                console.log(`[ManyChat][sendContent:${msgType}] erro="${e?.message || e}"`);
+                return { ok: false, error: e?.message || String(e) };
+            }
+        };
+
+        // 1) tenta como IMAGEM (igual ao teste, só que type: "image")
+        let resp = await trySend('image');
+
+        // 2) se falhar e pediram fallback, tenta como ARQUIVO (document)
+        if (!resp.ok && opts.alsoSendAsFile === true) {
+            console.log(`[${contato}] fallback: tentando enviar como arquivo (document) url="${url}"`);
+            resp = await trySend('file');
+        }
+
+        if (!resp.ok) {
+            const reason = resp.error ? `send-error:${resp.error}` : `send-failed:http-${resp.status || 0}`;
+            console.log(`[${contato}] ManyChat: falha ao enviar mídia via sendContent reason=${reason} url="${url}"`);
             return { ok: false, reason };
         }
 
-        console.log(`[${contato}] ManyChat: imagem enviada via sendContent. url="${url}" caption_len=${safeStr(caption).length}`);
+        console.log(
+            `[${contato}] ManyChat: mídia enviada via sendContent. url="${url}" caption_len=${cap.length}`
+        );
         return { ok: true, provider: 'manychat' };
     } catch (e) {
         console.log(`[${contato}] Image send fail: ${e?.message || e}`);
