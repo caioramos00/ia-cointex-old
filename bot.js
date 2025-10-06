@@ -2111,37 +2111,19 @@ async function processarMensagensPendentes(contato) {
                     if (!r1?.ok) return { ok: false, reason: 'send-aborted' };
                 }
 
-                // Dentro de st.etapa === 'conversao:send', no bloco st.conversaoBatch === 0,
-                // SUBSTITUA o trecho que chama sendManychatWaFlow(...) por isto:
-
+                // dentro de conversao:send (primeiro batch)
                 await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
 
-                // 1) Extrai 1+ imagens do conversao.json
-                let imgItems = [];
-                if (Array.isArray(conversao?.images)) {
-                    // espera-se algo como: [{ url: "...", caption: "..." }, ...]
-                    imgItems = conversao.images
-                        .map(it => ({ url: safeStr(it?.url).trim(), caption: safeStr(it?.caption || '') }))
-                        .filter(it => it.url);
-                } else if (conversao?.image?.url) {
-                    imgItems = [{
-                        url: safeStr(conversao.image.url).trim(),
-                        caption: safeStr(conversao.image.caption || '')
-                    }];
-                }
+                // ManyChat -> usa o mesmo mecanismo do /admin/test-image (fields + flow), sem precisar de imagem no conversao.json
+                const FLOW_NS_IMAGEM = 'content20251005164000_207206';
+                const r2 = await sendImage(st.contato, /* url opcional */ '', {
+                    flowNs: FLOW_NS_IMAGEM,
+                    // se quiser, já manda legenda para o flow ler via custom field
+                    caption: 'Comprovante de transferência'
+                });
 
-                // 2) Envia usando o MESMO mecanismo do /admin/test-image (custom fields no ManyChat)
-                if (imgItems.length > 0) {
-                    const r2 = await sendImage(st.contato, imgItems, {
-                        mechanism: 'manychat_fields',                 // padrão do sendImage (setField caption -> image)
-                        fields: { image: 'image', caption: 'caption' } // pode trocar os nomes se seus fields tiverem outros nomes
-                        // delayBetweenMs já segue o padrão global; pode ajustar aqui se quiser
-                    });
-                    if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-mid-batch' };
-                    if (!r2?.ok) return { ok: false, reason: r2?.reason || 'image-send-failed' };
-                } else {
-                    console.warn('[conversao:send] nenhuma imagem configurada em conversao.json (image/url ou images[])');
-                }
+                if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-mid-batch' };
+                if (!r2?.ok) return { ok: false, reason: r2?.reason || 'image-send-failed' };
 
 
                 await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
