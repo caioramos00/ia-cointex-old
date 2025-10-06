@@ -2114,7 +2114,7 @@ async function processarMensagensPendentes(contato) {
                 await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                 {
                     const FLOW_NS_IMAGEM = 'content20251005164000_207206';
-                    const r2 = await sendManychatWaFlow(st.contato, FLOW_NS_IMAGEM /*, { ...vars opcionais }*/);
+                    const r2 = await sendManychatWaFlow(st.contato, FLOW_NS_IMAGEM);
                     if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-mid-batch' };
                     if (!r2?.ok) return { ok: false, reason: r2?.reason || 'flow-send-failed' };
                 }
