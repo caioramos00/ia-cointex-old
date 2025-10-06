@@ -2366,7 +2366,7 @@ async function sendImage(contato, imageUrl, caption = '', opts = {}) {
             return { ok: false, reason: 'paused-by-optout' };
         }
 
-        // usa o mesmo mecanismo do teste: ManyChat -> sendContent:image
+        // usa o mesmo mecanismo do teste: ManyChat -> sendContent (v2) com mensagem de imagem
         const { mod, settings } = await getActiveTransport();
         if ((mod?.name || '') !== 'manychat') {
             return { ok: false, reason: 'unsupported' };
@@ -2378,26 +2378,41 @@ async function sendImage(contato, imageUrl, caption = '', opts = {}) {
         const subscriberId = await resolveManychatWaSubscriberId(contato, mod, settings);
         if (!subscriberId) return { ok: false, reason: 'no-subscriber-id' };
 
-        // chama diretamente o provider ManyChat para enviar a imagem via sendContent
-        const manychatProvider = require('./manychat');
-        const sendResp = await manychatProvider.sendImage(
-            { subscriberId, imageUrl: url, caption: safeStr(caption) },
-            settings,
-            { alsoSendAsFile: opts.alsoSendAsFile === true }
-        );
+        const endpoint = 'https://api.manychat.com/fb/sending/sendContent';
+        const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-        // interpreta retorno (considera ok se não veio erro explícito)
-        const ok = !!(sendResp && (sendResp.ok !== false));
+        const payload = {
+            subscriber_id: String(subscriberId),
+            data: {
+                version: 'v2',
+                content: {
+                    type: 'whatsapp',
+                    messages: [
+                        {
+                            type: 'image',
+                            url: url,
+                            ...(safeStr(caption).trim() ? { caption: safeStr(caption).trim() } : {})
+                        }
+                    ]
+                }
+            }
+        };
+
+        console.log(`[ManyChat][sendContent:image] POST ${endpoint}`);
+        console.log(`[ManyChat][sendContent:image] Payload: ${JSON.stringify(payload)}`);
+
+        const resp = await axios.post(endpoint, payload, { headers, timeout: 15000, validateStatus: () => true });
+        const body = resp?.data || {};
+        console.log(`[ManyChat][sendContent:image] HTTP ${resp.status} Body: ${typeof body === 'string' ? body : JSON.stringify(body)}`);
+
+        const ok = (resp.status >= 200 && resp.status < 300 && (body?.status === 'success' || body?.success === true));
         if (!ok) {
-            const reason = sendResp && sendResp.reason ? sendResp.reason : 'send-failed';
+            const reason = body?.message || body?.error || `http_${resp.status}`;
             console.log(`[${contato}] ManyChat: falha ao enviar imagem via sendContent reason=${reason} url="${url}"`);
             return { ok: false, reason };
         }
 
-        console.log(
-            `[${contato}] ManyChat: imagem enviada via sendContent. url="${url}" caption_len=${(safeStr(caption)).length}`
-        );
-
+        console.log(`[${contato}] ManyChat: imagem enviada via sendContent. url="${url}" caption_len=${(safeStr(caption)).length}`);
         return { ok: true, provider: 'manychat' };
     } catch (e) {
         console.log(`[${contato}] Image send fail: ${e?.message || e}`);
