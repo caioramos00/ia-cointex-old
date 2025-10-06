@@ -2348,28 +2348,6 @@ async function sendImage(contato, imageUrl, caption = '', opts = {}) {
     const cap = safeStr(caption);
     if (!url) return { ok: false, reason: 'empty-image-url' };
 
-    // mini util local (mesmo comportamento do helper)
-    const addCacheBustLocal = (u) => {
-        try {
-            const parsed = new URL(u);
-            parsed.searchParams.set('mc_ts', String(Date.now()));
-            return parsed.toString();
-        } catch {
-            return u + (u.includes('?') ? '&' : '?') + 'mc_ts=' + Date.now();
-        }
-    };
-
-    // extrair filename apenas para o fallback "file"
-    const resolveFilename = (u) => {
-        try {
-            const p = new URL(u);
-            const base = (p.pathname || '').split('/').pop() || '';
-            return base || 'arquivo';
-        } catch {
-            return 'arquivo';
-        }
-    };
-
     try {
         const st = ensureEstado(contato);
 
@@ -2402,7 +2380,7 @@ async function sendImage(contato, imageUrl, caption = '', opts = {}) {
         const subscriberId = await resolveManychatWaSubscriberId(contato, mod, settings);
         if (!subscriberId) return { ok: false, reason: 'no-subscriber-id' };
 
-        // 1) Tenta usar o helper (exatamente o que o /admin/test-image usa)
+        // 1) Tenta usar o helper (mesmo do endpoint de teste)
         try {
             const manychatProvider = require('./manychat');
             const sendResp = await manychatProvider.sendImage(
@@ -2412,28 +2390,27 @@ async function sendImage(contato, imageUrl, caption = '', opts = {}) {
             );
             const ok = !!(sendResp && (sendResp.ok !== false));
             if (!ok) {
-                const reason = (sendResp && sendResp.reason) ? sendResp.reason : 'send-failed';
+                const reason = sendResp && sendResp.reason ? sendResp.reason : 'send-failed';
                 console.log(`[${contato}] ManyChat: falha via helper sendImage reason=${reason} url="${url}"`);
                 return { ok: false, reason };
             }
             console.log(`[${contato}] ManyChat: mídia enviada via helper sendImage. url="${url}" caption_len=${cap.length}`);
             return { ok: true, provider: 'manychat' };
         } catch (e) {
-            // 2) Fallback: replica o payload do helper, incluindo cache-bust (essencial)
+            // 2) Fallback: mesmo payload do helper, direto no endpoint
             console.log(`[${contato}] manychat helper ausente/erro="${e?.message || e}", usando fallback direto no sendContent`);
 
             const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
             const endpoint = 'https://api.manychat.com/fb/sending/sendContent';
-            const finalUrl = addCacheBustLocal(url);
 
-            // primeiro tenta como IMAGEM (igual ao helper)
+            // primeiro tenta como imagem (igual ao helper)
             const payloadImage = {
                 subscriber_id: String(subscriberId),
                 data: {
                     version: 'v2',
                     content: {
                         type: 'whatsapp',
-                        messages: [{ type: 'image', url: finalUrl, ...(cap ? { caption: cap } : {}) }]
+                        messages: [{ type: 'image', url, ...(cap ? { caption: cap } : {}) }]
                     }
                 }
             };
@@ -2451,12 +2428,7 @@ async function sendImage(contato, imageUrl, caption = '', opts = {}) {
                         version: 'v2',
                         content: {
                             type: 'whatsapp',
-                            messages: [{
-                                type: 'file',
-                                url: finalUrl,
-                                filename: resolveFilename(finalUrl),
-                                ...(cap ? { caption: cap } : {})
-                            }]
+                            messages: [{ type: 'file', url }]
                         }
                     }
                 };
@@ -2467,11 +2439,11 @@ async function sendImage(contato, imageUrl, caption = '', opts = {}) {
 
             if (!ok) {
                 const reason = `send-failed:http-${r?.status || 0}`;
-                console.log(`[${contato}] ManyChat: falha no fallback direto reason=${reason} url="${finalUrl}"`);
+                console.log(`[${contato}] ManyChat: falha no fallback direto reason=${reason} url="${url}"`);
                 return { ok: false, reason };
             }
 
-            console.log(`[${contato}] ManyChat: mídia enviada via fallback direto. url="${finalUrl}" caption_len=${cap.length}`);
+            console.log(`[${contato}] ManyChat: mídia enviada via fallback direto. url="${url}" caption_len=${cap.length}`);
             return { ok: true, provider: 'manychat' };
         }
     } catch (e) {
