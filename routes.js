@@ -6,8 +6,6 @@ const { delay, sendMessage, setEtapa: setEtapaBot } = require('./bot.js');
 const { getBotSettings, updateBotSettings, getContatoByPhone } = require('./db.js');
 
 const LANDING_URL = 'https://grupo-whatsapp-trampos-lara-2025.onrender.com';
-const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
-const CONTACT_TOKEN = process.env.CONTACT_TOKEN;
 
 const sentContactByWa = new Set();
 const sentContactByClid = new Set();
@@ -192,6 +190,10 @@ function setupRoutes(
         manychat_api_token: (req.body.manychat_api_token || '').trim(),
         manychat_fallback_flow_id: (req.body.manychat_fallback_flow_id || '').trim(),
         manychat_webhook_secret: (req.body.manychat_webhook_secret || '').trim(),
+
+        meta_access_token: (req.body.meta_access_token || '').trim(),
+        meta_phone_number_id: (req.body.meta_phone_number_id || '').trim(),
+        contact_token: (req.body.contact_token || '').trim(),
       };
 
       await updateBotSettings(payload);
@@ -290,6 +292,9 @@ function setupRoutes(
   app.post('/webhook', async (req, res) => {
     const body = req.body;
     if (body.object === 'whatsapp_business_account') {
+      const settings = await getBotSettings();
+      const phoneNumberId = settings.meta_phone_number_id;
+      const contactToken = settings.contact_token;
       for (const entry of body.entry) {
         for (const change of entry.changes) {
           if (change.field !== 'messages') continue;
@@ -297,7 +302,7 @@ function setupRoutes(
           if (!value.messages || !value.messages.length) continue;
           const msg = value.messages[0];
           const contato = msg.from;  // Declaração original de contato
-          if (contato === PHONE_NUMBER_ID) { res.sendStatus(200); return; }
+          if (contato === phoneNumberId) { res.sendStatus(200); return; }
           const isProviderMedia = msg.type !== 'text';
           const texto = msg.type === 'text' ? (msg.text.body || '').trim() : '';
           console.log(`[${contato}] ${texto || '[mídia]'}`);
@@ -338,7 +343,7 @@ function setupRoutes(
             };
             try {
               const resp = await axios.post(`${LANDING_URL}/api/capi/contact`, contactPayload, {
-                headers: { 'Content-Type': 'application/json', 'X-Contact-Token': CONTACT_TOKEN },
+                headers: { 'Content-Type': 'application/json', 'X-Contact-Token': contactToken },
                 validateStatus: () => true,
               });
               if (is_ctwa && clid) sentContactByClid.add(clid);

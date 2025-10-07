@@ -51,7 +51,7 @@ Analise TODAS as respostas do lead após pedir o valor disponível em FINANCEIRO
 "${contexto}"
 
 Responda com só UMA destas opções:
-- "confirmado" (se ele enviou um valor em texto, como "R$ 5000", "5000", "5.000,00", "5K", "5,8k", "R$5.876,41", "$5876,41", "5876,41", "5.876,41", ou qualquer formato numérico que represente um valor monetário maior ou igual a 4000)
+- "confirmado" (se ele enviou um valor em texto, como "R$ 5000", "5000", "5.000,00", "5K", "5,8k", "R$5.876,41", "$5876,41", "5876,41", "5.876,41", "4385 R$", "4385 reais", "cinquenta mil", "vinte mil e poucos", "uns vinte mil reais" ou qualquer formato numérico que represente um valor monetário maior ou igual a 4000)
 - "nao_confirmado" (se ele não enviou um valor em texto ou disse que não conseguiu, como "não achei", "não tem valor", etc)
 - "duvida" (se ele perguntou algo tipo "onde tá FINANCEIRO", "qual valor mando", "como vejo o valor", etc)
 - "neutro" (se ele falou algo afirmativo como "beleza", "tá bom", "certo", "fechou", "ok", "entendi", "vou fazer", "slk", ou algo irrelevante como "Próximo passo?" que não confirma, nega ou questiona)

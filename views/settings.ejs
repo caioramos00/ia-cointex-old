@@ -70,7 +70,7 @@
                 </select>
 
                 <!-- Campos Twilio -->
-                <div data-provider="twilio" class="provider-fields">
+                <div id="twilio-settings" style="display: none;">
                     <input name="twilio_account_sid" value="<%= settings.twilio_account_sid || '' %>"
                         placeholder="TWILIO_ACCOUNT_SID" />
                     <input name="twilio_auth_token" value="<%= settings.twilio_auth_token || '' %>"
@@ -82,12 +82,25 @@
                 </div>
 
                 <!-- Campos Manychat -->
-                <div data-provider="manychat" class="provider-fields">
+                <div id="manychat-settings" style="display: none;">
                     <input name="manychat_api_token" value="<%= settings.manychat_api_token || '' %>"
                         placeholder="MANYCHAT_API_TOKEN" />
                     <input name="manychat_fallback_flow_id" value="<%= settings.manychat_fallback_flow_id || '' %>"
                         placeholder="MANYCHAT_FALLBACK_FLOW_ID (flow com template)" />
                         <input name="manychat_webhook_secret" value="<%= settings.manychat_webhook_secret || '' %>" placeholder="MANYCHAT_WEBHOOK_SECRET" />
+                </div>
+
+                <!-- Campos Meta -->
+                <div id="meta-settings" style="display: none;">
+                    <h3>Configurações Meta (WhatsApp Cloud API)</h3>
+                    <label>Access Token:</label>
+                    <input type="text" name="meta_access_token" value="<%= settings.meta_access_token || '' %>"><br>
+
+                    <label>Phone Number ID:</label>
+                    <input type="text" name="meta_phone_number_id" value="<%= settings.meta_phone_number_id || '' %>"><br>
+
+                    <label>Contact Token:</label>
+                    <input type="text" name="contact_token" value="<%= settings.contact_token || '' %>"><br>
                 </div>
 
                 <div class="col-12">
@@ -102,6 +115,23 @@
                 O selo é enviado <strong>apenas na primeira resposta</strong> de cada sessão para o contato, conforme as
                 políticas da Meta.
             </p>
+
+    <script>
+        const providerSelect = document.querySelector('select[name="message_provider"]');
+        const twilioDiv = document.getElementById('twilio-settings');
+        const manychatDiv = document.getElementById('manychat-settings');
+        const metaDiv = document.getElementById('meta-settings');
+
+        function toggleProviderSettings() {
+            const val = providerSelect.value.toLowerCase();
+            twilioDiv.style.display = val === 'twilio' ? 'block' : 'none';
+            manychatDiv.style.display = val === 'manychat' ? 'block' : 'none';
+            metaDiv.style.display = val === 'meta' ? 'block' : 'none';
+        }
+
+        providerSelect.addEventListener('change', toggleProviderSettings);
+        toggleProviderSettings(); // Inicial
+    </script>
 </body>
 
 </html>

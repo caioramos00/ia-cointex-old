@@ -622,7 +622,6 @@ async function handleIncomingNormalizedMessage(normalized) {
     const msg = hasText ? safeStr(texto).trim() : '[mídia]';
     log.info(`${tsNow()} [${st.contato}] Mensagem recebida: ${msg}`);
     st.lastIncomingTs = ts || Date.now();
-    // >>> ENFILEIRA para que preflightOptOut()/processamento consigam detectar
     if (!Array.isArray(st.mensagensPendentes)) st.mensagensPendentes = [];
     if (!Array.isArray(st.mensagensDesdeSolicitacao)) st.mensagensDesdeSolicitacao = [];
     st.mensagensPendentes.push({ texto: msg, ts: st.lastIncomingTs });
@@ -1475,20 +1474,17 @@ async function processarMensagensPendentes(contato) {
 
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
 
-            // se houver opt-out agora, não envia e não avança
             if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-pre-single' };
 
             let r = { ok: true };
             if (m) r = await sendMessage(st.contato, m);
 
-            // ENVIO FALHOU/FOI SKIPPED -> NÃO AVANÇA ETAPA
             if (!r?.ok) {
                 return { ok: true, paused: r?.reason || 'send-skipped' };
             }
 
             if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-post-single' };
 
-            // só avança se enviou com sucesso
             st.mensagensPendentes = [];
             st.mensagensDesdeSolicitacao = [];
             st.lastClassifiedIdx.confirmacao = 0;
@@ -1585,7 +1581,7 @@ async function processarMensagensPendentes(contato) {
                     console.log(`[${st.contato}] Análise: ${resp.picked || 'neutro'} ("${truncate(contexto, 140)}")`);
                 } catch { }
             }
-            st.lastClassifiedIdx.confirmacao = st.mensagensPendentes.length; // Use pendentes for consistency
+            st.lastClassifiedIdx.confirmacao = st.mensagensPendentes.length;
             st.mensagensPendentes = [];
             if (confirmado) {
                 st.mensagensDesdeSolicitacao = [];
@@ -1671,7 +1667,6 @@ async function processarMensagensPendentes(contato) {
             return { ok: true, partial: true };
         }
 
-        // --- SUBSTITUA TODO O BLOCO "saque:wait" POR ESTE ---
         if (st.etapa === 'saque:wait') {
             if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
             if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
@@ -1679,15 +1674,13 @@ async function processarMensagensPendentes(contato) {
                 return { ok: true, noop: 'waiting-user' };
             }
 
-            // Cursor/clamp sempre relativo a PENDENTES (não ao "desdeSolicitacao")
             const totalPend = st.mensagensPendentes.length;
             const startIdx = Math.min(totalPend, Math.max(0, Number(st.lastClassifiedIdx?.saque || 0)));
             const novasMsgs = st.mensagensPendentes.slice(startIdx);
 
-            // Se por algum motivo não há novas (ex.: cursor antigo > pendentes atuais), normaliza e sai
             if (novasMsgs.length === 0) {
                 st.mensagensPendentes = [];
-                st.lastClassifiedIdx.saque = 0; // importantíssimo: zera para o próximo ciclo não “pular” a nova mídia
+                st.lastClassifiedIdx.saque = 0;
                 return { ok: true, noop: 'no-new-messages' };
             }
 
@@ -1698,7 +1691,6 @@ async function processarMensagensPendentes(contato) {
                     || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
             };
 
-            // 1) CURTO-CIRCUITO: mídia detectada -> pular IA e avançar (igual confirmação)
             let temImagem = false;
             for (const m of novasMsgs) {
                 const msg = safeStr(m?.texto || '').trim();
@@ -1710,17 +1702,15 @@ async function processarMensagensPendentes(contato) {
             }
 
             if (temImagem) {
-                st.lastClassifiedIdx.saque = 0;         // zera o cursor SEMPRE que limpar pendentes
+                st.lastClassifiedIdx.saque = 0;
                 st.mensagensPendentes = [];
                 st.mensagensDesdeSolicitacao = [];
                 st.saquePediuPrint = false;
                 const _prev = st.etapa;
                 st.etapa = 'validacao:send';
                 console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
-                return { ok: true };
             }
 
-            // 2) Sem mídia: IA de relevância (igual já faz), mas usando SOMENTE as novas pendentes
             let relevante = false;
             if (apiKey) {
                 const contexto = novasMsgs.map(m => safeStr(m?.texto || '')).join(' | ');
@@ -1768,12 +1758,10 @@ async function processarMensagensPendentes(contato) {
                 } catch { }
             }
 
-            // Cursor SEMPRE zerado quando limpamos pendentes
             st.lastClassifiedIdx.saque = 0;
             st.mensagensPendentes = [];
 
             if (relevante) {
-                // Pede o print (uma vez) e mantém a etapa até vir a mídia
                 const saquePath = path.join(__dirname, 'content', 'saque.json');
                 let raw = fs.readFileSync(saquePath, 'utf8');
                 raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
@@ -1795,7 +1783,6 @@ async function processarMensagensPendentes(contato) {
 
             return { ok: true, classe: 'irrelevante' };
         }
-
 
         if (st.etapa === 'validacao:send') {
             enterStageOptOutResetIfNeeded(st);
@@ -1935,14 +1922,11 @@ async function processarMensagensPendentes(contato) {
                     if (!r1?.ok) return { ok: false, reason: 'send-aborted' };
                 }
 
-                // dentro de conversao:send (primeiro batch)
                 await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
 
-                // ManyChat -> usa o mesmo mecanismo do /admin/test-image (fields + flow), sem precisar de imagem no conversao.json
                 const FLOW_NS_IMAGEM = 'content20251005164000_207206';
-                const r2 = await sendImage(st.contato, /* url opcional */ '', {
+                const r2 = await sendImage(st.contato, '', {
                     flowNs: FLOW_NS_IMAGEM,
-                    // se quiser, já manda legenda para o flow ler via custom field
                     caption: 'Comprovante de transferência'
                 });
 
@@ -2186,11 +2170,6 @@ async function updateManyChatCustomFieldByName({ token, subscriberId, fieldName,
 }
 
 async function sendImage(contato, image, captionOrOpts = '', maybeOpts = {}) {
-    // ===== 1) Normalização de argumentos =====
-    // Usos aceitos:
-    //   sendImage(contato, 'https://img...', 'Legenda')
-    //   sendImage(contato, 'https://img...', { mechanism:'manychat_fields', caption:'...' })
-    //   sendImage(contato, [{ url, caption }, { url, caption }], { delayBetweenMs:[12000,16000] })
     const isArray = Array.isArray(image);
     const items = isArray
         ? image.map(it => ({ url: safeStr(it?.url).trim(), caption: safeStr(it?.caption || '') }))
@@ -2198,20 +2177,15 @@ async function sendImage(contato, image, captionOrOpts = '', maybeOpts = {}) {
 
     const baseOpts = (typeof captionOrOpts === 'object' && !isArray) ? captionOrOpts : maybeOpts;
     const opts = {
-        // mecanismo padrão: o mesmo do /admin/test-image (set custom fields)
         mechanism: (baseOpts.mechanism || 'manychat_fields'),
-        // nomes dos campos no ManyChat (pode sobrescrever se quiser)
         fields: { image: (baseOpts.fields?.image || 'image'), caption: (baseOpts.fields?.caption || 'caption') },
-        // para quem quiser ainda acionar flow direto:
-        flowNs: baseOpts.flowNs || null,        // ex: 'content20251005164000_207206'
-        flowVars: baseOpts.flowVars || {},      // vars extras para o flow
-        // comportamento geral:
+        flowNs: baseOpts.flowNs || null,
+        flowVars: baseOpts.flowVars || {},
         force: baseOpts.force === true,
-        alsoSendAsFile: baseOpts.alsoSendAsFile === true, // reservado p/ outros providers futuramente
+        alsoSendAsFile: baseOpts.alsoSendAsFile === true,
         delayBetweenMs: Array.isArray(baseOpts.delayBetweenMs) ? baseOpts.delayBetweenMs : [BETWEEN_MIN_MS, BETWEEN_MAX_MS],
     };
 
-    // ===== 2) Guardas e opt-out =====
     await extraGlobalDelay();
     const allowNoUrl = !!((typeof captionOrOpts === 'object' ? captionOrOpts : maybeOpts)?.flowNs);
     if (!items.length || (!items[0].url && !allowNoUrl)) {
@@ -2224,25 +2198,20 @@ async function sendImage(contato, image, captionOrOpts = '', maybeOpts = {}) {
         const paused = (st.permanentlyBlocked === true) || (st.optOutCount >= 3) || (st.optOutCount > 0 && !st.reoptinActive);
         if (paused && !opts.force) return { ok: false, reason: 'paused-by-optout' };
 
-        // ===== 3) Provider ativo =====
         const { mod, settings } = await getActiveTransport();
         const provider = mod?.name || 'unknown';
 
         if (provider !== 'manychat') {
-            // hoje só damos suporte completo a ManyChat p/ imagem
             return { ok: false, reason: 'unsupported' };
         }
 
-        // ===== 4) Credenciais/Subscriber =====
         const token = (settings && settings.manychat_api_token) || process.env.MANYCHAT_API_TOKEN || '';
         if (!token) return { ok: false, reason: 'missing-token' };
 
         const subscriberId = await resolveManychatWaSubscriberId(contato, mod, settings);
         if (!subscriberId) return { ok: false, reason: 'no-subscriber-id' };
 
-        // ===== 5) Estratégias de envio no ManyChat =====
         const sendOneByFields = async ({ url, caption }) => {
-            // (A) mesmo mecanismo do /admin/test-image: 1) set caption 2) set image
             if (typeof caption === 'string') {
                 await updateManyChatCustomFieldByName({ token, subscriberId, fieldName: opts.fields.caption, fieldValue: caption || '' });
             }
@@ -2253,7 +2222,6 @@ async function sendImage(contato, image, captionOrOpts = '', maybeOpts = {}) {
         };
 
         const sendOneByFlow = async ({ url, caption }) => {
-            // (B) alternativa: acionar diretamente um flow com variáveis
             if (!opts.flowNs) return { ok: false, reason: 'missing-flow-ns' };
             const payload = {
                 subscriber_id: subscriberId,
@@ -2280,27 +2248,23 @@ async function sendImage(contato, image, captionOrOpts = '', maybeOpts = {}) {
         const sender =
             (opts.mechanism === 'flow' || (!!opts.flowNs)) ? sendOneByFlow : sendOneByFields;
 
-        // ===== 6) Suporte a múltiplas imagens (replicável em qualquer etapa) =====
         const results = [];
         for (let i = 0; i < items.length; i++) {
             const { url, caption } = items[i];
             const r = await sender({ url: url || '', caption });
             results.push(r);
 
-            // checagem de opt-out entre envios
             if (await preflightOptOut(st)) {
                 results.push({ ok: false, reason: 'paused-by-optout-mid-batch' });
                 break;
             }
 
-            // delay humano entre imagens do mesmo lote
             if (i < items.length - 1) {
                 const [minMs, maxMs] = opts.delayBetweenMs;
                 await delayRange(minMs, maxMs);
             }
         }
 
-        // retorno compacto quando for 1 item, ou detalhado para lote
         if (!isArray) return results[0];
         const okAll = results.every(r => r?.ok);
         return { ok: okAll, results };
@@ -2320,24 +2284,22 @@ async function triggerManyChatFlow(contato, flowNs, imageUrl, caption, settings)
 
     const payload = {
         subscriber_id: subscriberId,
-        flow_ns: 'content20251005164000_207206',  // ex: 'content20251004203041_009700'
-        variables: {  // Parâmetros dinâmicos
-            contact_: contato,  // Envie o número do celular
+        flow_ns: 'content20251005164000_207206',
+        variables: {
+            contact_: contato,
             image_url_: imageUrl,
             caption_: caption || ''
         }
     };
 
-    // Log detalhado do payload enviado (EXATAMENTE o que vai para ManyChat)
     console.log(`[ManyChat][sendFlow] Sending payload: ${JSON.stringify(payload, null, 2)}`);
 
     const r = await axios.post('https://api.manychat.com/fb/sending/sendFlow', payload, {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        timeout: 60000,  // 60s
+        timeout: 60000,
         validateStatus: () => true
     });
 
-    // Log da resposta completa do ManyChat
     console.log(`[ManyChat][sendFlow] Response: Status=${r.status}, Body=${JSON.stringify(r.data, null, 2)}`);
 
     if (r.status >= 200 && r.status < 300 && r.data.status === 'success') {

@@ -52,6 +52,33 @@ async function initDatabase() {
       ADD COLUMN IF NOT EXISTS permanently_blocked BOOLEAN DEFAULT FALSE
     `);
     console.log('[DB] Colunas de opt-out OK.');
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS bot_settings (
+        id SERIAL PRIMARY KEY,
+        message_provider VARCHAR(50) DEFAULT 'meta',
+        twilio_account_sid TEXT,
+        twilio_auth_token TEXT,
+        twilio_messaging_service_sid TEXT,
+        twilio_from TEXT,
+        manychat_api_token TEXT,
+        manychat_fallback_flow_id TEXT,
+        manychat_webhook_secret TEXT,
+        meta_access_token TEXT,
+        meta_phone_number_id VARCHAR(50),
+        contact_token TEXT,  // Nova coluna para CONTACT_TOKEN
+        identity_enabled BOOLEAN DEFAULT FALSE,
+        identity_label TEXT,
+        support_email TEXT,
+        support_phone TEXT,
+        support_url TEXT,
+        optout_hint_enabled BOOLEAN DEFAULT FALSE,
+        optout_suffix TEXT,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('[DB] Tabela bot_settings criada ou já existe.');
+
   } catch (error) {
     console.error('[DB] Erro ao inicializar tabela:', error.message);
   } finally {
@@ -75,6 +102,7 @@ async function getBotSettings() {
       id, message_provider,
       twilio_account_sid, twilio_auth_token, twilio_messaging_service_sid, twilio_from,
       manychat_api_token, manychat_fallback_flow_id, manychat_webhook_secret,
+      meta_access_token, meta_phone_number_id, contact_token,
       identity_enabled, identity_label, support_email, support_phone, support_url,
       optout_hint_enabled, optout_suffix,
       updated_at
@@ -106,7 +134,8 @@ async function updateBotSettings(payload) {
       optout_hint_enabled, optout_suffix,
       message_provider,
       twilio_account_sid, twilio_auth_token, twilio_messaging_service_sid, twilio_from,
-      manychat_api_token, manychat_fallback_flow_id, manychat_webhook_secret
+      manychat_api_token, manychat_fallback_flow_id, manychat_webhook_secret,
+      meta_access_token, meta_phone_number_id, contact_token
     } = payload;
 
     await client.query(`
@@ -125,7 +154,10 @@ async function updateBotSettings(payload) {
              twilio_from = COALESCE($12, twilio_from),
              manychat_api_token = COALESCE($13, manychat_api_token),
              manychat_fallback_flow_id = COALESCE($14, manychat_fallback_flow_id),
-             manychat_webhook_secret = COALESCE($15, manychat_webhook_secret)
+             manychat_webhook_secret = COALESCE($15, manychat_webhook_secret),
+             meta_access_token = COALESCE($16, meta_access_token),
+             meta_phone_number_id = COALESCE($17, meta_phone_number_id),
+             contact_token = COALESCE($18, contact_token)
        WHERE id = (SELECT id FROM bot_settings ORDER BY id ASC LIMIT 1)
     `, [
       (typeof identity_enabled === 'boolean') ? identity_enabled : null,
@@ -142,7 +174,10 @@ async function updateBotSettings(payload) {
       twilio_from || null,
       manychat_api_token || null,
       manychat_fallback_flow_id || null,
-      manychat_webhook_secret || null
+      manychat_webhook_secret || null,
+      meta_access_token || null,
+      meta_phone_number_id || null,
+      contact_token || null
     ]);
 
     _settingsCache = null;
