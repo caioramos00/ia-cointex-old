@@ -1876,7 +1876,7 @@ async function processarMensagensPendentes(contato) {
             let temImagem = false;
             for (const raw of novasMsgs) {
                 const msg = safeStr(raw).trim();
-                console.log(`[DEBUG] Media check msg: "${msg}"`);  // Novo log para ver exato string testado
+                console.log(`[DEBUG] Media check msg: "${msg}"`);  // Novo log para ver exato string testado 
                 if (looksLikeMediaUrl(msg) || /^\[m[ií]dia\]$/i.test(msg)) {
                     console.log(`[${st.contato}] Análise: imagem ("${truncate(msg, 140)}")`);
                     temImagem = true;
