@@ -1718,12 +1718,13 @@ async function processarMensagensPendentes(contato) {
                         .replace(/https?:\/\/\S+/gi, ' ')
                         .replace(/[\u200b-\u200d\u2060\ufeff]/g, '')
                         .trim();
-
+                    // Novo log para debug
+                    console.log(`[${st.contato}] Media check: original="${original}" (codes: ${[...original].map(c => c.charCodeAt(0).toString(16)).join(',')}), cleaned="${cleaned}", norm_orig="${normMsg(original, { case_insensitive: true, accent_insensitive: true })}", norm_clean="${normMsg(cleaned, { case_insensitive: true, accent_insensitive: true })}"`);
                     if (
                         /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(original) ||
                         /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(original) ||
-                        normMsg(original, { case_insensitive: true, accent_insensitive: true }) === '[midia]' ||  // Atualizada para normalizar acentos
-                        normMsg(cleaned, { case_insensitive: true, accent_insensitive: true }) === '[midia]' ||  // Atualizada para normalizar acentos
+                        normMsg(original, { case_insensitive: true, accent_insensitive: true }) === '[midia]' ||
+                        normMsg(cleaned, { case_insensitive: true, accent_insensitive: true }) === '[midia]' ||
                         /^\s*[\[\(\{<]?\s*(?:m(?:i\u0301|\u00ed|i)dia|media|imagem|foto|image)\s*[\]\)\}>]?\s*$/i.test(cleaned) ||
                         /\b(?:image|media)\s+omitted\b/i.test(cleaned) ||
                         /\b(?:imagem|m(?:i\u0301|\u00ed|i)dia)\s+omitid[ao]\b/i.test(cleaned)
@@ -1733,9 +1734,13 @@ async function processarMensagensPendentes(contato) {
                         break;
                     }
                 }
+                // Novo log após loop
+                console.log(`[${st.contato}] Fallback result: confirmado=${confirmado}`);
             }
 
             if (!confirmado && apiKey) {
+                // Novo log antes de IA
+                console.log(`[${st.contato}] Falling to IA for confirmacao, contexto="${truncate(contexto, 140)}"`);
                 const allowed = ['confirmado', 'nao_confirmado', 'duvida', 'neutro'];
                 const contexto = novasMsgs.map(s => safeStr(s)).join(' | ');
                 const structuredPrompt =
@@ -1759,7 +1764,13 @@ async function processarMensagensPendentes(contato) {
                                 validateStatus: () => true
                             }
                         );
-                    } catch {
+                        // Novo log RAW para IA da etapa
+                        const reqId = (r.headers?.['x-request-id'] || '');
+                        console.log(`${tsNow()} [${st.contato}] [STAGE_IA][RAW] http=${r.status} req=${reqId} body=${truncate(JSON.stringify(r.data), 20000)}`);
+                    } catch (e) {
+                        // Novo log no catch
+                        console.log(`[${st.contato}] [STAGE_IA] erro="${e?.message || e}"`);
+                        if (e?.response) console.log(`http=${e.response.status} body=${truncate(JSON.stringify(e.response.data), 400)}`);
                         return { status: 0, picked: null };
                     }
                     const data = r.data;
@@ -1787,7 +1798,7 @@ async function processarMensagensPendentes(contato) {
                     return { status: r.status, picked };
                 };
                 try {
-                    let resp = await callOnce(64);
+                    let resp = await callOnce(128);  // Aumentado para 128 inicial
                     if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) {
                         resp = await callOnce(256);
                     }
@@ -1898,7 +1909,6 @@ async function processarMensagensPendentes(contato) {
                 return /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(n)
                     || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
             };
-            // Dentro de 'saque:wait' - substitua o bloco 'let temImagem = false; ... if (!temImagem) { for (const raw ... } }' por este:
             let temImagem = false;
 
             // --- FIX 2: atalho direto pelo flag da fila ---
@@ -1920,12 +1930,13 @@ async function processarMensagensPendentes(contato) {
                         .replace(/https?:\/\/\S+/gi, ' ')
                         .replace(/[\u200b-\u200d\u2060\ufeff]/g, '')
                         .trim();
-
+                    // Novo log para debug
+                    console.log(`[${st.contato}] Media check: original="${original}" (codes: ${[...original].map(c => c.charCodeAt(0).toString(16)).join(',')}), cleaned="${cleaned}", norm_orig="${normMsg(original, { case_insensitive: true, accent_insensitive: true })}", norm_clean="${normMsg(cleaned, { case_insensitive: true, accent_insensitive: true })}"`);
                     if (
                         /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(original) ||
                         /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(original) ||
-                        normMsg(original, { case_insensitive: true, accent_insensitive: true }) === '[midia]' ||  // Atualizada para normalizar acentos
-                        normMsg(cleaned, { case_insensitive: true, accent_insensitive: true }) === '[midia]' ||  // Atualizada para normalizar acentos
+                        normMsg(original, { case_insensitive: true, accent_insensitive: true }) === '[midia]' ||
+                        normMsg(cleaned, { case_insensitive: true, accent_insensitive: true }) === '[midia]' ||
                         /^\s*[\[\(\{<]?\s*(?:m(?:i\u0301|\u00ed|i)dia|media|imagem|foto|image)\s*[\]\)\}>]?\s*$/i.test(cleaned) ||
                         /\b(?:image|media)\s+omitted\b/i.test(cleaned) ||
                         /\b(?:imagem|m(?:i\u0301|\u00ed|i)dia)\s+omitid[ao]\b/i.test(cleaned)
@@ -1935,6 +1946,8 @@ async function processarMensagensPendentes(contato) {
                         break;
                     }
                 }
+                // Novo log após loop
+                console.log(`[${st.contato}] Fallback result: temImagem=${temImagem}`);
             }
 
             if (temImagem) {
@@ -1948,6 +1961,7 @@ async function processarMensagensPendentes(contato) {
             } else {
                 let relevante = false;
                 if (apiKey) {
+                    console.log(`[${st.contato}] Falling to IA for saque relevancia, contexto="${truncate(contexto, 140)}"`);
                     const allowed = ['relevante', 'irrelevante'];
                     const contexto = novasMsgs.map(s => safeStr(s)).join(' | ');
                     const structuredPrompt =
@@ -1971,7 +1985,11 @@ async function processarMensagensPendentes(contato) {
                                     validateStatus: () => true
                                 }
                             );
+                            const reqId = (r.headers?.['x-request-id'] || '');
+                            console.log(`${tsNow()} [${st.contato}] [STAGE_IA][RAW] http=${r.status} req=${reqId} body=${truncate(JSON.stringify(r.data), 20000)}`);
                         } catch {
+                            console.log(`[${st.contato}] [STAGE_IA] erro="${e?.message || e}"`);
+                            if (e?.response) console.log(`http=${e.response.status} body=${truncate(JSON.stringify(e.response.data), 400)}`);
                             return { status: 0, picked: null };
                         }
                         const data = r.data;
@@ -1999,7 +2017,7 @@ async function processarMensagensPendentes(contato) {
                         return { status: r.status, picked };
                     };
                     try {
-                        let resp = await callOnce(64);
+                        let resp = await callOnce(128);  // Aumentado para 128 inicial
                         if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) resp = await callOnce(256);
                         relevante = (resp.status >= 200 && resp.status < 300 && resp.picked === 'relevante');
                         console.log(`[${st.contato}] Análise: ${resp.picked || (relevante ? 'relevante' : 'irrelevante')} ("${truncate(contexto, 140)}")`);
