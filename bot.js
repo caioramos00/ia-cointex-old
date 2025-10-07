@@ -2112,7 +2112,7 @@ async function sendMessage(contato, texto, opts = {}) {
                 .replace(/\n{3,}/g, '\n\n')
                 .trim();
 
-            await mod.sendText({ to: phone, text: finalText });
+            await mod.sendText({ to: phone, text: finalText }, settings);
             console.log(`${tsNow()} [${contato}] Mensagem enviada via Meta: ${finalText}`);
             return { ok: true, provider };
         }
