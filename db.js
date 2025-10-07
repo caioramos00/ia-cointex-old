@@ -66,7 +66,7 @@ async function initDatabase() {
         manychat_webhook_secret TEXT,
         meta_access_token TEXT,
         meta_phone_number_id VARCHAR(50),
-        contact_token TEXT,  // Nova coluna para CONTACT_TOKEN
+        contact_token TEXT,
         identity_enabled BOOLEAN DEFAULT FALSE,
         identity_label TEXT,
         support_email TEXT,
