@@ -1697,6 +1697,7 @@ async function processarMensagensPendentes(contato) {
                 return /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(n)
                     || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
             };
+            // Dentro de 'confirmacao:wait' - substitua o bloco 'let confirmado = false; ... if (!confirmado) { for (const raw ... } }' por este:
             let confirmado = false;
 
             // --- FIX 1: atalho pelo flag da fila (quando veio texto + mídia) ---
@@ -1722,6 +1723,8 @@ async function processarMensagensPendentes(contato) {
                     if (
                         /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(original) ||
                         /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(original) ||
+                        original.toLowerCase() === '[mídia]' ||  // Nova verificação explícita para Meta
+                        cleaned.toLowerCase() === '[mídia]' ||   // Nova verificação explícita para Meta (após clean)
                         /^\s*[\[\(\{<]?\s*(?:m(?:i\u0301|\u00ed|i)dia|media|imagem|foto|image)\s*[\]\)\}>]?\s*$/i.test(cleaned) ||
                         /\b(?:image|media)\s+omitted\b/i.test(cleaned) ||
                         /\b(?:imagem|m(?:i\u0301|\u00ed|i)dia)\s+omitid[ao]\b/i.test(cleaned)
@@ -1896,6 +1899,7 @@ async function processarMensagensPendentes(contato) {
                 return /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(n)
                     || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
             };
+            // Dentro de 'saque:wait' - substitua o bloco 'let temImagem = false; ... if (!temImagem) { for (const raw ... } }' por este:
             let temImagem = false;
 
             // --- FIX 2: atalho direto pelo flag da fila ---
@@ -1921,6 +1925,8 @@ async function processarMensagensPendentes(contato) {
                     if (
                         /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(original) ||
                         /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(original) ||
+                        original.toLowerCase() === '[mídia]' ||  // Nova verificação explícita para Meta
+                        cleaned.toLowerCase() === '[mídia]' ||   // Nova verificação explícita para Meta (após clean)
                         /^\s*[\[\(\{<]?\s*(?:m(?:i\u0301|\u00ed|i)dia|media|imagem|foto|image)\s*[\]\)\}>]?\s*$/i.test(cleaned) ||
                         /\b(?:image|media)\s+omitted\b/i.test(cleaned) ||
                         /\b(?:imagem|m(?:i\u0301|\u00ed|i)dia)\s+omitid[ao]\b/i.test(cleaned)
