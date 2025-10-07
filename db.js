@@ -79,6 +79,17 @@ async function initDatabase() {
     `);
     console.log('[DB] Tabela bot_settings criada ou já existe.');
 
+    await client.query(`
+      ALTER TABLE bot_settings ADD CONSTRAINT bot_settings_singleton CHECK (id = 1) NOT VALID;
+    `).catch(() => { });
+
+    await client.query(`
+      INSERT INTO bot_settings (id, message_provider)
+      VALUES (1, 'meta')
+      ON CONFLICT (id) DO NOTHING;
+    `);
+    console.log('[DB] Linha singleton em bot_settings OK.');
+
   } catch (error) {
     console.error('[DB] Erro ao inicializar tabela:', error.message);
   } finally {
@@ -107,10 +118,10 @@ async function getBotSettings({ bypassCache = false } = {}) {
       optout_hint_enabled, optout_suffix,
       updated_at
     FROM bot_settings
-    ORDER BY id ASC
+    WHERE id = 1
     LIMIT 1
   `);
-  _settingsCache = rows[0] || { message_provider: 'meta' };
+  _settingsCache = rows[0] || { id: 1, message_provider: 'meta' };
   _settingsCacheTs = now;
   return _settingsCache;
 }
@@ -127,7 +138,11 @@ async function getContatoByPhone(phone) {
 async function updateBotSettings(payload) {
   const client = await pool.connect();
   try {
-    await ensureDefaultSettings(client);
+    await client.query(`
+      INSERT INTO bot_settings (id, message_provider)
+      VALUES (1, 'meta')
+      ON CONFLICT (id) DO NOTHING;
+    `);
 
     const {
       identity_enabled, identity_label, support_email, support_phone, support_url,
@@ -158,7 +173,7 @@ async function updateBotSettings(payload) {
              meta_access_token = COALESCE($16, meta_access_token),
              meta_phone_number_id = COALESCE($17, meta_phone_number_id),
              contact_token = COALESCE($18, contact_token)
-       WHERE id = (SELECT id FROM bot_settings ORDER BY id ASC LIMIT 1)
+       WHERE id = 1
     `, [
       (typeof identity_enabled === 'boolean') ? identity_enabled : null,
       identity_label || null,
