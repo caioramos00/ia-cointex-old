@@ -1697,17 +1697,30 @@ async function processarMensagensPendentes(contato) {
                     || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
             };
             let confirmado = false;
-            for (const raw of novasMsgs) {
-                const msg = safeStr(raw).trim();
+
+            let _novas = novasMsgs;
+            if (!_novas || _novas.length === 0) {
+                _novas = (Array.isArray(st.mensagensPendentes) ? st.mensagensPendentes : []).map(m => safeStr(m?.texto || ''));
+            }
+
+            for (const raw of _novas) {
+                const original = safeStr(raw);
+                const cleaned = original
+                    .replace(/https?:\/\/\S+/gi, ' ')
+                    .replace(/[\u200b-\u200d\u2060\ufeff]/g, '')
+                    .trim();
+
                 if (
-                    looksLikeMediaUrl(msg) ||
-                    /^\s*\[(?:m[ií]dia|media|imagem|foto|image)\]\s*$/i.test(msg)   // <= aceita "[mídia]" e variações
+                    /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(original) ||
+                    /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(original) ||
+                    /^\s*[\[\(\{<]?\s*(?:m(?:i\u0301|\u00ed|i)dia|media|imagem|foto|image)\s*[\]\)\}>]?\s*$/i.test(cleaned)
                 ) {
-                    console.log(`[${st.contato}] Análise: confirmado ("${truncate(msg, 140)}")`);
+                    console.log(`[${st.contato}] Análise: confirmado ("${truncate(original, 140)}")`);
                     confirmado = true;
                     break;
                 }
             }
+
             if (!confirmado && apiKey) {
                 const allowed = ['confirmado', 'nao_confirmado', 'duvida', 'neutro'];
                 const contexto = novasMsgs.map(s => safeStr(s)).join(' | ');
@@ -1872,13 +1885,25 @@ async function processarMensagensPendentes(contato) {
                     || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
             };
             let temImagem = false;
-            for (const raw of novasMsgs) {
-                const msg = safeStr(raw).trim();
+
+            let _novas = novasMsgs;
+            if (!_novas || _novas.length === 0) {
+                _novas = (Array.isArray(st.mensagensPendentes) ? st.mensagensPendentes : []).map(m => safeStr(m?.texto || ''));
+            }
+
+            for (const raw of _novas) {
+                const original = safeStr(raw);
+                const cleaned = original
+                    .replace(/https?:\/\/\S+/gi, ' ')
+                    .replace(/[\u200b-\u200d\u2060\ufeff]/g, '')
+                    .trim();
+
                 if (
-                    looksLikeMediaUrl(msg) ||
-                    /^\s*\[(?:m[ií]dia|media|imagem|foto|image)\]\s*$/i.test(msg)   // <= aceita "[mídia]" e variações
+                    /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(original) ||
+                    /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(original) ||
+                    /^\s*[\[\(\{<]?\s*(?:m(?:i\u0301|\u00ed|i)dia|media|imagem|foto|image)\s*[\]\)\}>]?\s*$/i.test(cleaned)
                 ) {
-                    console.log(`[${st.contato}] Análise: imagem ("${truncate(msg, 140)}")`);
+                    console.log(`[${st.contato}] Análise: imagem ("${truncate(original, 140)}")`);
                     temImagem = true;
                     break;
                 }
