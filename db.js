@@ -93,9 +93,9 @@ async function ensureDefaultSettings(client) {
   }
 }
 
-async function getBotSettings() {
+async function getBotSettings({ bypassCache = false } = {}) {
   const now = Date.now();
-  if (_settingsCache && now - _settingsCacheTs < SETTINGS_TTL_MS) return _settingsCache;
+  if (!bypassCache && _settingsCache && now - _settingsCacheTs < SETTINGS_TTL_MS) return _settingsCache;
 
   const { rows } = await pool.query(`
     SELECT
