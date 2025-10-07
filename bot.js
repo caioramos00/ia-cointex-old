@@ -6,14 +6,7 @@ const axios = require('axios');
 const estadoContatos = require('./state.js');
 const { getActiveTransport } = require('./lib/transport');
 const { getContatoByPhone, setManychatSubscriberId } = require('./db');
-const {
-    promptClassificaAceite,
-    promptClassificaAcesso,
-    promptClassificaConfirmacao,
-    promptClassificaRelevancia,
-    promptClassificaOptOut,
-    promptClassificaReoptin
-} = require('./prompts');
+const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, promptClassificaOptOut, promptClassificaReoptin } = require('./prompts');
 
 let log = console;
 
@@ -1697,11 +1690,7 @@ async function processarMensagensPendentes(contato) {
                 return /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(n)
                     || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
             };
-            const isMediaishMsg = (m) => {
-                const t = safeStr(m?.texto).trim();
-                return !!(m?.temMidia || m?.hasMedia || looksLikeMediaUrl(t) || /^\s*\[m[ií]dia\]\s*$/i.test(t));
-            };
-            let confirmado = novasMsgs.some(isMediaishMsg);
+            let confirmado = false;
             for (const m of novasMsgs) {
                 const msg = safeStr(m.texto).trim();
                 if (m.temMidia || m.hasMedia || looksLikeMediaUrl(msg) || /^\[m[ií]dia\]$/i.test(msg)) {
@@ -1770,7 +1759,7 @@ async function processarMensagensPendentes(contato) {
                     console.log(`[${st.contato}] Análise: ${resp.picked || 'neutro'} ("${truncate(contexto, 140)}")`);
                 } catch { }
             }
-            st.lastClassifiedIdx.confirmacao = st.mensagensPendentes.length;  // Use pendentes for consistency
+            st.lastClassifiedIdx.confirmacao = st.mensagensPendentes.length; // Use pendentes for consistency
             st.mensagensPendentes = [];
             if (confirmado) {
                 st.mensagensDesdeSolicitacao = [];
@@ -1866,18 +1855,14 @@ async function processarMensagensPendentes(contato) {
                 st.mensagensPendentes = [];
                 return { ok: true, noop: 'no-new-messages' };
             }
-            const novasMsgs = st.mensagensPendentes.slice(startIdx);
+            const novasMsgs = st.mensagensPendentes.slice(startIdx); // Use pendentes to access temMidia
             const apiKey = process.env.OPENAI_API_KEY;
             const looksLikeMediaUrl = (s) => {
                 const n = String(s || '');
                 return /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(n)
                     || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
             };
-            const isMediaishMsg = (m) => {
-                const t = safeStr(m?.texto).trim();
-                return !!(m?.temMidia || m?.hasMedia || looksLikeMediaUrl(t) || /^\s*\[m[ií]dia\]\s*$/i.test(t));
-            };
-            let temImagem = novasMsgs.some(isMediaishMsg);
+            let temImagem = false;
             for (const m of novasMsgs) {
                 const msg = safeStr(m.texto).trim();
                 if (m.temMidia || m.hasMedia || looksLikeMediaUrl(msg) || /^\[m[ií]dia\]$/i.test(msg)) {
@@ -1887,7 +1872,7 @@ async function processarMensagensPendentes(contato) {
                 }
             }
             if (temImagem) {
-                st.lastClassifiedIdx.saque = st.mensagensPendentes.length;  // Use pendentes for consistency
+                st.lastClassifiedIdx.saque = st.mensagensPendentes.length; // Use pendentes for consistency
                 st.mensagensPendentes = [];
                 st.mensagensDesdeSolicitacao = [];
                 st.saquePediuPrint = false;
@@ -1954,7 +1939,7 @@ async function processarMensagensPendentes(contato) {
                         console.log(`[${st.contato}] Análise: ${resp.picked || (relevante ? 'relevante' : 'irrelevante')} ("${truncate(contexto, 140)}")`);
                     } catch { }
                 }
-                st.lastClassifiedIdx.saque = st.mensagensPendentes.length;  // Use pendentes for consistency
+                st.lastClassifiedIdx.saque = st.mensagensPendentes.length; // Use pendentes for consistency
                 st.mensagensPendentes = [];
                 if (relevante) {
                     const saquePath = path.join(__dirname, 'content', 'saque.json');
