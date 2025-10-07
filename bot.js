@@ -1699,7 +1699,14 @@ async function processarMensagensPendentes(contato) {
             let confirmado = false;
             for (const raw of novasMsgs) {
                 const msg = safeStr(raw).trim();
-                if (looksLikeMediaUrl(msg)) { console.log(`[${st.contato}] Análise: confirmado ("${truncate(msg, 140)}")`); confirmado = true; break; }
+                if (
+                    looksLikeMediaUrl(msg) ||
+                    /^\s*\[(?:m[ií]dia|media|imagem|foto|image)\]\s*$/i.test(msg)   // <= aceita "[mídia]" e variações
+                ) {
+                    console.log(`[${st.contato}] Análise: confirmado ("${truncate(msg, 140)}")`);
+                    confirmado = true;
+                    break;
+                }
             }
             if (!confirmado && apiKey) {
                 const allowed = ['confirmado', 'nao_confirmado', 'duvida', 'neutro'];
@@ -1867,7 +1874,14 @@ async function processarMensagensPendentes(contato) {
             let temImagem = false;
             for (const raw of novasMsgs) {
                 const msg = safeStr(raw).trim();
-                if (looksLikeMediaUrl(msg)) { console.log(`[${st.contato}] Análise: imagem ("${truncate(msg, 140)}")`); temImagem = true; break; }
+                if (
+                    looksLikeMediaUrl(msg) ||
+                    /^\s*\[(?:m[ií]dia|media|imagem|foto|image)\]\s*$/i.test(msg)   // <= aceita "[mídia]" e variações
+                ) {
+                    console.log(`[${st.contato}] Análise: imagem ("${truncate(msg, 140)}")`);
+                    temImagem = true;
+                    break;
+                }
             }
             if (temImagem) {
                 st.lastClassifiedIdx.saque = total;
