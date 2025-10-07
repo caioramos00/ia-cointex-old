@@ -1687,13 +1687,13 @@ async function processarMensagensPendentes(contato) {
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
             const total = st.mensagensDesdeSolicitacao.length;
             const startIdx = Math.max(0, st.lastClassifiedIdx?.confirmacao || 0);
-            // Novo log antes de startIdx >= total
+            const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
+            // Novo log antes de startIdx >= total (agora após novasMsgs)
             console.log(`[${st.contato}] Check new msgs: total=${total}, startIdx=${startIdx}, novasMsgs.length=${novasMsgs.length}`);
             if (startIdx >= total) {
                 st.mensagensPendentes = [];
                 return { ok: true, noop: 'no-new-messages' };
             }
-            const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
             const apiKey = process.env.OPENAI_API_KEY;
             const looksLikeMediaUrl = (s) => {
                 const n = String(s || '');
@@ -1911,13 +1911,13 @@ async function processarMensagensPendentes(contato) {
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
             const total = st.mensagensDesdeSolicitacao.length;
             const startIdx = Math.max(0, st.lastClassifiedIdx?.saque || 0);
-            // Novo log antes de startIdx >= total
+            const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
+            // Novo log antes de startIdx >= total (agora após novasMsgs)
             console.log(`[${st.contato}] Check new msgs: total=${total}, startIdx=${startIdx}, novasMsgs.length=${novasMsgs.length}`);
             if (startIdx >= total) {
                 st.mensagensPendentes = [];
                 return { ok: true, noop: 'no-new-messages' };
             }
-            const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
             const apiKey = process.env.OPENAI_API_KEY;
             const looksLikeMediaUrl = (s) => {
                 const n = String(s || '');
@@ -1968,13 +1968,81 @@ async function processarMensagensPendentes(contato) {
                 console.log(`[${st.contato}] Fallback result: temImagem=${temImagem}`);
             }
 
+            if (!temImagem && apiKey) {
+                // Novo log antes de IA
+                console.log(`[${st.contato}] Falling to IA for saque relevancia, contexto="${truncate(contexto, 140)}"`);
+                const allowed = ['relevante', 'irrelevante'];
+                const contexto = novasMsgs.map(s => safeStr(s)).join(' | ');
+                const structuredPrompt =
+                    `${promptClassificaRelevancia(contexto, false)}\n\n` +
+                    `Output only this valid JSON format with double quotes around keys and values, nothing else: ` +
+                    `{"label": "relevante"} or {"label": "irrelevante"}`;
+                const callOnce = async (maxTok) => {
+                    let r;
+                    try {
+                        r = await axios.post(
+                            'https://api.openai.com/v1/responses',
+                            {
+                                model: 'gpt-5',
+                                input: structuredPrompt,
+                                max_output_tokens: maxTok,
+                                reasoning: { effort: 'low' }
+                            },
+                            {
+                                headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                                timeout: 15000,
+                                validateStatus: () => true
+                            }
+                        );
+                        // Novo log RAW para IA da etapa
+                        const reqId = (r.headers?.['x-request-id'] || '');
+                        console.log(`${tsNow()} [${st.contato}] [STAGE_IA][RAW] http=${r.status} req=${reqId} body=${truncate(JSON.stringify(r.data), 20000)}`);
+                    } catch (e) {
+                        // Novo log no catch
+                        console.log(`[${st.contato}] [STAGE_IA] erro="${e?.message || e}"`);
+                        if (e?.response) console.log(`http=${e.response.status} body=${truncate(JSON.stringify(e.response.data), 400)}`);
+                        return { status: 0, picked: null };
+                    }
+                    const data = r.data;
+                    let rawText = '';
+                    if (Array.isArray(data?.output)) {
+                        data.output.forEach(item => {
+                            if (item.type === 'message' && Array.isArray(item.content) && item.content[0]?.text) {
+                                rawText = item.content[0].text;
+                            }
+                        });
+                    }
+                    if (!rawText) rawText = extractTextForLog(data);
+                    rawText = String(rawText || '').trim();
+                    let picked = null;
+                    if (rawText) {
+                        try {
+                            const parsed = JSON.parse(rawText);
+                            if (parsed && typeof parsed.label === 'string') picked = parsed.label.toLowerCase().trim();
+                        } catch {
+                            const m = rawText.match(/(?:"label"|label)\s*:\s*"([^"]+)"/i);
+                            if (m && m[1]) picked = m[1].toLowerCase().trim();
+                        }
+                    }
+                    if (!picked) picked = pickLabelFromResponseData(data, allowed);
+                    return { status: r.status, picked };
+                };
+                try {
+                    let resp = await callOnce(128);  // Aumentado para 128 inicial
+                    if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) {
+                        resp = await callOnce(256);
+                    }
+                    temImagem = (resp.status >= 200 && resp.status < 300 && resp.picked === 'relevante');
+                    console.log(`[${st.contato}] Análise: ${resp.picked || (temImagem ? 'relevante' : 'irrelevante')} ("${truncate(contexto, 140)}")`);
+                } catch { }
+            }
             // Novo log after IA or fallback
             console.log(`[${st.contato}] After detection: temImagem=${temImagem}`);
+            st.lastClassifiedIdx.saque = total;
+            st.mensagensPendentes = [];
             if (temImagem) {
                 // Novo log inside advancement
                 console.log(`[${st.contato}] Confirmed media, advancing stage`);
-                st.lastClassifiedIdx.saque = total;
-                st.mensagensPendentes = [];
                 st.mensagensDesdeSolicitacao = [];
                 st.saquePediuPrint = false;
                 const _prev = st.etapa;
