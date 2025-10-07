@@ -712,7 +712,7 @@ async function handleIncomingNormalizedMessage(normalized) {
     const { contato, texto, temMidia, ts } = normalized;
 
     const hasText = !!safeStr(texto).trim();
-    const hasMedia = !!temMidia;
+    const hasMedia = temMidia === true;
     if (!hasText && !hasMedia) return;
 
     const st = ensureEstado(contato);
@@ -720,11 +720,12 @@ async function handleIncomingNormalizedMessage(normalized) {
     log.info(`${tsNow()} [${st.contato}] Mensagem recebida: ${msg}`);
     st.lastIncomingTs = ts || Date.now();
 
-    // >>> ENFILEIRA para que preflightOptOut()/processamento consigam detectar
+    // >>> ENFILEIRA mantendo o sinal de mídia no próprio objeto (sem helpers)
     if (!Array.isArray(st.mensagensPendentes)) st.mensagensPendentes = [];
     if (!Array.isArray(st.mensagensDesdeSolicitacao)) st.mensagensDesdeSolicitacao = [];
 
-    st.mensagensPendentes.push({ texto: msg, ts: st.lastIncomingTs });
+    // mantém as strings em mensagensDesdeSolicitacao como já eram
+    st.mensagensPendentes.push({ texto: msg, ts: st.lastIncomingTs, temMidia: hasMedia });
     st.mensagensDesdeSolicitacao.push(msg);
 }
 
@@ -1698,26 +1699,37 @@ async function processarMensagensPendentes(contato) {
             };
             let confirmado = false;
 
+            // --- FIX 1: atalho pelo flag da fila (quando veio texto + mídia) ---
+            const _pendObjs = Array.isArray(st.mensagensPendentes) ? st.mensagensPendentes : [];
+            if (_pendObjs.some(m => m && m.temMidia === true)) {
+                confirmado = true;
+            }
+
+            // Mantém fallback textual (URLs/placeholders)
             let _novas = novasMsgs;
             if (!_novas || _novas.length === 0) {
                 _novas = (Array.isArray(st.mensagensPendentes) ? st.mensagensPendentes : []).map(m => safeStr(m?.texto || ''));
             }
 
-            for (const raw of _novas) {
-                const original = safeStr(raw);
-                const cleaned = original
-                    .replace(/https?:\/\/\S+/gi, ' ')
-                    .replace(/[\u200b-\u200d\u2060\ufeff]/g, '')
-                    .trim();
+            if (!confirmado) {
+                for (const raw of _novas) {
+                    const original = safeStr(raw);
+                    const cleaned = original
+                        .replace(/https?:\/\/\S+/gi, ' ')
+                        .replace(/[\u200b-\u200d\u2060\ufeff]/g, '')
+                        .trim();
 
-                if (
-                    /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(original) ||
-                    /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(original) ||
-                    /^\s*[\[\(\{<]?\s*(?:m(?:i\u0301|\u00ed|i)dia|media|imagem|foto|image)\s*[\]\)\}>]?\s*$/i.test(cleaned)
-                ) {
-                    console.log(`[${st.contato}] Análise: confirmado ("${truncate(original, 140)}")`);
-                    confirmado = true;
-                    break;
+                    if (
+                        /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(original) ||
+                        /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(original) ||
+                        /^\s*[\[\(\{<]?\s*(?:m(?:i\u0301|\u00ed|i)dia|media|imagem|foto|image)\s*[\]\)\}>]?\s*$/i.test(cleaned) ||
+                        /\b(?:image|media)\s+omitted\b/i.test(cleaned) ||
+                        /\b(?:imagem|m(?:i\u0301|\u00ed|i)dia)\s+omitid[ao]\b/i.test(cleaned)
+                    ) {
+                        console.log(`[${st.contato}] Análise: confirmado ("${truncate(original, 140)}")`);
+                        confirmado = true;
+                        break;
+                    }
                 }
             }
 
@@ -1886,28 +1898,40 @@ async function processarMensagensPendentes(contato) {
             };
             let temImagem = false;
 
+            // --- FIX 2: atalho direto pelo flag da fila ---
+            const _pendObjs = Array.isArray(st.mensagensPendentes) ? st.mensagensPendentes : [];
+            if (_pendObjs.some(m => m && m.temMidia === true)) {
+                temImagem = true;
+            }
+
+            // Mantém fallback textual/URL como antes (com placeholders extra)
             let _novas = novasMsgs;
             if (!_novas || _novas.length === 0) {
                 _novas = (Array.isArray(st.mensagensPendentes) ? st.mensagensPendentes : []).map(m => safeStr(m?.texto || ''));
             }
 
-            for (const raw of _novas) {
-                const original = safeStr(raw);
-                const cleaned = original
-                    .replace(/https?:\/\/\S+/gi, ' ')
-                    .replace(/[\u200b-\u200d\u2060\ufeff]/g, '')
-                    .trim();
+            if (!temImagem) {
+                for (const raw of _novas) {
+                    const original = safeStr(raw);
+                    const cleaned = original
+                        .replace(/https?:\/\/\S+/gi, ' ')
+                        .replace(/[\u200b-\u200d\u2060\ufeff]/g, '')
+                        .trim();
 
-                if (
-                    /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(original) ||
-                    /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(original) ||
-                    /^\s*[\[\(\{<]?\s*(?:m(?:i\u0301|\u00ed|i)dia|media|imagem|foto|image)\s*[\]\)\}>]?\s*$/i.test(cleaned)
-                ) {
-                    console.log(`[${st.contato}] Análise: imagem ("${truncate(original, 140)}")`);
-                    temImagem = true;
-                    break;
+                    if (
+                        /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(original) ||
+                        /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(original) ||
+                        /^\s*[\[\(\{<]?\s*(?:m(?:i\u0301|\u00ed|i)dia|media|imagem|foto|image)\s*[\]\)\}>]?\s*$/i.test(cleaned) ||
+                        /\b(?:image|media)\s+omitted\b/i.test(cleaned) ||
+                        /\b(?:imagem|m(?:i\u0301|\u00ed|i)dia)\s+omitid[ao]\b/i.test(cleaned)
+                    ) {
+                        console.log(`[${st.contato}] Análise: imagem ("${truncate(original, 140)}")`);
+                        temImagem = true;
+                        break;
+                    }
                 }
             }
+
             if (temImagem) {
                 st.lastClassifiedIdx.saque = total;
                 st.mensagensPendentes = [];
