@@ -1683,17 +1683,13 @@ async function processarMensagensPendentes(contato) {
             if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
             if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
-            console.log(`[DEBUG] mensagensDesdeSolicitacao before total: ${JSON.stringify(st.mensagensDesdeSolicitacao)} , length=${st.mensagensDesdeSolicitacao.length}`);  // Novo log para ver array antes
             const total = st.mensagensDesdeSolicitacao.length;
             const startIdx = Math.max(0, st.lastClassifiedIdx?.confirmacao || 0);
-            console.log(`[DEBUG] total=${total}, startIdx=${startIdx}, pendentes=${st.mensagensPendentes.length}`);  // Log valores
             if (startIdx >= total) {
-                console.log(`[DEBUG] Skipping media detection: startIdx >= total`);  // Log quando skip
                 st.mensagensPendentes = [];
                 return { ok: true, noop: 'no-new-messages' };
             }
             const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
-            console.log(`[DEBUG] novasMsgs in confirmacao:wait: ${JSON.stringify(novasMsgs)}`);
             const apiKey = process.env.OPENAI_API_KEY;
             const looksLikeMediaUrl = (s) => {
                 const n = String(s || '');
@@ -1703,18 +1699,15 @@ async function processarMensagensPendentes(contato) {
             let confirmado = false;
             for (const raw of novasMsgs) {
                 const msg = safeStr(raw).trim();
-                console.log(`[DEBUG] Media check msg: "${msg}" , looksLikeMediaUrl=${looksLikeMediaUrl(msg)}, regexMatch=${/^\[m[ií]dia\]$/i.test(msg)}`);
                 if (looksLikeMediaUrl(msg) || /^\[m[ií]dia\]$/i.test(msg)) {
                     console.log(`[${st.contato}] Análise: confirmado ("${truncate(msg, 140)}")`);
                     confirmado = true;
                     break;
                 }
             }
-            console.log(`[DEBUG] confirmado after loop: ${confirmado}`);
             if (!confirmado && apiKey) {
                 const allowed = ['confirmado', 'nao_confirmado', 'duvida', 'neutro'];
                 const contexto = novasMsgs.map(s => safeStr(s)).join(' | ');
-                console.log(`[DEBUG] Calling confirmacao prompt with contexto: "${contexto}"`);  // Novo log para prompt input
                 const structuredPrompt =
                     `${promptClassificaConfirmacao(contexto)}\n\n` +
                     `Output only this valid JSON format with double quotes around keys and values, nothing else: ` +
@@ -1736,7 +1729,6 @@ async function processarMensagensPendentes(contato) {
                                 validateStatus: () => true
                             }
                         );
-                        console.log(`[DEBUG] Prompt response raw: ${JSON.stringify(r.data)}`);  // Novo log para resposta do prompt
                     } catch {
                         return { status: 0, picked: null };
                     }
@@ -1870,7 +1862,6 @@ async function processarMensagensPendentes(contato) {
                 return { ok: true, noop: 'no-new-messages' };
             }
             const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
-            console.log(`[DEBUG] novasMsgs in saque:wait: ${JSON.stringify(novasMsgs)}`);  // Novo log para rastrear mensagens
             const apiKey = process.env.OPENAI_API_KEY;
             const looksLikeMediaUrl = (s) => {
                 const n = String(s || '');
@@ -1880,7 +1871,6 @@ async function processarMensagensPendentes(contato) {
             let temImagem = false;
             for (const raw of novasMsgs) {
                 const msg = safeStr(raw).trim();
-                console.log(`[DEBUG] Media check msg: "${msg}"`);  // Novo log para ver exato string testado 
                 if (looksLikeMediaUrl(msg) || /^\[m[ií]dia\]$/i.test(msg)) {
                     console.log(`[${st.contato}] Análise: imagem ("${truncate(msg, 140)}")`);
                     temImagem = true;
@@ -1900,7 +1890,6 @@ async function processarMensagensPendentes(contato) {
                 if (apiKey) {
                     const allowed = ['relevante', 'irrelevante'];
                     const contexto = novasMsgs.map(s => safeStr(s)).join(' | ');
-                    console.log(`[DEBUG] Calling relevancia prompt with contexto: "${contexto}"`);  // Novo log para prompt input
                     const structuredPrompt =
                         `${promptClassificaRelevancia(contexto, false)}\n\n` +
                         `Output only this valid JSON format with double quotes around keys and values, nothing else: ` +
@@ -1922,7 +1911,6 @@ async function processarMensagensPendentes(contato) {
                                     validateStatus: () => true
                                 }
                             );
-                            console.log(`[DEBUG] Prompt response raw: ${JSON.stringify(r.data)}`);  // Novo log para resposta do prompt
                         } catch {
                             return { status: 0, picked: null };
                         }

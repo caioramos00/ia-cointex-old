@@ -137,10 +137,10 @@ function setupRoutes(
   if (typeof processarMensagensPendentes !== 'function') {
     try { processarMensagensPendentes = require('./bot.js').processarMensagensPendentes; } catch { }
   }
-  if (typeof inicializarEstado !== 'function') {
+  if (typeof inicializarEstado === 'function') {
     try { inicializarEstado = require('./bot.js').inicializarEstado; } catch { }
   }
-  if (typeof criarUsuarioDjango !== 'function') {
+  if (typeof criarUsuarioDjango === 'function') {
     try { criarUsuarioDjango = require('./bot.js').criarUsuarioDjango; } catch { }
   }
   app.use('/public', express.static(pathModule.join(__dirname, 'public')));
@@ -296,7 +296,8 @@ function setupRoutes(
           const value = change.value;
           if (!value.messages || !value.messages.length) continue;
           const msg = value.messages[0];
-          const contato = msg.from;
+          const declaredType = msg.type || '';
+          console.log(`[DEBUG] Meta message type: ${declaredType}`);  // Novo log para ver o type real
           if (contato === PHONE_NUMBER_ID) { res.sendStatus(200); return; }
           const isProviderMedia = msg.type !== 'text';
           const texto = msg.type === 'text' ? (msg.text.body || '').trim() : '';
@@ -362,7 +363,11 @@ function setupRoutes(
             type: msg.type || '',
             urls: urlsFromText,
           });
-          if (texto && !st.mensagensDesdeSolicitacao.includes(texto)) st.mensagensDesdeSolicitacao.push(texto);
+          if (texto && !st.mensagensDesdeSolicitacao.includes(texto)) {
+            st.mensagensDesdeSolicitacao.push(texto);
+          } else if (isProviderMedia && !st.mensagensDesdeSolicitacao.includes('[mídia]')) {
+            st.mensagensDesdeSolicitacao.push('[mídia]');
+          }
           st.ultimaMensagem = Date.now();
           const delayAleatorio = 10000 + Math.random() * 5000;
           await delay(delayAleatorio);
@@ -500,7 +505,11 @@ function setupRoutes(
       type: declaredType || (textoRecebido ? 'text' : ''),
       urls: allUrls,
     });
-    if (textoRecebido && !stNow.mensagensDesdeSolicitacao.includes(textoRecebido)) stNow.mensagensDesdeSolicitacao.push(textoRecebido);
+    if (textoRecebido && !stNow.mensagensDesdeSolicitacao.includes(textoRecebido)) {
+      stNow.mensagensDesdeSolicitacao.push(textoRecebido);
+    } else if (!textoRecebido && declaredType !== 'text' && !stNow.mensagensDesdeSolicitacao.includes('[mídia]')) {
+      stNow.mensagensDesdeSolicitacao.push('[mídia]');
+    }
     stNow.ultimaMensagem = Date.now();
 
     if (processingDebounce.has(idContato)) { clearTimeout(processingDebounce.get(idContato)); }
