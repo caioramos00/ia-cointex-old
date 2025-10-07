@@ -268,9 +268,10 @@ async function preflightOptOut(st) {
     const start = Math.max(0, st._optoutSeenIdx || 0);
     for (let i = start; i < pend.length; i++) {
         const t = safeStr(pend[i]?.texto || '').trim();
-        if (!t || t.toLowerCase() === '[mídia]' || t.toLowerCase() === '[midia]') continue;  // Nova: skip push para placeholders de mídia
-        st.optoutBuffer.push(t);
-        console.log(`[${st.contato}] [OPTOUT][BATCH][PUSH] stage=${st.etapa} size=${st.optoutBuffer.length} msg="${truncate(t, 140)}"`);
+        if (t) {
+            st.optoutBuffer.push(t);
+            console.log(`[${st.contato}] [OPTOUT][BATCH][PUSH] stage=${st.etapa} size=${st.optoutBuffer.length} msg="${truncate(t, 140)}"`);
+        }
     }
     st._optoutSeenIdx = pend.length;
     return false;
@@ -711,7 +712,7 @@ async function handleIncomingNormalizedMessage(normalized) {
     const { contato, texto, temMidia, ts } = normalized;
 
     const hasText = !!safeStr(texto).trim();
-    const hasMedia = temMidia === true;
+    const hasMedia = !!temMidia;
     if (!hasText && !hasMedia) return;
 
     const st = ensureEstado(contato);
@@ -719,12 +720,11 @@ async function handleIncomingNormalizedMessage(normalized) {
     log.info(`${tsNow()} [${st.contato}] Mensagem recebida: ${msg}`);
     st.lastIncomingTs = ts || Date.now();
 
-    // >>> ENFILEIRA mantendo o sinal de mídia no próprio objeto (sem helpers)
+    // >>> ENFILEIRA para que preflightOptOut()/processamento consigam detectar
     if (!Array.isArray(st.mensagensPendentes)) st.mensagensPendentes = [];
     if (!Array.isArray(st.mensagensDesdeSolicitacao)) st.mensagensDesdeSolicitacao = [];
 
-    // mantém as strings em mensagensDesdeSolicitacao como já eram
-    st.mensagensPendentes.push({ texto: msg, ts: st.lastIncomingTs, temMidia: hasMedia });
+    st.mensagensPendentes.push({ texto: msg, ts: st.lastIncomingTs });
     st.mensagensDesdeSolicitacao.push(msg);
 }
 
@@ -1682,72 +1682,26 @@ async function processarMensagensPendentes(contato) {
         if (st.etapa === 'confirmacao:wait') {
             if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
             if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
-            // Novo log após finalize, antes do pendentes.length check
-            console.log(`[${st.contato}] After optout checks: continuing to media detection, pendentes.length=${st.mensagensPendentes.length}, mensagensDesdeSolicitacao.length=${st.mensagensDesdeSolicitacao.length}, lastClassifiedIdx.confirmacao=${st.lastClassifiedIdx?.confirmacao || 0}`);
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
             const total = st.mensagensDesdeSolicitacao.length;
             const startIdx = Math.max(0, st.lastClassifiedIdx?.confirmacao || 0);
-            const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
-            // Novo log antes de startIdx >= total (agora após novasMsgs)
-            console.log(`[${st.contato}] Check new msgs: total=${total}, startIdx=${startIdx}, novasMsgs.length=${novasMsgs.length}`);
             if (startIdx >= total) {
                 st.mensagensPendentes = [];
                 return { ok: true, noop: 'no-new-messages' };
             }
+            const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
             const apiKey = process.env.OPENAI_API_KEY;
             const looksLikeMediaUrl = (s) => {
                 const n = String(s || '');
                 return /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(n)
                     || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
             };
-            // Dentro de 'confirmacao:wait' - substitua o bloco 'let confirmado = false; ... if (!confirmado) { for (const raw ... } }' por este:
             let confirmado = false;
-
-            // --- FIX 1: atalho pelo flag da fila (quando veio texto + mídia) ---
-            const _pendObjs = Array.isArray(st.mensagensPendentes) ? st.mensagensPendentes : [];
-            // Novo: full pendentes log and athalho check
-            console.log(`[${st.contato}] Pendentes objects: ${JSON.stringify(_pendObjs, null, 2)}`);
-            console.log(`[${st.contato}] Athalho check: some temMidia=true? ${_pendObjs.some(m => m && m.temMidia === true)}`);
-            if (_pendObjs.some(m => m && m.temMidia === true)) {
-                confirmado = true;
+            for (const raw of novasMsgs) {
+                const msg = safeStr(raw).trim();
+                if (looksLikeMediaUrl(msg)) { console.log(`[${st.contato}] Análise: confirmado ("${truncate(msg, 140)}")`); confirmado = true; break; }
             }
-
-            // Mantém fallback textual (URLs/placeholders)
-            let _novas = novasMsgs;
-            if (!_novas || _novas.length === 0) {
-                _novas = (Array.isArray(st.mensagensPendentes) ? st.mensagensPendentes : []).map(m => safeStr(m?.texto || ''));
-            }
-
-            if (!confirmado) {
-                for (const raw of _novas) {
-                    const original = safeStr(raw);
-                    const cleaned = original
-                        .replace(/https?:\/\/\S+/gi, ' ')
-                        .replace(/[\u200b-\u200d\u2060\ufeff]/g, '')
-                        .trim();
-                    // Novo log para debug
-                    console.log(`[${st.contato}] Media check: original="${original}" (codes: ${[...original].map(c => c.charCodeAt(0).toString(16)).join(',')}), cleaned="${cleaned}", norm_orig="${normMsg(original, { case_insensitive: true, accent_insensitive: true })}", norm_clean="${normMsg(cleaned, { case_insensitive: true, accent_insensitive: true })}"`);
-                    if (
-                        /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(original) ||
-                        /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(original) ||
-                        normMsg(original, { case_insensitive: true, accent_insensitive: true }) === '[midia]' ||
-                        normMsg(cleaned, { case_insensitive: true, accent_insensitive: true }) === '[midia]' ||
-                        /^\s*[\[\(\{<]?\s*(?:m(?:i\u0301|\u00ed|i)dia|media|imagem|foto|image)\s*[\]\)\}>]?\s*$/i.test(cleaned) ||
-                        /\b(?:image|media)\s+omitted\b/i.test(cleaned) ||
-                        /\b(?:imagem|m(?:i\u0301|\u00ed|i)dia)\s+omitid[ao]\b/i.test(cleaned)
-                    ) {
-                        console.log(`[${st.contato}] Análise: confirmado ("${truncate(original, 140)}")`);
-                        confirmado = true;
-                        break;
-                    }
-                }
-                // Novo log após loop
-                console.log(`[${st.contato}] Fallback result: confirmado=${confirmado}`);
-            }
-
             if (!confirmado && apiKey) {
-                // Novo log antes de IA
-                console.log(`[${st.contato}] Falling to IA for confirmacao, contexto="${truncate(contexto, 140)}"`);
                 const allowed = ['confirmado', 'nao_confirmado', 'duvida', 'neutro'];
                 const contexto = novasMsgs.map(s => safeStr(s)).join(' | ');
                 const structuredPrompt =
@@ -1771,13 +1725,7 @@ async function processarMensagensPendentes(contato) {
                                 validateStatus: () => true
                             }
                         );
-                        // Novo log RAW para IA da etapa
-                        const reqId = (r.headers?.['x-request-id'] || '');
-                        console.log(`${tsNow()} [${st.contato}] [STAGE_IA][RAW] http=${r.status} req=${reqId} body=${truncate(JSON.stringify(r.data), 20000)}`);
-                    } catch (e) {
-                        // Novo log no catch
-                        console.log(`[${st.contato}] [STAGE_IA] erro="${e?.message || e}"`);
-                        if (e?.response) console.log(`http=${e.response.status} body=${truncate(JSON.stringify(e.response.data), 400)}`);
+                    } catch {
                         return { status: 0, picked: null };
                     }
                     const data = r.data;
@@ -1805,7 +1753,7 @@ async function processarMensagensPendentes(contato) {
                     return { status: r.status, picked };
                 };
                 try {
-                    let resp = await callOnce(128);  // Aumentado para 128 inicial
+                    let resp = await callOnce(64);
                     if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) {
                         resp = await callOnce(256);
                     }
@@ -1813,13 +1761,9 @@ async function processarMensagensPendentes(contato) {
                     console.log(`[${st.contato}] Análise: ${resp.picked || 'neutro'} ("${truncate(contexto, 140)}")`);
                 } catch { }
             }
-            // Novo log after IA or fallback
-            console.log(`[${st.contato}] After detection: confirmado=${confirmado}`);
             st.lastClassifiedIdx.confirmacao = total;
             st.mensagensPendentes = [];
             if (confirmado) {
-                // Novo log inside advancement
-                console.log(`[${st.contato}] Confirmed media, advancing stage`);
                 st.mensagensDesdeSolicitacao = [];
                 st.lastClassifiedIdx.saque = 0;
                 const _prev = st.etapa;
@@ -1906,18 +1850,14 @@ async function processarMensagensPendentes(contato) {
         if (st.etapa === 'saque:wait') {
             if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
             if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
-            // Novo log após finalize, antes do pendentes.length check
-            console.log(`[${st.contato}] After optout checks: continuing to media detection, pendentes.length=${st.mensagensPendentes.length}, mensagensDesdeSolicitacao.length=${st.mensagensDesdeSolicitacao.length}, lastClassifiedIdx.saque=${st.lastClassifiedIdx?.saque || 0}`);
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
             const total = st.mensagensDesdeSolicitacao.length;
             const startIdx = Math.max(0, st.lastClassifiedIdx?.saque || 0);
-            const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
-            // Novo log antes de startIdx >= total (agora após novasMsgs)
-            console.log(`[${st.contato}] Check new msgs: total=${total}, startIdx=${startIdx}, novasMsgs.length=${novasMsgs.length}`);
             if (startIdx >= total) {
                 st.mensagensPendentes = [];
                 return { ok: true, noop: 'no-new-messages' };
             }
+            const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
             const apiKey = process.env.OPENAI_API_KEY;
             const looksLikeMediaUrl = (s) => {
                 const n = String(s || '');
@@ -1925,124 +1865,13 @@ async function processarMensagensPendentes(contato) {
                     || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
             };
             let temImagem = false;
-
-            // --- FIX 2: atalho direto pelo flag da fila ---
-            const _pendObjs = Array.isArray(st.mensagensPendentes) ? st.mensagensPendentes : [];
-            // Novo: full pendentes log and athalho check
-            console.log(`[${st.contato}] Pendentes objects: ${JSON.stringify(_pendObjs, null, 2)}`);
-            console.log(`[${st.contato}] Athalho check: some temMidia=true? ${_pendObjs.some(m => m && m.temMidia === true)}`);
-            if (_pendObjs.some(m => m && m.temMidia === true)) {
-                temImagem = true;
+            for (const raw of novasMsgs) {
+                const msg = safeStr(raw).trim();
+                if (looksLikeMediaUrl(msg)) { console.log(`[${st.contato}] Análise: imagem ("${truncate(msg, 140)}")`); temImagem = true; break; }
             }
-
-            // Mantém fallback textual/URL como antes (com placeholders extra)
-            let _novas = novasMsgs;
-            if (!_novas || _novas.length === 0) {
-                _novas = (Array.isArray(st.mensagensPendentes) ? st.mensagensPendentes : []).map(m => safeStr(m?.texto || ''));
-            }
-
-            if (!temImagem) {
-                for (const raw of _novas) {
-                    const original = safeStr(raw);
-                    const cleaned = original
-                        .replace(/https?:\/\/\S+/gi, ' ')
-                        .replace(/[\u200b-\u200d\u2060\ufeff]/g, '')
-                        .trim();
-                    // Novo log para debug
-                    console.log(`[${st.contato}] Media check: original="${original}" (codes: ${[...original].map(c => c.charCodeAt(0).toString(16)).join(',')}), cleaned="${cleaned}", norm_orig="${normMsg(original, { case_insensitive: true, accent_insensitive: true })}", norm_clean="${normMsg(cleaned, { case_insensitive: true, accent_insensitive: true })}"`);
-                    if (
-                        /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(original) ||
-                        /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(original) ||
-                        normMsg(original, { case_insensitive: true, accent_insensitive: true }) === '[midia]' ||
-                        normMsg(cleaned, { case_insensitive: true, accent_insensitive: true }) === '[midia]' ||
-                        /^\s*[\[\(\{<]?\s*(?:m(?:i\u0301|\u00ed|i)dia|media|imagem|foto|image)\s*[\]\)\}>]?\s*$/i.test(cleaned) ||
-                        /\b(?:image|media)\s+omitted\b/i.test(cleaned) ||
-                        /\b(?:imagem|m(?:i\u0301|\u00ed|i)dia)\s+omitid[ao]\b/i.test(cleaned)
-                    ) {
-                        console.log(`[${st.contato}] Análise: imagem ("${truncate(original, 140)}")`);
-                        temImagem = true;
-                        break;
-                    }
-                }
-                // Novo log após loop
-                console.log(`[${st.contato}] Fallback result: temImagem=${temImagem}`);
-            }
-
-            if (!temImagem && apiKey) {
-                // Novo log antes de IA
-                console.log(`[${st.contato}] Falling to IA for saque relevancia, contexto="${truncate(contexto, 140)}"`);
-                const allowed = ['relevante', 'irrelevante'];
-                const contexto = novasMsgs.map(s => safeStr(s)).join(' | ');
-                const structuredPrompt =
-                    `${promptClassificaRelevancia(contexto, false)}\n\n` +
-                    `Output only this valid JSON format with double quotes around keys and values, nothing else: ` +
-                    `{"label": "relevante"} or {"label": "irrelevante"}`;
-                const callOnce = async (maxTok) => {
-                    let r;
-                    try {
-                        r = await axios.post(
-                            'https://api.openai.com/v1/responses',
-                            {
-                                model: 'gpt-5',
-                                input: structuredPrompt,
-                                max_output_tokens: maxTok,
-                                reasoning: { effort: 'low' }
-                            },
-                            {
-                                headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-                                timeout: 15000,
-                                validateStatus: () => true
-                            }
-                        );
-                        // Novo log RAW para IA da etapa
-                        const reqId = (r.headers?.['x-request-id'] || '');
-                        console.log(`${tsNow()} [${st.contato}] [STAGE_IA][RAW] http=${r.status} req=${reqId} body=${truncate(JSON.stringify(r.data), 20000)}`);
-                    } catch (e) {
-                        // Novo log no catch
-                        console.log(`[${st.contato}] [STAGE_IA] erro="${e?.message || e}"`);
-                        if (e?.response) console.log(`http=${e.response.status} body=${truncate(JSON.stringify(e.response.data), 400)}`);
-                        return { status: 0, picked: null };
-                    }
-                    const data = r.data;
-                    let rawText = '';
-                    if (Array.isArray(data?.output)) {
-                        data.output.forEach(item => {
-                            if (item.type === 'message' && Array.isArray(item.content) && item.content[0]?.text) {
-                                rawText = item.content[0].text;
-                            }
-                        });
-                    }
-                    if (!rawText) rawText = extractTextForLog(data);
-                    rawText = String(rawText || '').trim();
-                    let picked = null;
-                    if (rawText) {
-                        try {
-                            const parsed = JSON.parse(rawText);
-                            if (parsed && typeof parsed.label === 'string') picked = parsed.label.toLowerCase().trim();
-                        } catch {
-                            const m = rawText.match(/(?:"label"|label)\s*:\s*"([^"]+)"/i);
-                            if (m && m[1]) picked = m[1].toLowerCase().trim();
-                        }
-                    }
-                    if (!picked) picked = pickLabelFromResponseData(data, allowed);
-                    return { status: r.status, picked };
-                };
-                try {
-                    let resp = await callOnce(128);  // Aumentado para 128 inicial
-                    if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) {
-                        resp = await callOnce(256);
-                    }
-                    temImagem = (resp.status >= 200 && resp.status < 300 && resp.picked === 'relevante');
-                    console.log(`[${st.contato}] Análise: ${resp.picked || (temImagem ? 'relevante' : 'irrelevante')} ("${truncate(contexto, 140)}")`);
-                } catch { }
-            }
-            // Novo log after IA or fallback
-            console.log(`[${st.contato}] After detection: temImagem=${temImagem}`);
-            st.lastClassifiedIdx.saque = total;
-            st.mensagensPendentes = [];
             if (temImagem) {
-                // Novo log inside advancement
-                console.log(`[${st.contato}] Confirmed media, advancing stage`);
+                st.lastClassifiedIdx.saque = total;
+                st.mensagensPendentes = [];
                 st.mensagensDesdeSolicitacao = [];
                 st.saquePediuPrint = false;
                 const _prev = st.etapa;
@@ -2051,7 +1880,6 @@ async function processarMensagensPendentes(contato) {
             } else {
                 let relevante = false;
                 if (apiKey) {
-                    console.log(`[${st.contato}] Falling to IA for saque relevancia, contexto="${truncate(contexto, 140)}"`);
                     const allowed = ['relevante', 'irrelevante'];
                     const contexto = novasMsgs.map(s => safeStr(s)).join(' | ');
                     const structuredPrompt =
@@ -2075,11 +1903,7 @@ async function processarMensagensPendentes(contato) {
                                     validateStatus: () => true
                                 }
                             );
-                            const reqId = (r.headers?.['x-request-id'] || '');
-                            console.log(`${tsNow()} [${st.contato}] [STAGE_IA][RAW] http=${r.status} req=${reqId} body=${truncate(JSON.stringify(r.data), 20000)}`);
                         } catch {
-                            console.log(`[${st.contato}] [STAGE_IA] erro="${e?.message || e}"`);
-                            if (e?.response) console.log(`http=${e.response.status} body=${truncate(JSON.stringify(e.response.data), 400)}`);
                             return { status: 0, picked: null };
                         }
                         const data = r.data;
@@ -2107,7 +1931,7 @@ async function processarMensagensPendentes(contato) {
                         return { status: r.status, picked };
                     };
                     try {
-                        let resp = await callOnce(128);  // Aumentado para 128 inicial
+                        let resp = await callOnce(64);
                         if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) resp = await callOnce(256);
                         relevante = (resp.status >= 200 && resp.status < 300 && resp.picked === 'relevante');
                         console.log(`[${st.contato}] Análise: ${resp.picked || (relevante ? 'relevante' : 'irrelevante')} ("${truncate(contexto, 140)}")`);
