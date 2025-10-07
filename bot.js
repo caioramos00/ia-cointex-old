@@ -268,10 +268,9 @@ async function preflightOptOut(st) {
     const start = Math.max(0, st._optoutSeenIdx || 0);
     for (let i = start; i < pend.length; i++) {
         const t = safeStr(pend[i]?.texto || '').trim();
-        if (t) {
-            st.optoutBuffer.push(t);
-            console.log(`[${st.contato}] [OPTOUT][BATCH][PUSH] stage=${st.etapa} size=${st.optoutBuffer.length} msg="${truncate(t, 140)}"`);
-        }
+        if (!t || t.toLowerCase() === '[mídia]' || t.toLowerCase() === '[midia]') continue;  // Nova: skip push para placeholders de mídia
+        st.optoutBuffer.push(t);
+        console.log(`[${st.contato}] [OPTOUT][BATCH][PUSH] stage=${st.etapa} size=${st.optoutBuffer.length} msg="${truncate(t, 140)}"`);
     }
     st._optoutSeenIdx = pend.length;
     return false;
