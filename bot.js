@@ -2231,18 +2231,6 @@ async function sendManychatWaFlow(contato, flowNs, dataOpt = {}) {
         return { ok: false, reason: 'paused-by-optout' };
     }
 
-    if (provider === 'meta') {
-        const phone = String(contato || '').replace(/\D/g, '');
-        let finalText = String(msg ?? '')
-            .replace(/\r\n/g, '\n')
-            .replace(/\n{3,}/g, '\n\n')
-            .trim();
-
-        await mod.sendText({ to: phone, text: finalText });
-        console.log(`${tsNow()} [${contato}] Mensagem enviada via Meta: ${finalText}`);
-        return { ok: true, provider };
-    }
-
     const { mod, settings } = await getActiveTransport();
     const provider = mod?.name || 'unknown';
     if (provider !== 'manychat') {
@@ -2308,6 +2296,19 @@ async function sendMessage(contato, texto, opts = {}) {
 
         const { mod, settings } = await getActiveTransport();
         const provider = mod?.name || 'unknown';
+
+        if (provider === 'meta') {
+            const phone = String(contato || '').replace(/\D/g, '');
+            let finalText = String(msg ?? '')
+                .replace(/\r\n/g, '\n')
+                .replace(/\n{3,}/g, '\n\n')
+                .trim();
+
+            await mod.sendText({ to: phone, text: finalText });
+            console.log(`${tsNow()} [${contato}] Mensagem enviada via Meta: ${finalText}`);
+            return { ok: true, provider };
+        }
+
         if (provider === 'manychat') {
             let subscriberId = null;
             try {
