@@ -297,7 +297,8 @@ function setupRoutes(
           if (!value.messages || !value.messages.length) continue;
           const msg = value.messages[0];
           const declaredType = msg.type || '';
-          console.log(`[DEBUG] Meta message type: ${declaredType}`);  // Novo log para ver o type real
+          const contato = msg.from;  // Declaração original de contato
+          console.log(`[DEBUG] Meta message type: ${declaredType}`);  // Movido para depois de contato e msg
           if (contato === PHONE_NUMBER_ID) { res.sendStatus(200); return; }
           const isProviderMedia = msg.type !== 'text';
           const texto = msg.type === 'text' ? (msg.text.body || '').trim() : '';

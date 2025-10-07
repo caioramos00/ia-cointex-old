@@ -1689,7 +1689,7 @@ async function processarMensagensPendentes(contato) {
                 st.mensagensPendentes = [];
                 return { ok: true, noop: 'no-new-messages' };
             }
-            const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
+            const novasMsgs = st.mensagensPendentes.slice(startIdx);  // Use pendentes to access temMidia
             const apiKey = process.env.OPENAI_API_KEY;
             const looksLikeMediaUrl = (s) => {
                 const n = String(s || '');
@@ -1697,9 +1697,9 @@ async function processarMensagensPendentes(contato) {
                     || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
             };
             let confirmado = false;
-            for (const raw of novasMsgs) {
-                const msg = safeStr(raw).trim();
-                if (looksLikeMediaUrl(msg) || /^\[m[ií]dia\]$/i.test(msg)) {
+            for (const m of novasMsgs) {
+                const msg = safeStr(m.texto).trim();
+                if (m.temMidia || m.hasMedia || looksLikeMediaUrl(msg) || /^\[m[ií]dia\]$/i.test(msg)) {
                     console.log(`[${st.contato}] Análise: confirmado ("${truncate(msg, 140)}")`);
                     confirmado = true;
                     break;
@@ -1707,7 +1707,7 @@ async function processarMensagensPendentes(contato) {
             }
             if (!confirmado && apiKey) {
                 const allowed = ['confirmado', 'nao_confirmado', 'duvida', 'neutro'];
-                const contexto = novasMsgs.map(s => safeStr(s)).join(' | ');
+                const contexto = novasMsgs.map(m => safeStr(m.texto)).join(' | ');
                 const structuredPrompt =
                     `${promptClassificaConfirmacao(contexto)}\n\n` +
                     `Output only this valid JSON format with double quotes around keys and values, nothing else: ` +
@@ -1765,7 +1765,7 @@ async function processarMensagensPendentes(contato) {
                     console.log(`[${st.contato}] Análise: ${resp.picked || 'neutro'} ("${truncate(contexto, 140)}")`);
                 } catch { }
             }
-            st.lastClassifiedIdx.confirmacao = total;
+            st.lastClassifiedIdx.confirmacao = st.mensagensPendentes.length;  // Use pendentes for consistency
             st.mensagensPendentes = [];
             if (confirmado) {
                 st.mensagensDesdeSolicitacao = [];
@@ -1861,7 +1861,7 @@ async function processarMensagensPendentes(contato) {
                 st.mensagensPendentes = [];
                 return { ok: true, noop: 'no-new-messages' };
             }
-            const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
+            const novasMsgs = st.mensagensPendentes.slice(startIdx);  // Use pendentes to access temMidia
             const apiKey = process.env.OPENAI_API_KEY;
             const looksLikeMediaUrl = (s) => {
                 const n = String(s || '');
@@ -1869,16 +1869,16 @@ async function processarMensagensPendentes(contato) {
                     || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
             };
             let temImagem = false;
-            for (const raw of novasMsgs) {
-                const msg = safeStr(raw).trim();
-                if (looksLikeMediaUrl(msg) || /^\[m[ií]dia\]$/i.test(msg)) {
+            for (const m of novasMsgs) {
+                const msg = safeStr(m.texto).trim();
+                if (m.temMidia || m.hasMedia || looksLikeMediaUrl(msg) || /^\[m[ií]dia\]$/i.test(msg)) {
                     console.log(`[${st.contato}] Análise: imagem ("${truncate(msg, 140)}")`);
                     temImagem = true;
                     break;
                 }
             }
             if (temImagem) {
-                st.lastClassifiedIdx.saque = total;
+                st.lastClassifiedIdx.saque = st.mensagensPendentes.length;  // Use pendentes for consistency
                 st.mensagensPendentes = [];
                 st.mensagensDesdeSolicitacao = [];
                 st.saquePediuPrint = false;
@@ -1889,7 +1889,7 @@ async function processarMensagensPendentes(contato) {
                 let relevante = false;
                 if (apiKey) {
                     const allowed = ['relevante', 'irrelevante'];
-                    const contexto = novasMsgs.map(s => safeStr(s)).join(' | ');
+                    const contexto = novasMsgs.map(m => safeStr(m.texto)).join(' | ');
                     const structuredPrompt =
                         `${promptClassificaRelevancia(contexto, false)}\n\n` +
                         `Output only this valid JSON format with double quotes around keys and values, nothing else: ` +
@@ -1945,7 +1945,7 @@ async function processarMensagensPendentes(contato) {
                         console.log(`[${st.contato}] Análise: ${resp.picked || (relevante ? 'relevante' : 'irrelevante')} ("${truncate(contexto, 140)}")`);
                     } catch { }
                 }
-                st.lastClassifiedIdx.saque = total;
+                st.lastClassifiedIdx.saque = st.mensagensPendentes.length;  // Use pendentes for consistency
                 st.mensagensPendentes = [];
                 if (relevante) {
                     const saquePath = path.join(__dirname, 'content', 'saque.json');
