@@ -1,5 +1,4 @@
 'use strict';
-
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
@@ -7,16 +6,12 @@ const estadoContatos = require('./state.js');
 const { getActiveTransport } = require('./lib/transport');
 const { getContatoByPhone, setManychatSubscriberId } = require('./db');
 const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, promptClassificaOptOut, promptClassificaReoptin } = require('./prompts');
-
 let log = console;
-
 const https = require('https');
 axios.defaults.httpsAgent = new https.Agent({ keepAlive: true });
-
 function safeStr(v) { return (v === null || v === undefined) ? '' : String(v); }
 function normalizeContato(raw) { return safeStr(raw).replace(/\D/g, ''); }
 const delay = (ms) => new Promise(r => setTimeout(r, ms));
-
 const FIRST_REPLY_DELAY_MS = 15000;
 const BETWEEN_MIN_MS = 12000;
 const BETWEEN_MAX_MS = 16000;
@@ -27,17 +22,14 @@ function extraGlobalDelay() {
     return delay(d);
 }
 function delayRange(minMs, maxMs) { const d = Math.floor(minMs + Math.random() * (maxMs - minMs)); return delay(d); }
-
 function tsNow() {
     const d = new Date();
     const p2 = n => String(n).padStart(2, '0');
     const p3 = n => String(n).padStart(3, '0');
     return `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}.${p3(d.getMilliseconds())}`;
 }
-
 const URL_RX = /https?:\/\/\S+/gi;
 const EMOJI_RX = /([\u203C-\u3299]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDD00-\uDFFF])/g;
-
 function stripUrls(s = '') { return String(s || '').replace(URL_RX, ' ').trim(); }
 function stripEmojis(s = '') { return String(s || '').replace(EMOJI_RX, ' ').trim(); }
 function collapseSpaces(s = '') { return String(s || '').replace(/\s+/g, ' ').trim(); }
@@ -52,14 +44,11 @@ function normMsg(s = '', { case_insensitive = true, accent_insensitive = true, s
     if (trim) out = out.trim();
     return out;
 }
-
 function loadJsonSafe(p) {
     let raw = fs.readFileSync(p, 'utf8');
     raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
     return JSON.parse(raw);
 }
-
-// cache loaders
 let _optOutData = null, _optInData = null, _optOutMsgs = null, _optInMsgs = null;
 function loadOptOutData() {
     if (_optOutData) return _optOutData;
@@ -81,26 +70,20 @@ function loadOptInMsgs() {
     _optInMsgs = loadJsonSafe(path.join(__dirname, 'content', 'opt-in-messages.json'));
     return _optInMsgs;
 }
-
 function _canonicalizeEtapa(etapa) {
     return etapa.toLowerCase().trim();
 }
-
 function isOptOut(textRaw) {
     const data = loadOptOutData();
     const cfg = data?.config || {};
     const s = normMsg(textRaw, cfg);
     if (!s) return false;
-
-    // exceção: mensagem é *apenas* um token ambíguo (do JSON)
     const amb = new Set(
         (data?.exceptions?.ambiguous_single_tokens || [])
             .map(v => normMsg(v, cfg))
             .filter(Boolean)
     );
     if (amb.has(s)) return false;
-
-    // Une todas as listas por idioma (pt/en/es) do JSON
     const bl = data?.blocklists || {};
     const langs = Object.keys(bl);
     const flatten = (key) => {
@@ -111,49 +94,36 @@ function isOptOut(textRaw) {
         }
         return out;
     };
-
-    // Carrega listas (apenas do ARQUIVO)
-    const phrases = flatten('phrases').map(v => normMsg(v, cfg)).filter(Boolean);     // PT/EN/ES
-    const keywords = flatten('keywords').map(v => normMsg(v, cfg)).filter(Boolean);   // PT/EN/ES
+    const phrases = flatten('phrases').map(v => normMsg(v, cfg)).filter(Boolean);
+    const keywords = flatten('keywords').map(v => normMsg(v, cfg)).filter(Boolean);
     const riskTerms = (data?.risk_terms || []).map(v => normMsg(v, cfg)).filter(Boolean);
-
-    // “block_if_any” vindo do arquivo – SEM usar regex no código
     const rule = Array.isArray(data?.block_if_any) ? data.block_if_any : ['phrases', 'keywords', 'risk_terms'];
     const shouldCheck = new Set(
         rule
             .map(x => String(x || '').toLowerCase())
             .filter(k => k === 'phrases' || k === 'keywords' || k === 'risk_terms')
     );
-
     const padded = (x) => ` ${x} `;
     const hasAnySafe = (arr, S) => {
         const P = padded(S);
         return arr.some(tok => tok && P.includes(padded(tok)));
     };
-
-    // Aplica as regras declaradas no JSON (sem regex em código)
     if (shouldCheck.has('phrases') && hasAnySafe(phrases, s)) return true;
     if (shouldCheck.has('keywords') && hasAnySafe(keywords, s)) return true;
     if (shouldCheck.has('risk_terms') && hasAnySafe(riskTerms, s)) return true;
-
     return false;
 }
-
 function isOptIn(textRaw) {
     const data = loadOptInData();
     const cfg = data?.config || {};
     const s = normMsg(textRaw, cfg);
     if (!s) return false;
-
-    // 1) Exceções: tokens ambíguos sozinhos NÃO contam
     const amb = new Set(
         (data?.exceptions?.ambiguous_single_tokens || [])
             .map(v => normMsg(v, cfg))
             .filter(Boolean)
     );
     if (amb.has(s)) return false;
-
-    // 2) Achata allowlists por idioma
     const al = data?.allowlists || {};
     const langs = Object.keys(al);
     const flatten = (key) => {
@@ -164,14 +134,11 @@ function isOptIn(textRaw) {
         }
         return out;
     };
-
     const phrases = flatten('phrases').map(v => normMsg(v, cfg)).filter(Boolean);
     const keywords = flatten('keywords').map(v => normMsg(v, cfg)).filter(Boolean);
     const regexList = flatten('regex')
         .map(r => { try { return new RegExp(r, 'i'); } catch { return null; } })
         .filter(Boolean);
-
-    // 3) Regras declarativas do JSON
     const rule = Array.isArray(data?.match_if_any) ? data.match_if_any : ['phrases', 'keywords', 'regex'];
     const shouldCheck = new Set(rule.map(x => String(x || '').toLowerCase()));
     const padded = (x) => ` ${x} `;
@@ -179,10 +146,8 @@ function isOptIn(textRaw) {
         const P = padded(S);
         return arr.some(tok => tok && P.includes(padded(tok)));
     };
-
     if (shouldCheck.has('phrases') && hasAnySafe(phrases, s)) return true;
     if (shouldCheck.has('regex') && regexList.some(rx => rx.test(s))) return true;
-
     if (shouldCheck.has('keywords') && hasAnySafe(keywords, s)) {
         const POS = new RegExp(
             '\\b(' +
@@ -195,18 +160,13 @@ function isOptIn(textRaw) {
         );
         if (POS.test(s)) return true;
     }
-
     return false;
 }
-
 async function preflightOptOut(st) {
     if (!Array.isArray(st.mensagensPendentes) || !st.mensagensPendentes.length) return false;
-
     const pend = st.mensagensPendentes;
     let hardMatched = false;
     let hardText = '';
-
-    // 1) Verificação hard-coded por mensagem (sempre ligada)
     for (const m of pend) {
         const t = safeStr(m?.texto || '');
         if (!t) continue;
@@ -214,8 +174,6 @@ async function preflightOptOut(st) {
         console.log(`[${st.contato}] [OPTOUT][HARD] check="${truncate(t, 140)}" -> ${res ? 'MATCH' : 'nope'}`);
         if (res) { hardMatched = true; hardText = t; break; }
     }
-
-    // 2) Se deu match hard-coded, aplica bloqueio/resposta
     if (hardMatched) {
         console.log(`[${st.contato}] [OPTOUT] HARD-MATCH acionado. texto="${truncate(hardText, 140)}"`);
         st.optedOutAtTs = Date.now();
@@ -227,7 +185,6 @@ async function preflightOptOut(st) {
         st.reoptinBuffer = [];
         st.optoutBuffer = [];
         st.optoutLotsTried = 0;
-
         if (st.optOutCount >= 3) {
             st.permanentlyBlocked = true;
             if (st.etapa !== 'encerrado:wait') {
@@ -236,7 +193,6 @@ async function preflightOptOut(st) {
                 console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
             }
         }
-
         const oMsgs = loadOptOutMsgs();
         const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
         let texto = '';
@@ -257,7 +213,6 @@ async function preflightOptOut(st) {
         }
         return true;
     }
-
     const start = Math.max(0, st._optoutSeenIdx || 0);
     for (let i = start; i < pend.length; i++) {
         const t = safeStr(pend[i]?.texto || '').trim();
@@ -269,11 +224,9 @@ async function preflightOptOut(st) {
     st._optoutSeenIdx = pend.length;
     return false;
 }
-
 function randomInt(min, max) {
     return Math.floor(min + Math.random() * (max - min));
 }
-
 function pickLabelFromResponseData(data, allowed) {
     const S = new Set((allowed || []).map(s => String(s).toLowerCase()));
     let label =
@@ -300,42 +253,31 @@ function pickLabelFromResponseData(data, allowed) {
     label = String(label || '').trim().toLowerCase();
     return S.has(label) ? label : null;
 }
-
 function truncate(s, n = 600) {
     const str = String(s || '');
     return str.length > n ? str.slice(0, n) + '…[truncated]' : str;
 }
-
 function extractTextForLog(data) {
     try {
-        // 1) Campo “convenience” se vier preenchido
         if (typeof data?.output_text === 'string' && data.output_text.trim()) return data.output_text;
-
-        // 2) Novo Responses: varrer todos os blocos e pegar o 'output_text'
         if (Array.isArray(data?.output)) {
             for (const blk of data.output) {
                 if (blk?.type === 'message' && Array.isArray(blk.content)) {
-                    // prioriza o chunk de saída
                     const out = blk.content.find(c => c?.type === 'output_text' && typeof c?.text === 'string' && c.text.trim());
                     if (out) return out.text;
-                    // fallback: primeiro content com texto não-vazio
                     const any = blk.content.find(c => typeof c?.text === 'string' && c.text.trim());
                     if (any) return any.text;
                 }
             }
         }
-
-        // 3) Fallbacks antigos (chat.completions / result)
         const cc = data?.choices?.[0]?.message?.content;
         if (typeof cc === 'string' && cc.trim()) return cc;
         if (typeof data?.result === 'string' && data.result.trim()) return data.result;
-
         return '';
     } catch {
         return '';
     }
 }
-
 function enterStageOptOutResetIfNeeded(st) {
     if (st.optoutBatchStage !== st.etapa) {
         st.optoutBatchStage = st.etapa;
@@ -345,7 +287,6 @@ function enterStageOptOutResetIfNeeded(st) {
         console.log(`[${st.contato}] [OPTOUT][BATCH][RESET] stage=${st.etapa}`);
     }
 }
-
 async function finalizeOptOutBatchAtEnd(st) {
     await preflightOptOut(st);
     for (let i = 0; i < 2; i++) {
@@ -363,17 +304,13 @@ async function finalizeOptOutBatchAtEnd(st) {
         st.optoutBuffer = [];
         return false;
     }
-
     const uniq = Array.from(new Set((st.optoutBuffer || []).map(s => safeStr(s))));
-
     const size = uniq.length;
     if (size === 0) { st.optoutBuffer = []; return false; }
-
     const joined = uniq.join(' | ');
     const structuredPrompt =
         `${promptClassificaOptOut(joined)}\n\n` +
         `Output only valid JSON as {"label":"OPTOUT"} or {"label":"CONTINUAR"}`;
-
     const ask = async (maxTok) => {
         try {
             const r = await axios.post(
@@ -390,13 +327,11 @@ async function finalizeOptOutBatchAtEnd(st) {
                     validateStatus: () => true
                 }
             );
-
             const reqId = (r.headers?.['x-request-id'] || r.headers?.['X-Request-Id'] || '');
             console.log(
                 `${tsNow()} [${st.contato}] [OPTOUT][IA][RAW] http=${r.status} ` +
                 `req=${reqId} body=${truncate(JSON.stringify(r.data), 20000)}`
             );
-
             console.log(
                 `[${st.contato}] [OPTOUT][IA][DEBUG] http=${r.status} req=${reqId}` +
                 ` output_text="${truncate(r.data?.output_text, 300)}"` +
@@ -404,16 +339,11 @@ async function finalizeOptOutBatchAtEnd(st) {
                 ` choices0="${truncate(r.data?.choices?.[0]?.message?.content || '', 300)}"` +
                 ` result="${truncate(r.data?.result || '', 300)}"`
             );
-
-            // opcional: log bruto quando der 4xx/5xx
             if (!(r.status >= 200 && r.status < 300)) {
                 console.log(`[OPTOUT][IA][RAW] ${truncate(JSON.stringify(r.data), 800)}`);
             }
-
-            // === mesma estratégia de parsing usada nas :wait ===
             let rawText = extractTextForLog(r.data) || '';
             rawText = String(rawText).trim();
-
             let picked = null;
             try {
                 const parsed = JSON.parse(rawText);
@@ -423,11 +353,9 @@ async function finalizeOptOutBatchAtEnd(st) {
                 if (m && m[1]) picked = String(m[1]).toUpperCase();
             }
             if (!picked) picked = String(pickLabelFromResponseData(r.data, ['OPTOUT', 'CONTINUAR']) || '').toUpperCase();
-
             console.log(
                 `[${st.contato}] [OPTOUT][BATCH->IA] stage=${st.etapa} size=${size} picked=${picked || 'null'} sample="${truncate(joined, 200)}"`
             );
-
             return { status: r.status, picked };
         } catch (e) {
             console.log(`[${st.contato}] [OPTOUT][IA] erro="${e?.message || e}"`);
@@ -442,22 +370,15 @@ async function finalizeOptOutBatchAtEnd(st) {
             return { status: 0, picked: null };
         }
     };
-
     st.optoutLotsTried = 1;
     let resp = await ask(64);
     if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) resp = await ask(128);
-
-    // Zera buffer SEMPRE ao final da tentativa por etapa
     st.optoutBuffer = [];
-
     const aiOptOut = (resp.status >= 200 && resp.status < 300 && resp.picked === 'OPTOUT');
-
     if (!aiOptOut) {
         console.log(`[${st.contato}] [OPTOUT][IA] decisão=CONTINUAR (fim da etapa ${st.etapa})`);
         return false;
     }
-
-    // === Aplicar bloqueio e mensagens (mesmo fluxo do hard-coded) ===
     st.optedOutAtTs = Date.now();
     st.mensagensPendentes = [];
     st.mensagensDesdeSolicitacao = [];
@@ -466,7 +387,6 @@ async function finalizeOptOutBatchAtEnd(st) {
     st.reoptinLotsTried = 0;
     st.reoptinBuffer = [];
     st.optoutLotsTried = 0;
-
     if (st.optOutCount >= 3) {
         st.permanentlyBlocked = true;
         if (st.etapa !== 'encerrado:wait') {
@@ -475,7 +395,6 @@ async function finalizeOptOutBatchAtEnd(st) {
             console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
         }
     }
-
     const oMsgs = loadOptOutMsgs();
     const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
     let texto = '';
@@ -493,9 +412,8 @@ async function finalizeOptOutBatchAtEnd(st) {
         await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
         await sendMessage(st.contato, texto, { force: true });
     }
-    return true; // bloqueou
+    return true;
 }
-
 function ensureEstado(contato) {
     const key = normalizeContato(contato) || 'desconhecido';
     if (!estadoContatos[key]) {
@@ -520,10 +438,10 @@ function ensureEstado(contato) {
             conversaoAwaitMsg: false,
             optOutCount: 0,
             permanentlyBlocked: false,
-            reoptinActive: false,     // false enquanto "pausado" por opt-out
-            reoptinLotsTried: 0,      // lotes IA já usados (máx 3)
-            reoptinBuffer: [],        // acumula 1..3 msgs antes de consultar IA
-            reoptinCount: 0,          // quantas retomadas já realizadas (máx 2)
+            reoptinActive: false,
+            reoptinLotsTried: 0,
+            reoptinBuffer: [],
+            reoptinCount: 0,
             optedOutAtTs: 0,
             _reoptinInitTs: 0,
             stageCursor: {}
@@ -559,14 +477,12 @@ function ensureEstado(contato) {
     }
     return estadoContatos[key];
 }
-
 function inicializarEstado(contato, maybeTid, maybeClickType) {
     const st = ensureEstado(contato);
     if (typeof maybeTid === 'string') st.tid = maybeTid || st.tid || '';
     if (typeof maybeClickType === 'string') st.click_type = maybeClickType || st.click_type || 'Orgânico';
     return st;
 }
-
 async function criarUsuarioDjango(contato) {
     const st = ensureEstado(contato);
     if (st.createdUser === 'ok' || st.credenciais) return { ok: true, skipped: true };
@@ -610,7 +526,6 @@ async function criarUsuarioDjango(contato) {
         throw err;
     }
 }
-
 async function resolveManychatSubscriberId(contato, modOpt, settingsOpt) {
     const phone = String(contato || '').replace(/\D/g, '');
     const st = ensureEstado(phone);
@@ -653,7 +568,6 @@ async function resolveManychatSubscriberId(contato, modOpt, settingsOpt) {
     } catch { }
     return null;
 }
-
 async function resolveManychatWaSubscriberId(contato, modOpt, settingsOpt) {
     const phone = String(contato || '').replace(/\D/g, '');
     console.log(`Debug resolve: phone=${phone}`);
@@ -695,33 +609,25 @@ async function resolveManychatWaSubscriberId(contato, modOpt, settingsOpt) {
     }
     return null;
 }
-
 const sentHashesGlobal = new Set();
 function hashText(s) { let h = 0, i, chr; const str = String(s); if (str.length === 0) return '0'; for (i = 0; i < str.length; i++) { chr = str.charCodeAt(i); h = ((h << 5) - h) + chr; h |= 0; } return String(h); }
 function chooseUnique(generator, st) { const maxTries = 200; for (let i = 0; i < maxTries; i++) { const text = generator(); const h = hashText(text); if (!sentHashesGlobal.has(h) && !st.sentHashes.has(h)) { sentHashesGlobal.add(h); st.sentHashes.add(h); return text; } } return null; }
-
 async function handleIncomingNormalizedMessage(normalized) {
     if (!normalized) return;
     const { contato, texto, temMidia, ts } = normalized;
-
     const hasText = !!safeStr(texto).trim();
     const hasMedia = !!temMidia;
     if (!hasText && !hasMedia) return;
-
     const st = ensureEstado(contato);
     const msg = hasText ? safeStr(texto).trim() : '[mídia]';
     log.info(`${tsNow()} [${st.contato}] Mensagem recebida: ${msg}`);
     st.lastIncomingTs = ts || Date.now();
-
+    // >>> ENFILEIRA para que preflightOptOut()/processamento consigam detectar
     if (!Array.isArray(st.mensagensPendentes)) st.mensagensPendentes = [];
     if (!Array.isArray(st.mensagensDesdeSolicitacao)) st.mensagensDesdeSolicitacao = [];
-
-    // ✅ salve os flags de mídia aqui
-    st.mensagensPendentes.push({ texto: msg, ts: st.lastIncomingTs, temMidia: hasMedia, hasMedia });
-    // mantém o histórico “string” como antes (alinha contagens/índices)
+    st.mensagensPendentes.push({ texto: msg, ts: st.lastIncomingTs });
     st.mensagensDesdeSolicitacao.push(msg);
 }
-
 function init(options = {}) {
     if (options.logger) {
         const { info, warn, error } = options.logger;
@@ -729,7 +635,6 @@ function init(options = {}) {
     }
     return { ok: true };
 }
-
 async function handleManyChatWebhook(body) {
     try {
         const pickPath = (obj, paths) => {
@@ -775,24 +680,20 @@ async function handleManyChatWebhook(body) {
         return { ok: false, error: e?.message || String(e) };
     }
 }
-
 async function processarMensagensPendentes(contato) {
     const st = ensureEstado(contato);
     if (st.enviandoMensagens) {
         await preflightOptOut(st);
         const pend = Array.isArray(st.mensagensPendentes) ? st.mensagensPendentes : [];
         const hadOptOut = pend.some(m => isOptOut(m?.texto || ''));
-
         if (hadOptOut) {
             st.mensagensPendentes = [];
             st.mensagensDesdeSolicitacao = [];
             st.enviandoMensagens = false;
-
             st.optOutCount = (st.optOutCount || 0) + 1;
             st.reoptinActive = false;
             st.reoptinLotsTried = 0;
             st.reoptinBuffer = [];
-
             if (st.optOutCount >= 3) {
                 st.permanentlyBlocked = true;
                 if (st.etapa !== 'encerrado:wait') {
@@ -801,8 +702,6 @@ async function processarMensagensPendentes(contato) {
                     console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
                 }
             }
-
-            // Confirmação de opt-out (1ª e 2ª vezes)
             const oMsgs = loadOptOutMsgs();
             const pick = arr => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
             let texto = '';
@@ -831,15 +730,12 @@ async function processarMensagensPendentes(contato) {
             }
             return { ok: true, optout: st.optOutCount, interrupted: true };
         }
-
         return { ok: true, skipped: 'busy' };
     }
-
     st.enviandoMensagens = true;
     try {
         console.log(`${tsNow()} [${st.contato}] etapa=${st.etapa} pendentes=${st.mensagensPendentes.length}`);
         enterStageOptOutResetIfNeeded(st);
-
         if (st.permanentlyBlocked || st.optOutCount >= 3) {
             st.permanentlyBlocked = true;
             if (st.etapa !== 'encerrado:wait') {
@@ -851,19 +747,16 @@ async function processarMensagensPendentes(contato) {
             st.mensagensDesdeSolicitacao = [];
             return { ok: true, noop: 'permanently-blocked' };
         }
-
         if (Array.isArray(st.mensagensPendentes) && st.mensagensPendentes.length) {
             const hadOptOut = st.mensagensPendentes.some(m => isOptOut(m?.texto || ''));
             if (hadOptOut) {
                 st.mensagensPendentes = [];
                 st.mensagensDesdeSolicitacao = [];
                 st.enviandoMensagens = false;
-
                 st.optOutCount = (st.optOutCount || 0) + 1;
                 st.reoptinActive = false;
                 st.reoptinLotsTried = 0;
                 st.reoptinBuffer = [];
-
                 if (st.optOutCount >= 3) {
                     st.permanentlyBlocked = true;
                     const _prev = st.etapa;
@@ -871,8 +764,6 @@ async function processarMensagensPendentes(contato) {
                     console.log(`[${st.contato}] opt-out #${st.optOutCount} => bloqueio permanente | ${_prev} -> ${st.etapa}`);
                     return { ok: true, status: 'blocked-forever' };
                 }
-
-                // enviar confirmação de opt-out (1ª e 2ª vezes)
                 const oMsgs = loadOptOutMsgs();
                 const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
                 let texto = '';
@@ -902,9 +793,7 @@ async function processarMensagensPendentes(contato) {
                 return { ok: true, optout: st.optOutCount };
             }
         }
-
         if (st.optOutCount > 0 && !st.reoptinActive) {
-            // Inicializa UMA vez por janela de re-opt-in (logo após o último opt-out)
             const isNewWindow = !st._reoptinInitTs || st._reoptinInitTs < (st.optedOutAtTs || 0);
             if (isNewWindow) {
                 st._reoptinInitTs = Date.now();
@@ -915,11 +804,8 @@ async function processarMensagensPendentes(contato) {
             const cutoffTs = Number(st.optedOutAtTs || 0);
             if (Array.isArray(st.mensagensPendentes) && st.mensagensPendentes.length) {
                 console.log(`[${st.contato}] [REOPTIN] pend=${st.mensagensPendentes.length} lotsTried=${st.reoptinLotsTried} buf=${st.reoptinBuffer.length}`);
-
                 let matched = false;
                 let matchedText = '';
-
-                // 1) Hard-coded (imediato)
                 for (const m of st.mensagensPendentes) {
                     const t = m?.texto || '';
                     if (!t) continue;
@@ -928,12 +814,9 @@ async function processarMensagensPendentes(contato) {
                     if (hard) { matched = true; matchedText = t; }
                     if (matched) break;
                 }
-
-                // 2) Se não houve hard, acumula e dispare IA de 3 em 3 mensagens, até 3 lotes
                 if (!matched) {
                     const apiKey = process.env.OPENAI_API_KEY;
                     const canIa = apiKey && typeof promptClassificaReoptin === 'function';
-
                     for (const m of st.mensagensPendentes) {
                         const t = safeStr(m?.texto || '').trim();
                         const mts = Number(m?.ts || 0);
@@ -941,13 +824,11 @@ async function processarMensagensPendentes(contato) {
                         if (cutoffTs && mts && mts <= cutoffTs) continue;
                         st.reoptinBuffer.push(t);
                         console.log(`[${st.contato}] [REOPTIN][BATCH][PUSH] size=${st.reoptinBuffer.length} msg="${truncate(t, 140)}"`);
-
                         if (st.reoptinBuffer.length === 3 && st.reoptinLotsTried < 3 && canIa) {
                             const joined = st.reoptinBuffer.join(' | ');
                             const structuredPrompt =
                                 `${promptClassificaReoptin(joined)}\n\n` +
                                 `Output only valid JSON as {"label": "optin"} or {"label": "nao_optin"}`;
-
                             const ask = async (maxTok) => {
                                 try {
                                     const r = await axios.post('https://api.openai.com/v1/responses', {
@@ -981,24 +862,18 @@ async function processarMensagensPendentes(contato) {
                                     return null;
                                 }
                             };
-
                             let out = await ask(48);
                             if (!out) out = await ask(128);
-
                             st.reoptinLotsTried += 1;
                             matched = (out === 'optin');
                             matchedText = matched ? (st.reoptinBuffer[st.reoptinBuffer.length - 1] || '') : '';
-                            st.reoptinBuffer = []; // limpa o lote SEMPRE entre tentativas
-
+                            st.reoptinBuffer = [];
                             if (matched) break;
-                            if (st.reoptinLotsTried >= 3) break; // atingiu o limite
+                            if (st.reoptinLotsTried >= 3) break;
                         }
                     }
                 }
-
-                // 3) Decisão
                 st.mensagensPendentes = [];
-
                 if (matched) {
                     console.log(`[${st.contato}] re-opt-in DETECTADO: "${truncate(matchedText, 140)}"`);
                     st.reoptinActive = true;
@@ -1007,7 +882,6 @@ async function processarMensagensPendentes(contato) {
                     st.reoptinCount = (st.reoptinCount || 0) + 1;
                     st.mensagensDesdeSolicitacao = [];
                     st._reoptinInitTs = 0;
-
                     const iMsgs = loadOptInMsgs();
                     const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
                     let texto = '';
@@ -1023,7 +897,6 @@ async function processarMensagensPendentes(contato) {
                         await sendMessage(st.contato, texto, { force: true });
                     }
                 } else {
-                    // Se chegou a 3 tentativas e não detectou -> encerrar e parar análises
                     if (st.reoptinLotsTried >= 3) {
                         console.log(`[${st.contato}] [REOPTIN][STOP] 3 lotes sem opt-in -> encerrado:wait`);
                         st.etapa = 'encerrado:wait';
@@ -1036,7 +909,6 @@ async function processarMensagensPendentes(contato) {
                 }
             }
         }
-
         if (st.etapa === 'abertura:send') {
             enterStageOptOutResetIfNeeded(st);
             const aberturaPath = path.join(__dirname, 'content', 'abertura.json');
@@ -1064,80 +936,54 @@ async function processarMensagensPendentes(contato) {
                 const head = [g1, g2].filter(Boolean).join(' ');
                 return [head, g3].filter(Boolean).join(', ');
             };
-
-            // gere as duas mensagens (mantém "unique" quando possível)
             const m1 = chooseUnique(composeAberturaMsg1, st) || composeAberturaMsg1();
             const m2 = chooseUnique(composeAberturaMsg2, st) || composeAberturaMsg2();
             const msgs = [m1, m2];
-
-            // retoma exatamente de onde parou
             let cur = Number(st.stageCursor?.[st.etapa] || 0);
-
             for (let i = cur; i < msgs.length; i++) {
-                // se entrou um opt-out agora, não avança etapa nem cursor
                 if (await preflightOptOut(st)) {
                     return { ok: true, interrupted: 'optout-pre-batch' };
                 }
-
                 if (!msgs[i]) {
-                    // msg vazia: considere como enviada para fins de cursor
                     st.stageCursor[st.etapa] = i + 1;
                     continue;
                 }
-
-                // delays do fluxo original
                 if (i === 0) {
                     await delay(FIRST_REPLY_DELAY_MS);
                 } else {
                     await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                 }
-
-                // tentativa de envio (NÃO avançar cursor/etapa se skip)
                 const r = await sendMessage(st.contato, msgs[i]);
-
                 if (!r?.ok) {
-                    // aqui pega "paused-by-optout" e similares — não muda etapa
                     return { ok: true, paused: r?.reason || 'send-skipped', idx: i };
                 }
-
-                // enviado com sucesso -> atualiza cursor
                 st.stageCursor[st.etapa] = i + 1;
-
-                // se rolou opt-out depois do envio, ainda assim não avançamos etapa
                 if (await preflightOptOut(st)) {
                     return { ok: true, interrupted: 'optout-mid-batch' };
                 }
             }
-
-            // só chega aqui se as DUAS mensagens saíram com ok:true
             if ((st.stageCursor[st.etapa] || 0) >= msgs.length) {
                 if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-post-batch' };
                 st.stageCursor[st.etapa] = 0;
                 st.mensagensPendentes = [];
                 st.mensagensDesdeSolicitacao = [];
                 st.lastClassifiedIdx.interesse = 0;
-
                 const _prev = st.etapa;
                 if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-batch-end' };
                 st.etapa = 'abertura:wait';
                 console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
                 return { ok: true };
             }
-
-            // envio parcial (ficou travado entre m1 e m2 por opt-out)
             return { ok: true, partial: true };
         }
-
         if (st.etapa === 'abertura:wait') {
             if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
             if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
-
             const _prev = st.etapa;
             st.etapa = 'interesse:send';
             console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
         }
-
         if (st.etapa === 'interesse:send') {
             enterStageOptOutResetIfNeeded(st);
             const interessePath = path.join(__dirname, 'content', 'interesse.json');
@@ -1158,33 +1004,25 @@ async function processarMensagensPendentes(contato) {
                 const g5 = pick(c?.msg?.g5);
                 return `${[g1, g2].filter(Boolean).join(', ')}... ${[g3, g4, g5].filter(Boolean).join(', ')}`.replace(/\s+,/g, ',');
             };
-
             const mi = chooseUnique(composeInteresseMsg, st) || composeInteresseMsg();
-
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
             if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-pre-single' };
-
             let r = { ok: true };
             if (mi) r = await sendMessage(st.contato, mi);
-
             if (!r?.ok) {
                 st.mensagensPendentes = [];
                 return { ok: true, paused: r?.reason || 'send-skipped' };
             }
-
             if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-post-single' };
-
             st.mensagensPendentes = [];
             st.mensagensDesdeSolicitacao = [];
             st.lastClassifiedIdx.interesse = 0;
-
             const _prev = st.etapa;
             if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-batch-end' };
             st.etapa = 'interesse:wait';
             console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
             return { ok: true };
         }
-
         if (st.etapa === 'interesse:wait') {
             if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
             if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
@@ -1278,7 +1116,6 @@ async function processarMensagensPendentes(contato) {
                 return { ok: true, classe };
             }
         }
-
         if (st.etapa === 'instrucoes:send') {
             enterStageOptOutResetIfNeeded(st);
             const instrucoesPath = path.join(__dirname, 'content', 'instrucoes.json');
@@ -1314,33 +1151,26 @@ async function processarMensagensPendentes(contato) {
                 const g2 = pick(c?.msg3?.grupo2);
                 return [g1 && `${g1}…`, g2 && `${g2}?`].filter(Boolean).join(' ');
             };
-
             const m1 = composeMsg1();
             const m2 = composeMsg2();
             const m3 = composeMsg3();
             const msgs = [m1, m2, m3];
-
             let cur = Number(st.stageCursor?.[st.etapa] || 0);
             for (let i = cur; i < msgs.length; i++) {
                 if (await preflightOptOut(st)) {
                     return { ok: true, interrupted: 'optout-pre-batch' };
                 }
                 if (!msgs[i]) continue;
-                // delays específicos do fluxo original
                 if (i === 0) await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                 if (i === 1) { await delayRange(20000, 30000); await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS); }
                 if (i === 2) await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-
                 const r = await sendMessage(st.contato, msgs[i]);
-                if (!r?.ok) break; // se bloqueado por opt-out no meio
-
+                if (!r?.ok) break;
                 if (await preflightOptOut(st)) {
                     return { ok: true, interrupted: 'optout-mid-batch' };
                 }
-
                 st.stageCursor[st.etapa] = i + 1;
             }
-
             if ((st.stageCursor[st.etapa] || 0) >= msgs.length) {
                 if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-post-batch' };
                 st.stageCursor[st.etapa] = 0;
@@ -1357,7 +1187,6 @@ async function processarMensagensPendentes(contato) {
             }
             return { ok: true, partial: true };
         }
-
         if (st.etapa === 'instrucoes:wait') {
             if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
             if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
@@ -1455,7 +1284,6 @@ async function processarMensagensPendentes(contato) {
                 return { ok: true, classe };
             }
         }
-
         if (st.etapa === 'acesso:send') {
             enterStageOptOutResetIfNeeded(st);
             const acessoPath = path.join(__dirname, 'content', 'acesso.json');
@@ -1499,7 +1327,6 @@ async function processarMensagensPendentes(contato) {
                 '',
                 `${[pick(c?.msg3?.bloco2C), pick(c?.msg3?.bloco3C)].filter(Boolean).join(', ')}`
             ].join('\n');
-
             const msgs = [msg1, msg2, msg3];
             let cur = Number(st.stageCursor?.[st.etapa] || 0);
             for (let i = cur; i < msgs.length; i++) {
@@ -1529,7 +1356,6 @@ async function processarMensagensPendentes(contato) {
             }
             return { ok: true, partial: true };
         }
-
         if (st.etapa === 'acesso:wait') {
             if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
             if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
@@ -1845,131 +1671,131 @@ async function processarMensagensPendentes(contato) {
             return { ok: true, partial: true };
         }
 
+        // --- SUBSTITUA TODO O BLOCO "saque:wait" POR ESTE ---
         if (st.etapa === 'saque:wait') {
             if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
             if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
-            if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
-            const total = st.mensagensDesdeSolicitacao.length;
-            const startIdx = Math.max(0, st.lastClassifiedIdx?.saque || 0);
-            if (startIdx >= total) {
+            if (!Array.isArray(st.mensagensPendentes) || st.mensagensPendentes.length === 0) {
+                return { ok: true, noop: 'waiting-user' };
+            }
+
+            // Cursor/clamp sempre relativo a PENDENTES (não ao "desdeSolicitacao")
+            const totalPend = st.mensagensPendentes.length;
+            const startIdx = Math.min(totalPend, Math.max(0, Number(st.lastClassifiedIdx?.saque || 0)));
+            const novasMsgs = st.mensagensPendentes.slice(startIdx);
+
+            // Se por algum motivo não há novas (ex.: cursor antigo > pendentes atuais), normaliza e sai
+            if (novasMsgs.length === 0) {
                 st.mensagensPendentes = [];
+                st.lastClassifiedIdx.saque = 0; // importantíssimo: zera para o próximo ciclo não “pular” a nova mídia
                 return { ok: true, noop: 'no-new-messages' };
             }
-            const novasMsgs = st.mensagensPendentes.slice(startIdx); // Use pendentes to access temMidia
+
             const apiKey = process.env.OPENAI_API_KEY;
             const looksLikeMediaUrl = (s) => {
                 const n = String(s || '');
                 return /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(n)
                     || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
             };
+
+            // 1) CURTO-CIRCUITO: mídia detectada -> pular IA e avançar (igual confirmação)
             let temImagem = false;
             for (const m of novasMsgs) {
-                const msg = safeStr(m.texto).trim();
-                if (m.temMidia || m.hasMedia || looksLikeMediaUrl(msg) || /^\[m[ií]dia\]$/i.test(msg)) {
+                const msg = safeStr(m?.texto || '').trim();
+                if (m?.temMidia || m?.hasMedia || looksLikeMediaUrl(msg) || /^\[m[ií]dia\]$/i.test(msg)) {
                     console.log(`[${st.contato}] Análise: imagem ("${truncate(msg, 140)}")`);
                     temImagem = true;
                     break;
                 }
             }
+
             if (temImagem) {
-                st.lastClassifiedIdx.saque = st.mensagensPendentes.length; // Use pendentes for consistency
+                st.lastClassifiedIdx.saque = 0;         // zera o cursor SEMPRE que limpar pendentes
                 st.mensagensPendentes = [];
                 st.mensagensDesdeSolicitacao = [];
                 st.saquePediuPrint = false;
                 const _prev = st.etapa;
                 st.etapa = 'validacao:send';
                 console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
-            } else {
-                let relevante = false;
-                if (apiKey) {
-                    const allowed = ['relevante', 'irrelevante'];
-                    const contexto = novasMsgs.map(m => safeStr(m.texto)).join(' | ');
-                    const structuredPrompt =
-                        `${promptClassificaRelevancia(contexto, false)}\n\n` +
-                        `Output only this valid JSON format with double quotes around keys and values, nothing else: ` +
-                        `{"label": "relevante"} or {"label": "irrelevante"}`;
-                    const callOnce = async (maxTok) => {
-                        let r;
-                        try {
-                            r = await axios.post(
-                                'https://api.openai.com/v1/responses',
-                                {
-                                    model: 'gpt-5',
-                                    input: structuredPrompt,
-                                    max_output_tokens: maxTok,
-                                    reasoning: { effort: 'low' }
-                                },
-                                {
-                                    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-                                    timeout: 15000,
-                                    validateStatus: () => true
-                                }
-                            );
-                        } catch {
-                            return { status: 0, picked: null };
-                        }
-                        const data = r.data;
-                        let rawText = '';
-                        if (Array.isArray(data?.output)) {
-                            data.output.forEach(item => {
-                                if (item.type === 'message' && Array.isArray(item.content) && item.content[0]?.text) {
-                                    rawText = item.content[0].text;
-                                }
-                            });
-                        }
-                        if (!rawText) rawText = extractTextForLog(data);
-                        rawText = String(rawText || '').trim();
-                        let picked = null;
-                        if (rawText) {
-                            try {
-                                const parsed = JSON.parse(rawText);
-                                if (parsed && typeof parsed.label === 'string') picked = parsed.label.toLowerCase().trim();
-                            } catch {
-                                const m = rawText.match(/(?:"label"|label)\s*:\s*"([^"]+)"/i);
-                                if (m && m[1]) picked = m[1].toLowerCase().trim();
-                            }
-                        }
-                        if (!picked) picked = pickLabelFromResponseData(data, allowed);
-                        return { status: r.status, picked };
-                    };
-                    try {
-                        let resp = await callOnce(64);
-                        if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) resp = await callOnce(256);
-                        relevante = (resp.status >= 200 && resp.status < 300 && resp.picked === 'relevante');
-                        console.log(`[${st.contato}] Análise: ${resp.picked || (relevante ? 'relevante' : 'irrelevante')} ("${truncate(contexto, 140)}")`);
-                    } catch { }
-                }
-                st.lastClassifiedIdx.saque = st.mensagensPendentes.length; // Use pendentes for consistency
-                st.mensagensPendentes = [];
-                if (relevante) {
-                    const saquePath = path.join(__dirname, 'content', 'saque.json');
-                    let saqueMsgPrint = null;
-                    let raw = fs.readFileSync(saquePath, 'utf8');
-                    raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
-                    const parsed = JSON.parse(raw);
-                    if (Array.isArray(parsed?.msgprint) && parsed.msgprint.length > 0) {
-                        saqueMsgPrint = parsed.msgprint;
-                    }
-                    if (!Array.isArray(saqueMsgPrint) || saqueMsgPrint.length === 0) {
-                        return { ok: true, classe: 'aguardando_imagem' };
-                    }
-                    // helpers locais
-                    const pickLocal = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
-                    const composeMsgPrint = () => pickLocal(saqueMsgPrint);
-                    if (!st.saquePediuPrint) {
-                        const m = chooseUnique(composeMsgPrint, st) || composeMsgPrint();
-                        await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-                        let r = { ok: true };
-                        if (m) r = await sendMessage(st.contato, m);
-                        if (!r?.ok) return { ok: true, paused: r?.reason || 'send-skipped' };
-                        st.saquePediuPrint = true;
-                        return { ok: true, classe: 'relevante' };
-                    }
-                    return { ok: true, classe: 'aguardando_imagem' };
-                }
-                return { ok: true, classe: 'irrelevante' };
+                return { ok: true };
             }
+
+            // 2) Sem mídia: IA de relevância (igual já faz), mas usando SOMENTE as novas pendentes
+            let relevante = false;
+            if (apiKey) {
+                const contexto = novasMsgs.map(m => safeStr(m?.texto || '')).join(' | ');
+                const structuredPrompt =
+                    `${promptClassificaRelevancia(contexto, false)}\n\n` +
+                    `Output only this valid JSON format with double quotes around keys and values, nothing else: ` +
+                    `{"label": "relevante"} or {"label": "irrelevante"}`;
+
+                const callOnce = async (maxTok) => {
+                    let r;
+                    try {
+                        r = await axios.post(
+                            'https://api.openai.com/v1/responses',
+                            { model: 'gpt-5', input: structuredPrompt, max_output_tokens: maxTok, reasoning: { effort: 'low' } },
+                            { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 15000, validateStatus: () => true }
+                        );
+                    } catch {
+                        return { status: 0, picked: null };
+                    }
+                    const data = r.data;
+                    let rawText = '';
+                    if (Array.isArray(data?.output)) {
+                        data.output.forEach(item => {
+                            if (item.type === 'message' && Array.isArray(item.content) && item.content[0]?.text) {
+                                rawText = item.content[0].text;
+                            }
+                        });
+                    }
+                    if (!rawText) rawText = extractTextForLog(data);
+                    rawText = String(rawText || '').trim();
+                    let picked = null;
+                    if (rawText) {
+                        try { const parsed = JSON.parse(rawText); if (parsed && typeof parsed.label === 'string') picked = parsed.label.toLowerCase().trim(); }
+                        catch { const m = rawText.match(/(?:"label"|label)\s*:\s*"([^"]+)"/i); if (m && m[1]) picked = m[1].toLowerCase().trim(); }
+                    }
+                    if (!picked) picked = pickLabelFromResponseData(data, ['relevante', 'irrelevante']);
+                    return { status: r.status, picked };
+                };
+
+                try {
+                    let resp = await callOnce(64);
+                    if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) resp = await callOnce(256);
+                    relevante = (resp.status >= 200 && resp.status < 300 && resp.picked === 'relevante');
+                    console.log(`[${st.contato}] Análise: ${resp.picked || (relevante ? 'relevante' : 'irrelevante')} ("${truncate(contexto, 140)}")`);
+                } catch { }
+            }
+
+            // Cursor SEMPRE zerado quando limpamos pendentes
+            st.lastClassifiedIdx.saque = 0;
+            st.mensagensPendentes = [];
+
+            if (relevante) {
+                // Pede o print (uma vez) e mantém a etapa até vir a mídia
+                const saquePath = path.join(__dirname, 'content', 'saque.json');
+                let raw = fs.readFileSync(saquePath, 'utf8');
+                raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
+                const parsed = JSON.parse(raw);
+                const lista = Array.isArray(parsed?.msgprint) ? parsed.msgprint : [];
+                if (!lista.length) return { ok: true, classe: 'aguardando_imagem' };
+
+                if (!st.saquePediuPrint) {
+                    const pickLocal = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
+                    const m = pickLocal(lista);
+                    await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+                    const r = m ? await sendMessage(st.contato, m) : { ok: true };
+                    if (!r?.ok) return { ok: true, paused: r?.reason || 'send-skipped' };
+                    st.saquePediuPrint = true;
+                    return { ok: true, classe: 'relevante' };
+                }
+                return { ok: true, classe: 'aguardando_imagem' };
+            }
+
+            return { ok: true, classe: 'irrelevante' };
         }
+
 
         if (st.etapa === 'validacao:send') {
             enterStageOptOutResetIfNeeded(st);
