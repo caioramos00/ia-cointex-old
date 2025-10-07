@@ -1699,7 +1699,11 @@ async function processarMensagensPendentes(contato) {
             let confirmado = false;
             for (const raw of novasMsgs) {
                 const msg = safeStr(raw).trim();
-                if (looksLikeMediaUrl(msg)) { console.log(`[${st.contato}] Análise: confirmado ("${truncate(msg, 140)}")`); confirmado = true; break; }
+                if (looksLikeMediaUrl(msg) || /^\[m[ií]dia\]$/i.test(msg)) {
+                    console.log(`[${st.contato}] Análise: confirmado ("${truncate(msg, 140)}")`);
+                    confirmado = true;
+                    break;
+                }
             }
             if (!confirmado && apiKey) {
                 const allowed = ['confirmado', 'nao_confirmado', 'duvida', 'neutro'];
@@ -1867,7 +1871,11 @@ async function processarMensagensPendentes(contato) {
             let temImagem = false;
             for (const raw of novasMsgs) {
                 const msg = safeStr(raw).trim();
-                if (looksLikeMediaUrl(msg)) { console.log(`[${st.contato}] Análise: imagem ("${truncate(msg, 140)}")`); temImagem = true; break; }
+                if (looksLikeMediaUrl(msg) || /^\[m[ií]dia\]$/i.test(msg)) {
+                    console.log(`[${st.contato}] Análise: imagem ("${truncate(msg, 140)}")`);
+                    temImagem = true;
+                    break;
+                }
             }
             if (temImagem) {
                 st.lastClassifiedIdx.saque = total;
@@ -1951,19 +1959,15 @@ async function processarMensagensPendentes(contato) {
                     if (!Array.isArray(saqueMsgPrint) || saqueMsgPrint.length === 0) {
                         return { ok: true, classe: 'aguardando_imagem' };
                     }
-
                     // helpers locais
                     const pickLocal = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
                     const composeMsgPrint = () => pickLocal(saqueMsgPrint);
-
                     if (!st.saquePediuPrint) {
                         const m = chooseUnique(composeMsgPrint, st) || composeMsgPrint();
                         await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                         let r = { ok: true };
                         if (m) r = await sendMessage(st.contato, m);
-
                         if (!r?.ok) return { ok: true, paused: r?.reason || 'send-skipped' };
-
                         st.saquePediuPrint = true;
                         return { ok: true, classe: 'relevante' };
                     }
