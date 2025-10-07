@@ -1682,9 +1682,13 @@ async function processarMensagensPendentes(contato) {
         if (st.etapa === 'confirmacao:wait') {
             if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
             if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
+            // Novo log após finalize, antes do pendentes.length check
+            console.log(`[${st.contato}] After optout checks: continuing to media detection, pendentes.length=${st.mensagensPendentes.length}, mensagensDesdeSolicitacao.length=${st.mensagensDesdeSolicitacao.length}, lastClassifiedIdx.confirmacao=${st.lastClassifiedIdx?.confirmacao || 0}`);
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
             const total = st.mensagensDesdeSolicitacao.length;
             const startIdx = Math.max(0, st.lastClassifiedIdx?.confirmacao || 0);
+            // Novo log antes de startIdx >= total
+            console.log(`[${st.contato}] Check new msgs: total=${total}, startIdx=${startIdx}, novasMsgs.length=${novasMsgs.length}`);
             if (startIdx >= total) {
                 st.mensagensPendentes = [];
                 return { ok: true, noop: 'no-new-messages' };
@@ -1701,6 +1705,7 @@ async function processarMensagensPendentes(contato) {
 
             // --- FIX 1: atalho pelo flag da fila (quando veio texto + mídia) ---
             const _pendObjs = Array.isArray(st.mensagensPendentes) ? st.mensagensPendentes : [];
+            // Novo: full pendentes log and athalho check
             console.log(`[${st.contato}] Pendentes objects: ${JSON.stringify(_pendObjs, null, 2)}`);
             console.log(`[${st.contato}] Athalho check: some temMidia=true? ${_pendObjs.some(m => m && m.temMidia === true)}`);
             if (_pendObjs.some(m => m && m.temMidia === true)) {
@@ -1808,9 +1813,13 @@ async function processarMensagensPendentes(contato) {
                     console.log(`[${st.contato}] Análise: ${resp.picked || 'neutro'} ("${truncate(contexto, 140)}")`);
                 } catch { }
             }
+            // Novo log after IA or fallback
+            console.log(`[${st.contato}] After detection: confirmado=${confirmado}`);
             st.lastClassifiedIdx.confirmacao = total;
             st.mensagensPendentes = [];
             if (confirmado) {
+                // Novo log inside advancement
+                console.log(`[${st.contato}] Confirmed media, advancing stage`);
                 st.mensagensDesdeSolicitacao = [];
                 st.lastClassifiedIdx.saque = 0;
                 const _prev = st.etapa;
@@ -1897,9 +1906,13 @@ async function processarMensagensPendentes(contato) {
         if (st.etapa === 'saque:wait') {
             if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
             if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
+            // Novo log após finalize, antes do pendentes.length check
+            console.log(`[${st.contato}] After optout checks: continuing to media detection, pendentes.length=${st.mensagensPendentes.length}, mensagensDesdeSolicitacao.length=${st.mensagensDesdeSolicitacao.length}, lastClassifiedIdx.saque=${st.lastClassifiedIdx?.saque || 0}`);
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
             const total = st.mensagensDesdeSolicitacao.length;
             const startIdx = Math.max(0, st.lastClassifiedIdx?.saque || 0);
+            // Novo log antes de startIdx >= total
+            console.log(`[${st.contato}] Check new msgs: total=${total}, startIdx=${startIdx}, novasMsgs.length=${novasMsgs.length}`);
             if (startIdx >= total) {
                 st.mensagensPendentes = [];
                 return { ok: true, noop: 'no-new-messages' };
@@ -1915,6 +1928,7 @@ async function processarMensagensPendentes(contato) {
 
             // --- FIX 2: atalho direto pelo flag da fila ---
             const _pendObjs = Array.isArray(st.mensagensPendentes) ? st.mensagensPendentes : [];
+            // Novo: full pendentes log and athalho check
             console.log(`[${st.contato}] Pendentes objects: ${JSON.stringify(_pendObjs, null, 2)}`);
             console.log(`[${st.contato}] Athalho check: some temMidia=true? ${_pendObjs.some(m => m && m.temMidia === true)}`);
             if (_pendObjs.some(m => m && m.temMidia === true)) {
@@ -1954,7 +1968,11 @@ async function processarMensagensPendentes(contato) {
                 console.log(`[${st.contato}] Fallback result: temImagem=${temImagem}`);
             }
 
+            // Novo log after IA or fallback
+            console.log(`[${st.contato}] After detection: temImagem=${temImagem}`);
             if (temImagem) {
+                // Novo log inside advancement
+                console.log(`[${st.contato}] Confirmed media, advancing stage`);
                 st.lastClassifiedIdx.saque = total;
                 st.mensagensPendentes = [];
                 st.mensagensDesdeSolicitacao = [];
