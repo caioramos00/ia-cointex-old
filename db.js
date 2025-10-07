@@ -97,13 +97,6 @@ async function initDatabase() {
   }
 }
 
-async function ensureDefaultSettings(client) {
-  const { rows } = await client.query('SELECT id FROM bot_settings ORDER BY id ASC LIMIT 1');
-  if (!rows.length) {
-    await client.query("INSERT INTO bot_settings (message_provider) VALUES ('meta')");
-  }
-}
-
 async function getBotSettings({ bypassCache = false } = {}) {
   const now = Date.now();
   if (!bypassCache && _settingsCache && now - _settingsCacheTs < SETTINGS_TTL_MS) return _settingsCache;
