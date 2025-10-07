@@ -1722,8 +1722,8 @@ async function processarMensagensPendentes(contato) {
                     if (
                         /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(original) ||
                         /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(original) ||
-                        original.toLowerCase() === '[mídia]' ||  // Nova verificação explícita para Meta
-                        cleaned.toLowerCase() === '[mídia]' ||   // Nova verificação explícita para Meta (após clean)
+                        normMsg(original, { case_insensitive: true, accent_insensitive: true }) === '[midia]' ||  // Atualizada para normalizar acentos
+                        normMsg(cleaned, { case_insensitive: true, accent_insensitive: true }) === '[midia]' ||  // Atualizada para normalizar acentos
                         /^\s*[\[\(\{<]?\s*(?:m(?:i\u0301|\u00ed|i)dia|media|imagem|foto|image)\s*[\]\)\}>]?\s*$/i.test(cleaned) ||
                         /\b(?:image|media)\s+omitted\b/i.test(cleaned) ||
                         /\b(?:imagem|m(?:i\u0301|\u00ed|i)dia)\s+omitid[ao]\b/i.test(cleaned)
@@ -1924,8 +1924,8 @@ async function processarMensagensPendentes(contato) {
                     if (
                         /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(original) ||
                         /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(original) ||
-                        original.toLowerCase() === '[mídia]' ||  // Nova verificação explícita para Meta
-                        cleaned.toLowerCase() === '[mídia]' ||   // Nova verificação explícita para Meta (após clean)
+                        normMsg(original, { case_insensitive: true, accent_insensitive: true }) === '[midia]' ||  // Atualizada para normalizar acentos
+                        normMsg(cleaned, { case_insensitive: true, accent_insensitive: true }) === '[midia]' ||  // Atualizada para normalizar acentos
                         /^\s*[\[\(\{<]?\s*(?:m(?:i\u0301|\u00ed|i)dia|media|imagem|foto|image)\s*[\]\)\}>]?\s*$/i.test(cleaned) ||
                         /\b(?:image|media)\s+omitted\b/i.test(cleaned) ||
                         /\b(?:imagem|m(?:i\u0301|\u00ed|i)dia)\s+omitid[ao]\b/i.test(cleaned)
