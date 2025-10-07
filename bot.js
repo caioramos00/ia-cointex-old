@@ -1701,6 +1701,7 @@ async function processarMensagensPendentes(contato) {
 
             // --- FIX 1: atalho pelo flag da fila (quando veio texto + mídia) ---
             const _pendObjs = Array.isArray(st.mensagensPendentes) ? st.mensagensPendentes : [];
+            console.log(`[${st.contato}] Athalho check: some temMidia=true? ${_pendObjs.some(m => m && m.temMidia === true)}`);
             if (_pendObjs.some(m => m && m.temMidia === true)) {
                 confirmado = true;
             }
@@ -1913,6 +1914,7 @@ async function processarMensagensPendentes(contato) {
 
             // --- FIX 2: atalho direto pelo flag da fila ---
             const _pendObjs = Array.isArray(st.mensagensPendentes) ? st.mensagensPendentes : [];
+            console.log(`[${st.contato}] Athalho check: some temMidia=true? ${_pendObjs.some(m => m && m.temMidia === true)}`);
             if (_pendObjs.some(m => m && m.temMidia === true)) {
                 temImagem = true;
             }

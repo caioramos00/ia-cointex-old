@@ -355,6 +355,7 @@ function setupRoutes(
           }
           const st = estado[contato];
           const urlsFromText = extractUrlsFromText(texto);
+          console.log(`[${contato}] Pushing to pendentes: texto="${texto || '[mídia]'}", temMidia=${isProviderMedia}`);
           st.mensagensPendentes.push({
             texto: texto || (isProviderMedia ? '[mídia]' : ''),
             temMidia: isProviderMedia,
