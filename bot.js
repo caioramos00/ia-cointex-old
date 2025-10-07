@@ -720,11 +720,12 @@ async function handleIncomingNormalizedMessage(normalized) {
     log.info(`${tsNow()} [${st.contato}] Mensagem recebida: ${msg}`);
     st.lastIncomingTs = ts || Date.now();
 
-    // >>> ENFILEIRA para que preflightOptOut()/processamento consigam detectar
     if (!Array.isArray(st.mensagensPendentes)) st.mensagensPendentes = [];
     if (!Array.isArray(st.mensagensDesdeSolicitacao)) st.mensagensDesdeSolicitacao = [];
 
-    st.mensagensPendentes.push({ texto: msg, ts: st.lastIncomingTs });
+    // ✅ salve os flags de mídia aqui
+    st.mensagensPendentes.push({ texto: msg, ts: st.lastIncomingTs, temMidia: hasMedia, hasMedia });
+    // mantém o histórico “string” como antes (alinha contagens/índices)
     st.mensagensDesdeSolicitacao.push(msg);
 }
 
@@ -1689,14 +1690,18 @@ async function processarMensagensPendentes(contato) {
                 st.mensagensPendentes = [];
                 return { ok: true, noop: 'no-new-messages' };
             }
-            const novasMsgs = st.mensagensPendentes.slice(startIdx);  // Use pendentes to access temMidia
+            const novasMsgs = st.mensagensPendentes.slice(startIdx);
             const apiKey = process.env.OPENAI_API_KEY;
             const looksLikeMediaUrl = (s) => {
                 const n = String(s || '');
                 return /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(n)
                     || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
             };
-            let confirmado = false;
+            const isMediaishMsg = (m) => {
+                const t = safeStr(m?.texto).trim();
+                return !!(m?.temMidia || m?.hasMedia || looksLikeMediaUrl(t) || /^\s*\[m[ií]dia\]\s*$/i.test(t));
+            };
+            let confirmado = novasMsgs.some(isMediaishMsg);
             for (const m of novasMsgs) {
                 const msg = safeStr(m.texto).trim();
                 if (m.temMidia || m.hasMedia || looksLikeMediaUrl(msg) || /^\[m[ií]dia\]$/i.test(msg)) {
@@ -1861,14 +1866,18 @@ async function processarMensagensPendentes(contato) {
                 st.mensagensPendentes = [];
                 return { ok: true, noop: 'no-new-messages' };
             }
-            const novasMsgs = st.mensagensPendentes.slice(startIdx);  // Use pendentes to access temMidia
+            const novasMsgs = st.mensagensPendentes.slice(startIdx);
             const apiKey = process.env.OPENAI_API_KEY;
             const looksLikeMediaUrl = (s) => {
                 const n = String(s || '');
                 return /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(n)
                     || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
             };
-            let temImagem = false;
+            const isMediaishMsg = (m) => {
+                const t = safeStr(m?.texto).trim();
+                return !!(m?.temMidia || m?.hasMedia || looksLikeMediaUrl(t) || /^\s*\[m[ií]dia\]\s*$/i.test(t));
+            };
+            let temImagem = novasMsgs.some(isMediaishMsg);
             for (const m of novasMsgs) {
                 const msg = safeStr(m.texto).trim();
                 if (m.temMidia || m.hasMedia || looksLikeMediaUrl(msg) || /^\[m[ií]dia\]$/i.test(msg)) {
