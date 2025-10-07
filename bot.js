@@ -1683,14 +1683,17 @@ async function processarMensagensPendentes(contato) {
             if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
             if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
             if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
+            console.log(`[DEBUG] mensagensDesdeSolicitacao before total: ${JSON.stringify(st.mensagensDesdeSolicitacao)} , length=${st.mensagensDesdeSolicitacao.length}`);  // Novo log para ver array antes
             const total = st.mensagensDesdeSolicitacao.length;
             const startIdx = Math.max(0, st.lastClassifiedIdx?.confirmacao || 0);
+            console.log(`[DEBUG] total=${total}, startIdx=${startIdx}, pendentes=${st.mensagensPendentes.length}`);  // Log valores
             if (startIdx >= total) {
+                console.log(`[DEBUG] Skipping media detection: startIdx >= total`);  // Log quando skip
                 st.mensagensPendentes = [];
                 return { ok: true, noop: 'no-new-messages' };
             }
             const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
-            console.log(`[DEBUG] novasMsgs in confirmacao:wait: ${JSON.stringify(novasMsgs)}`);  // Novo log para rastrear mensagens
+            console.log(`[DEBUG] novasMsgs in confirmacao:wait: ${JSON.stringify(novasMsgs)}`);
             const apiKey = process.env.OPENAI_API_KEY;
             const looksLikeMediaUrl = (s) => {
                 const n = String(s || '');
@@ -1700,13 +1703,14 @@ async function processarMensagensPendentes(contato) {
             let confirmado = false;
             for (const raw of novasMsgs) {
                 const msg = safeStr(raw).trim();
-                console.log(`[DEBUG] Media check msg: "${msg}"`);  // Novo log para ver exato string testado
+                console.log(`[DEBUG] Media check msg: "${msg}" , looksLikeMediaUrl=${looksLikeMediaUrl(msg)}, regexMatch=${/^\[m[ií]dia\]$/i.test(msg)}`);
                 if (looksLikeMediaUrl(msg) || /^\[m[ií]dia\]$/i.test(msg)) {
                     console.log(`[${st.contato}] Análise: confirmado ("${truncate(msg, 140)}")`);
                     confirmado = true;
                     break;
                 }
             }
+            console.log(`[DEBUG] confirmado after loop: ${confirmado}`);
             if (!confirmado && apiKey) {
                 const allowed = ['confirmado', 'nao_confirmado', 'duvida', 'neutro'];
                 const contexto = novasMsgs.map(s => safeStr(s)).join(' | ');
