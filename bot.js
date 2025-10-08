@@ -6,6 +6,7 @@ const { ensureEstado } = require('./stateManager.js');
 const { loadOptOutMsgs, loadOptInMsgs, isOptOut, isOptIn, preflightOptOut } = require('./optout.js');
 const { setManychatSubscriberId } = require('./db');
 const { sendMessage, sendImage } = require('./senders.js');
+const { criarUsuarioDjango } = require('./services.js');
 const { safeStr, normalizeContato, delay, delayRange, tsNow, randomInt, truncate, FIRST_REPLY_DELAY_MS, BETWEEN_MIN_MS, BETWEEN_MAX_MS } = require('./utils.js');
 const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, promptClassificaOptOut, promptClassificaReoptin } = require('./prompts');
 let log = console;
