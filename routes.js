@@ -120,7 +120,6 @@ function setupRoutes(
   pathModule,
   processarMensagensPendentes,
   inicializarEstado,
-  criarUsuarioDjango,
   salvarContato,
   VERIFY_TOKEN,
   estado
@@ -130,9 +129,6 @@ function setupRoutes(
   }
   if (typeof inicializarEstado === 'function') {
     try { inicializarEstado = require('./bot.js').inicializarEstado; } catch { }
-  }
-  if (typeof criarUsuarioDjango === 'function') {
-    try { criarUsuarioDjango = require('./services.js').criarUsuarioDjango; } catch { }
   }
   app.use('/public', express.static(pathModule.join(__dirname, 'public')));
 
@@ -421,7 +417,7 @@ function setupRoutes(
           'UPDATE contatos SET manychat_subscriber_id = $2 WHERE id = $1',
           [phone, subscriberId]
         );
-        const st = ensureEstado(phone);  // Use ensureEstado para garantir que o estado exista
+        const st = ensureEstado(phone);
         st.manychat_subscriber_id = String(subscriberId);
       } catch (e) {
         console.warn(`[${phone}] Falha ao vincular subscriber_id: ${e.message}`);
