@@ -2,6 +2,7 @@ const express = require('express');
 const axios = require('axios');
 
 const { pool } = require('./db.js');
+const { criarUsuarioDjango } = require('./services.js')
 const { delay, sendMessage, setEtapa: setEtapaBot } = require('./bot.js');
 const { getBotSettings, updateBotSettings, getContatoByPhone } = require('./db.js');
 
