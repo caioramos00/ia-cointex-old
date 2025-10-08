@@ -11,9 +11,6 @@ let log = console;
 const https = require('https');
 axios.defaults.httpsAgent = new https.Agent({ keepAlive: true });
 
-function randomInt(min, max) {
-    return Math.floor(min + Math.random() * (max - min));
-}
 function pickLabelFromResponseData(data, allowed) {
     const S = new Set((allowed || []).map(s => String(s).toLowerCase()));
     let label =
