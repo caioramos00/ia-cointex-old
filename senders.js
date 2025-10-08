@@ -3,7 +3,7 @@ const { delayRange, extraGlobalDelay, tsNow, safeStr, BETWEEN_MIN_MS, BETWEEN_MA
 const { getContatoByPhone, setManychatSubscriberId } = require('./db');  // Adicionei setManychatSubscriberId aqui, pois é usado no resolver
 const { getActiveTransport } = require('./lib/transport/index.js');
 const { preflightOptOut } = require('./optout.js');
-// Note: Para ensureEstado, require('./stateManager.js') quando criado; por agora, use o de bot.js ou mova para utils.js
+const { ensureEstado } = require('./stateManager.js');
 
 async function resolveManychatSubscriberId(contato, modOpt, settingsOpt) {
     const phone = String(contato || '').replace(/\D/g, '');
