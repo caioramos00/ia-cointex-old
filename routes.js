@@ -83,8 +83,6 @@ async function bootstrapFromManychat(
   phone,
   subscriberId,
   inicializarEstado,
-  salvarContato,
-  criarUsuarioDjango,
   estado,
   initialTid = '',
   initialClickType = 'Orgânico'
@@ -295,7 +293,7 @@ function setupRoutes(
           const value = change.value;
           if (!value.messages || !value.messages.length) continue;
           const msg = value.messages[0];
-          const contato = msg.from;  // Declaração original de contato
+          const contato = msg.from;
           if (contato === phoneNumberId) { res.sendStatus(200); return; }
           const isProviderMedia = msg.type !== 'text';
           const texto = msg.type === 'text' ? (msg.text.body || '').trim() : '';
@@ -346,9 +344,7 @@ function setupRoutes(
             } catch { }
           }
           if (!estado[contato]) {
-            const { criarUsuarioDjango } = require('./services.js')
             inicializarEstado(contato, tid, click_type);
-            await criarUsuarioDjango(contato);
             await salvarContato(contato, null, texto || (isProviderMedia ? '[mídia]' : ''), tid, click_type);
           } else {
             await salvarContato(contato, null, texto || (isProviderMedia ? '[mídia]' : ''), tid, click_type);
