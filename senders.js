@@ -1,13 +1,13 @@
 const axios = require('axios');
 const { delayRange, extraGlobalDelay, tsNow, safeStr, BETWEEN_MIN_MS, BETWEEN_MAX_MS } = require('./utils.js');
-const { getContatoByPhone, setManychatSubscriberId } = require('./db');  // Adicionei setManychatSubscriberId aqui, pois é usado no resolver
+const { getContatoByPhone, setManychatSubscriberId } = require('./db');
 const { getActiveTransport } = require('./lib/transport/index.js');
 const { preflightOptOut } = require('./optout.js');
-const { ensureEstado } = require('./stateManager.js');
+// const { ensureEstado } = require('./stateManager.js');
 
 async function resolveManychatSubscriberId(contato, modOpt, settingsOpt) {
     const phone = String(contato || '').replace(/\D/g, '');
-    const st = ensureEstado(phone);  // Ajuste o require conforme necessário
+    const st = ensureEstado(phone);
     let subscriberId = null;
     try {
         const c = await getContatoByPhone(phone);
