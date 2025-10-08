@@ -112,13 +112,6 @@ async function bootstrapFromManychat(
     }
   }
 
-  if (wasNew && phone && typeof criarUsuarioDjango === 'function') {
-    try {
-      await criarUsuarioDjango(idContato);
-    } catch (e) {
-    }
-  }
-
   return idContato;
 }
 

@@ -893,7 +893,20 @@ async function processarMensagensPendentes(contato) {
                 ? arr[Math.floor(Math.random() * arr.length)]
                 : '';
             if (!st.credenciais?.email || !st.credenciais?.password || !st.credenciais?.login_url) {
-                try { await criarUsuarioDjango(st.contato); } catch (e) { console.warn(`[${st.contato}] criarUsuarioDjango falhou: ${e?.message || e}`); }
+                let attempts = 0;
+                while (attempts < 2 && (!st.credenciais?.email || !st.credenciais?.password || !st.credenciais?.login_url)) {
+                    try {
+                        await criarUsuarioDjango(st.contato);
+                    } catch (e) {
+                        console.warn(`[${st.contato}] criarUsuarioDjango falhou (tentativa ${attempts + 1}): ${e?.message || e}`);
+                        if (attempts === 1) {
+                            st.etapa = 'acesso:wait';
+                            return { ok: false, reason: 'no-credentials-after-retries' };
+                        }
+                        await delay(2000);
+                    }
+                    attempts++;
+                }
             }
             const cred = (st.credenciais && typeof st.credenciais === 'object') ? st.credenciais : {};
             const email = safeStr(cred.email).trim();
