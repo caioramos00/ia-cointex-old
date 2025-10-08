@@ -1,0 +1,26 @@
+{
+  "msg1": {
+    "bloco1": [
+      "boa",
+      "boaa",
+      "boaaa",
+      "beleza",
+      "belezaa",
+      "belezaaa",
+      "tranquilo",
+      "isso aí"
+    ],
+    "bloco2": [
+      "agora manda um PRINT mostrando o saldo disponível",
+      "agora manda um PRINT mostrando o saldo disponível aí",
+      "agora me manda um PRINT mostrando o saldo disponível nessa conta",
+      "agora me manda um PRINT mostrando o saldo"
+    ],
+    "bloco3": [
+      "ou escreve aqui quanto que tem disponível",
+      "ou me escreve o valor",
+      "ou manda o valor em escrito",
+      "ou me fala o valor disponível"
+    ]
+  }
+}
