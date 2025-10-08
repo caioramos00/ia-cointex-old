@@ -37,10 +37,6 @@ function pickLabelFromResponseData(data, allowed) {
     label = String(label || '').trim().toLowerCase();
     return S.has(label) ? label : null;
 }
-function truncate(s, n = 600) {
-    const str = String(s || '');
-    return str.length > n ? str.slice(0, n) + '…[truncated]' : str;
-}
 function extractTextForLog(data) {
     try {
         if (typeof data?.output_text === 'string' && data.output_text.trim()) return data.output_text;
