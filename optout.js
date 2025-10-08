@@ -152,7 +152,7 @@ async function preflightOptOut(st) {
                     (pick(p.msg2b5) ? `, ${pick(p.msg2b5)}` : '');
             }
             if (texto) {
-                const { sendMessage } = require('./bot.js');  // Ajuste: Use senders.js se sendMessage for movido para lá mais tarde; por agora, assuma que será resolvido.
+                const { sendMessage } = require('./senders.js');
                 await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                 await sendMessage(st.contato, texto, { force: true });
             }
