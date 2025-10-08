@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const { ensureEstado } = require('./stateManager.js');
+const { loadOptOutMsgs, loadOptInMsgs, _canonicalizeEtapa, isOptOut, isOptIn, preflightOptOut } = require('./optout.js');
 const { getActiveTransport } = require('./lib/transport/index.js');
 const { getContatoByPhone, setManychatSubscriberId } = require('./db');
 const { sendMessage, sendImage } = require('./senders.js');
