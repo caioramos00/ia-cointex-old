@@ -1,5 +1,28 @@
 const { normalizeContato } = require('./utils.js');
 const estadoContatos = require('./state.js');
+const { _canonicalizeEtapa } = require('./optout.js');
+const { criarUsuarioDjango } = require('./services.js');
+
+const KNOWN_ETAPAS = new Set([
+    'abertura:send',
+    'abertura:wait',
+    'interesse:send',
+    'interesse:wait',
+    'instrucoes:send',
+    'instrucoes:wait',
+    'acesso:send',
+    'acesso:wait',
+    'confirmacao:send',
+    'confirmacao:wait',
+    'saque:send',
+    'saque:wait',
+    'validacao:send',
+    'validacao:wait',
+    'validacao:cooldown',
+    'conversao:send',
+    'conversao:wait',
+    'encerrado:wait'
+]);
 
 function _resetRuntime(st, opts = {}) {
     st.enviandoMensagens = false;
@@ -48,7 +71,32 @@ function ensureEstado(contato) {
     return estadoContatos[normalized];
 }
 
+async function setEtapa(contato, etapa, opts = {}) {
+    const target = _canonicalizeEtapa(String(etapa || '').trim());
+    if (!KNOWN_ETAPAS.has(target)) {
+        throw new Error(`etapa inválida: "${target}"`);
+    }
+    const st = ensureEstado(contato);
+    _resetRuntime(st, opts);
+    st.etapa = target;
+    if (opts.autoCreateUser && !st.credenciais &&
+        (target.startsWith('acesso:') ||
+            target.startsWith('confirmacao:') ||
+            target.startsWith('saque:') ||
+            target.startsWith('validacao:') ||
+            target.startsWith('conversao:'))) {
+        try {
+            await criarUsuarioDjango(contato);
+        } catch (e) {
+            console.warn(`[${st.contato}] setEtapa:autoCreateUser falhou: ${e?.message || e}`);
+        }
+    }
+    return { ok: true, contato: st.contato, etapa: st.etapa };
+}
+
 module.exports = {
+    KNOWN_ETAPAS,
+    _resetRuntime,
     ensureEstado,
-    _resetRuntime
+    setEtapa
 };

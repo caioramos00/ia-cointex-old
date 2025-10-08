@@ -2,10 +2,9 @@
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
-const { ensureEstado, _resetRuntime } = require('./stateManager.js');
-const { loadOptOutMsgs, loadOptInMsgs, _canonicalizeEtapa, isOptOut, isOptIn, preflightOptOut } = require('./optout.js');
-const { getActiveTransport } = require('./lib/transport/index.js');
-const { getContatoByPhone, setManychatSubscriberId } = require('./db');
+const { ensureEstado } = require('./stateManager.js');
+const { loadOptOutMsgs, loadOptInMsgs, isOptOut, isOptIn, preflightOptOut } = require('./optout.js');
+const { setManychatSubscriberId } = require('./db');
 const { sendMessage, sendImage } = require('./senders.js');
 const { safeStr, normalizeContato, delay, delayRange, tsNow, randomInt, truncate, FIRST_REPLY_DELAY_MS, BETWEEN_MIN_MS, BETWEEN_MAX_MS } = require('./utils.js');
 const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, promptClassificaOptOut, promptClassificaReoptin } = require('./prompts');
@@ -247,47 +246,6 @@ async function criarUsuarioDjango(contato) {
     }
 }
 
-async function resolveManychatWaSubscriberId(contato, modOpt, settingsOpt) {
-    const phone = String(contato || '').replace(/\D/g, '');
-    console.log(`Debug resolve: phone=${phone}`);
-    const st = ensureEstado(phone);
-    let subscriberId = null;
-    try {
-        const c = await getContatoByPhone(phone);
-        if (c?.manychat_subscriber_id) subscriberId = String(c.manychat_subscriber_id);
-    } catch { }
-    if (!subscriberId && st?.manychat_subscriber_id) subscriberId = String(st.manychat_subscriber_id);
-    const { mod, settings } = (modOpt && settingsOpt) ? { mod: modOpt, settings: settingsOpt } : await getActiveTransport();
-    const token = (settings && settings.manychat_api_token) || process.env.MANYCHAT_API_TOKEN || '';
-    if (!token) return subscriberId || null;
-    const phonePlus = phone.startsWith('+') ? phone : `+${phone}`;
-    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-    const call = async (method, url, data) => {
-        try {
-            return await axios({ method, url, data, headers, timeout: 12000, validateStatus: () => true });
-        } catch { return { status: 0, data: null }; }
-    };
-    const tries = [
-        { m: 'get', u: `https://api.manychat.com/whatsapp/subscribers/findByPhone?phone=${encodeURIComponent(phonePlus)}` },
-        { m: 'post', u: `https://api.manychat.com/whatsapp/subscribers/findByPhone`, p: { phone: phonePlus } },
-    ];
-    for (const t of tries) {
-        const r = await call(t.m, t.u, t.p);
-        const d = r?.data || {};
-        const id = d?.data?.id || d?.data?.subscriber_id || d?.subscriber?.id || d?.id || null;
-        if (r.status >= 200 && r.status < 300 && id) {
-            subscriberId = String(id);
-            break;
-        }
-    }
-    if (subscriberId) {
-        try { await setManychatSubscriberId(phone, subscriberId); } catch { }
-        st.manychat_subscriber_id = subscriberId;
-        console.log(`[${phone}] manychat WA subscriber_id resolvido: ${subscriberId}`);
-        return subscriberId;
-    }
-    return null;
-}
 const sentHashesGlobal = new Set();
 function hashText(s) { let h = 0, i, chr; const str = String(s); if (str.length === 0) return '0'; for (i = 0; i < str.length; i++) { chr = str.charCodeAt(i); h = ((h << 5) - h) + chr; h |= 0; } return String(h); }
 function chooseUnique(generator, st) { const maxTries = 200; for (let i = 0; i < maxTries; i++) { const text = generator(); const h = hashText(text); if (!sentHashesGlobal.has(h) && !st.sentHashes.has(h)) { sentHashesGlobal.add(h); st.sentHashes.add(h); return text; } } return null; }
@@ -1705,50 +1663,6 @@ async function processarMensagensPendentes(contato) {
     }
 }
 
-const KNOWN_ETAPAS = new Set([
-    'abertura:send',
-    'abertura:wait',
-    'interesse:send',
-    'interesse:wait',
-    'instrucoes:send',
-    'instrucoes:wait',
-    'acesso:send',
-    'acesso:wait',
-    'confirmacao:send',
-    'confirmacao:wait',
-    'saque:send',
-    'saque:wait',
-    'validacao:send',
-    'validacao:wait',
-    'validacao:cooldown',
-    'conversao:send',
-    'conversao:wait',
-    'encerrado:wait'
-]);
-
-async function setEtapa(contato, etapa, opts = {}) {
-    const target = _canonicalizeEtapa(String(etapa || '').trim());
-    if (!KNOWN_ETAPAS.has(target)) {
-        throw new Error(`etapa inválida: "${target}"`);
-    }
-    const st = ensureEstado(contato);
-    _resetRuntime(st, opts);
-    st.etapa = target;
-    if (opts.autoCreateUser && !st.credenciais &&
-        (target.startsWith('acesso:') ||
-            target.startsWith('confirmacao:') ||
-            target.startsWith('saque:') ||
-            target.startsWith('validacao:') ||
-            target.startsWith('conversao:'))) {
-        try {
-            await criarUsuarioDjango(contato);
-        } catch (e) {
-            console.warn(`[${st.contato}] setEtapa:autoCreateUser falhou: ${e?.message || e}`);
-        }
-    }
-    return { ok: true, contato: st.contato, etapa: st.etapa };
-}
-
 module.exports = {
     init,
     handleManyChatWebhook,
@@ -1757,6 +1671,5 @@ module.exports = {
     inicializarEstado,
     criarUsuarioDjango,
     delay,
-    setEtapa,
     _utils: { normalizeContato },
 };
