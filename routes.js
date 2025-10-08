@@ -2,8 +2,9 @@ const express = require('express');
 const axios = require('axios');
 
 const { pool } = require('./db.js');
-const { delay, setEtapa: setEtapaBot } = require('./bot.js');
+const { delay } = require('./bot.js');
 const { getBotSettings, updateBotSettings, getContatoByPhone } = require('./db.js');
+const { setEtapa } = require('./stateManager.js');
 
 const LANDING_URL = 'https://grupo-whatsapp-trampos-lara-2025.onrender.com';
 
@@ -567,7 +568,7 @@ function setupRoutes(
         };
       }
 
-      const out = await setEtapaBot(contato, etapa, opts);
+      const out = await setEtapa(contato, etapa, opts);
 
       try {
         await pool.query('UPDATE contatos SET etapa_atual = $2 WHERE id = $1', [contato, etapa]);
