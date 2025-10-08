@@ -2,7 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
-const estadoContatos = require('./state.js');
+const { ensureEstado } = require('./stateManager.js');
 const { getActiveTransport } = require('./lib/transport/index.js');
 const { getContatoByPhone, setManychatSubscriberId } = require('./db');
 const { sendMessage, sendImage } = require('./senders.js');
@@ -195,69 +195,7 @@ async function finalizeOptOutBatchAtEnd(st) {
     }
     return true;
 }
-function ensureEstado(contato) {
-    const key = normalizeContato(contato) || 'desconhecido';
-    if (!estadoContatos[key]) {
-        estadoContatos[key] = {
-            contato: key,
-            etapa: 'abertura:send',
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-            mensagensPendentes: [],
-            mensagensDesdeSolicitacao: [],
-            enviandoMensagens: false,
-            tid: '',
-            click_type: 'Orgânico',
-            sentHashes: new Set(),
-            classificacaoAceite: null,
-            classesSinceSolicitacao: [],
-            lastClassifiedIdx: { interesse: 0, acesso: 0, confirmacao: 0, saque: 0, validacao: 0, conversao: 0 },
-            saquePediuPrint: false,
-            validacaoAwaitFirstMsg: false,
-            validacaoTimeoutUntil: 0,
-            conversaoBatch: 0,
-            conversaoAwaitMsg: false,
-            optOutCount: 0,
-            permanentlyBlocked: false,
-            reoptinActive: false,
-            reoptinLotsTried: 0,
-            reoptinBuffer: [],
-            reoptinCount: 0,
-            optedOutAtTs: 0,
-            _reoptinInitTs: 0,
-            stageCursor: {}
-        };
-    } else {
-        const st = estadoContatos[key];
-        st.updatedAt = Date.now();
-        if (!Array.isArray(st.mensagensPendentes)) st.mensagensPendentes = [];
-        if (!Array.isArray(st.mensagensDesdeSolicitacao)) st.mensagensDesdeSolicitacao = [];
-        if (!(st.sentHashes instanceof Set)) st.sentHashes = new Set(Array.isArray(st.sentHashes) ? st.sentHashes : []);
-        if (!st.lastClassifiedIdx) st.lastClassifiedIdx = { interesse: 0, acesso: 0, confirmacao: 0, saque: 0, validacao: 0, conversao: 0 };
-        for (const k of ['interesse', 'acesso', 'confirmacao', 'saque', 'validacao', 'conversao']) {
-            if (typeof st.lastClassifiedIdx[k] !== 'number' || st.lastClassifiedIdx[k] < 0) st.lastClassifiedIdx[k] = 0;
-        }
-        if (typeof st.saquePediuPrint !== 'boolean') st.saquePediuPrint = false;
-        if (typeof st.validacaoAwaitFirstMsg !== 'boolean') st.validacaoAwaitFirstMsg = false;
-        if (typeof st.validacaoTimeoutUntil !== 'number') st.validacaoTimeoutUntil = 0;
-        if (typeof st.conversaoBatch !== 'number') st.conversaoBatch = 0;
-        if (typeof st.conversaoAwaitMsg !== 'boolean') st.conversaoAwaitMsg = false;
-        if (typeof st.optOutCount !== 'number') st.optOutCount = 0;
-        if (typeof st.permanentlyBlocked !== 'boolean') st.permanentlyBlocked = false;
-        if (typeof st.reoptinActive !== 'boolean') st.reoptinActive = false;
-        if (typeof st.reoptinLotsTried !== 'number') st.reoptinLotsTried = 0;
-        if (!Array.isArray(st.reoptinBuffer)) st.reoptinBuffer = [];
-        if (typeof st.reoptinCount !== 'number') st.reoptinCount = 0;
-        if (!st.stageCursor || typeof st.stageCursor !== 'object') st.stageCursor = {};
-        if (typeof st.optoutLotsTried !== 'number') st.optoutLotsTried = 0;
-        if (!Array.isArray(st.optoutBuffer)) st.optoutBuffer = [];
-        if (!('optoutBatchStage' in st)) st.optoutBatchStage = null;
-        if (typeof st._optoutSeenIdx !== 'number') st._optoutSeenIdx = 0;
-        if (typeof st.optedOutAtTs !== 'number') st.optedOutAtTs = 0;
-        if (typeof st._reoptinInitTs !== 'number') st._reoptinInitTs = 0;
-    }
-    return estadoContatos[key];
-}
+
 function inicializarEstado(contato, maybeTid, maybeClickType) {
     const st = ensureEstado(contato);
     if (typeof maybeTid === 'string') st.tid = maybeTid || st.tid || '';
@@ -1854,5 +1792,5 @@ module.exports = {
     criarUsuarioDjango,
     delay,
     setEtapa,
-    _utils: { ensureEstado, normalizeContato },
+    _utils: { normalizeContato },
 };
