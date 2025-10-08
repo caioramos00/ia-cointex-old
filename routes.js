@@ -458,8 +458,6 @@ function setupRoutes(
         phone,
         subscriberId,
         inicializarEstado,
-        salvarContato,
-        criarUsuarioDjango,
         estado,
         finalTid,
         finalClickType
