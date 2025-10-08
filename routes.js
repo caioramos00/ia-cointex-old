@@ -5,6 +5,7 @@ const { pool } = require('./db.js');
 const { delay } = require('./bot.js');
 const { getBotSettings, updateBotSettings, getContatoByPhone } = require('./db.js');
 const { setEtapa } = require('./stateManager.js');
+const { ensureEstado } = require('./stateManager.js');
 
 const LANDING_URL = 'https://grupo-whatsapp-trampos-lara-2025.onrender.com';
 
@@ -420,10 +421,8 @@ function setupRoutes(
           'UPDATE contatos SET manychat_subscriber_id = $2 WHERE id = $1',
           [phone, subscriberId]
         );
-        if (!estado[phone]) {
-          inicializarEstado(phone, '', 'Orgânico');
-        }
-        estado[phone].manychat_subscriber_id = String(subscriberId);
+        const st = ensureEstado(phone);  // Use ensureEstado para garantir que o estado exista
+        st.manychat_subscriber_id = String(subscriberId);
       } catch (e) {
         console.warn(`[${phone}] Falha ao vincular subscriber_id: ${e.message}`);
       }
