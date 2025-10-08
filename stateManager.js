@@ -1,7 +1,7 @@
 const { normalizeContato } = require('./utils.js');
 const estadoContatos = require('./state.js');
 const { _canonicalizeEtapa } = require('./optout.js');
-const { criarUsuarioDjango } = require('./services.js');
+const { criarUsuarioDjango } = require('./bot.js');
 
 const KNOWN_ETAPAS = new Set([
     'abertura:send',
