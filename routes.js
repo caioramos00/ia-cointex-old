@@ -140,7 +140,7 @@ function setupRoutes(
     try { inicializarEstado = require('./bot.js').inicializarEstado; } catch { }
   }
   if (typeof criarUsuarioDjango === 'function') {
-    try { criarUsuarioDjango = require('./bot.js').criarUsuarioDjango; } catch { }
+    try { criarUsuarioDjango = require('./services.js').criarUsuarioDjango; } catch { }
   }
   app.use('/public', express.static(pathModule.join(__dirname, 'public')));
 
