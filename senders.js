@@ -114,62 +114,144 @@ async function sendImage(contato, urlOrItems, captionOrOpts, opts = {}) {
     if (paused) return { ok: false, reason: 'paused-by-optout' };
     const { mod, settings } = await getActiveTransport();
     const provider = mod?.name || 'unknown';
-    if (provider !== 'manychat') {
-        console.warn(`[${contato}] sendImage: provider=${provider} não suportado (esperado manychat).`);
-        return { ok: false, reason: 'unsupported-provider' };
-    }
-    const token = settings?.manychat_api_token || process.env.MANYCHAT_API_TOKEN || '';
-    if (!token) throw new Error('ManyChat API token ausente');
-    const subscriberId = await resolveManychatSubscriberId(contato, mod, settings);
-    if (!subscriberId) throw new Error('subscriber_id ausente');
-    const sendOneByFields = async ({ url, caption }) => {
-        if (!opts.fields?.image) return { ok: false, reason: 'missing-field-name' };
-        const r = await updateManyChatCustomFieldByName(subscriberId, opts.fields.image, url, token);
-        if (!r.ok) return { ok: false, reason: 'set-field-failed' };
-        console.log(`[${contato}] ManyChat: ${opts.fields.image} atualizado -> fluxo disparado. url="${url}" caption_len=${(caption || '').length}`);
-        return { ok: true, provider: 'manychat', mechanism: 'manychat_fields' };
-    };
-    const sendOneByFlow = async ({ url, caption }) => {
-        if (!opts.flowNs) return { ok: false, reason: 'missing-flow-ns' };
-        const payload = {
-            subscriber_id: subscriberId,
-            flow_ns: opts.flowNs,
-            variables: {
-                contact_: contato,
-                image_url_: url,
-                caption_: caption || '',
-                ...opts.flowVars,
+    try {
+        if (provider === 'manychat') {
+            const token = settings?.manychat_api_token || process.env.MANYCHAT_API_TOKEN || '';
+            if (!token) throw new Error('ManyChat API token ausente');
+            const subscriberId = await resolveManychatSubscriberId(contato, mod, settings);
+            if (!subscriberId) throw new Error('subscriber_id ausente');
+            const sendOneByFields = async ({ url, caption }) => {
+                if (!opts.fields?.image) return { ok: false, reason: 'missing-field-name' };
+                const r = await updateManyChatCustomFieldByName(subscriberId, opts.fields.image, url, token);
+                if (!r.ok) return { ok: false, reason: 'set-field-failed' };
+                console.log(`[${contato}] ManyChat: ${opts.fields.image} atualizado -> fluxo disparado. url="${url}" caption_len=${(caption || '').length}`);
+                return { ok: true, provider: 'manychat', mechanism: 'manychat_fields' };
+            };
+            const sendOneByFlow = async ({ url, caption }) => {
+                if (!opts.flowNs) return { ok: false, reason: 'missing-flow-ns' };
+                const payload = {
+                    subscriber_id: subscriberId,
+                    flow_ns: opts.flowNs,
+                    variables: {
+                        contact_: contato,
+                        image_url_: url,
+                        caption_: caption || '',
+                        ...opts.flowVars,
+                    }
+                };
+                const r = await axios.post('https://api.manychat.com/fb/sending/sendFlow', payload, {
+                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    timeout: 60000,
+                    validateStatus: () => true
+                });
+                console.log(`[ManyChat][sendFlow] http=${r.status} body=${JSON.stringify(r.data)}`);
+                if (r.status >= 200 && r.status < 300 && r.data?.status === 'success') {
+                    return { ok: true, provider: 'manychat', mechanism: 'flow', flowNs: opts.flowNs };
+                }
+                return { ok: false, reason: 'flow-send-failed', details: r.data };
+            };
+            const sender = (opts.mechanism === 'flow' || (!!opts.flowNs)) ? sendOneByFlow : sendOneByFields;
+            const results = [];
+            for (let i = 0; i < items.length; i++) {
+                const { url, caption } = items[i];
+                const r = await sender({ url: url || '', caption });
+                results.push(r);
+                if (await preflightOptOut(st)) {
+                    results.push({ ok: false, reason: 'paused-by-optout-mid-batch' });
+                    break;
+                }
+                if (i < items.length - 1) {
+                    const [minMs, maxMs] = opts.delayBetweenMs;
+                    await delayRange(minMs, maxMs);
+                }
             }
-        };
-        const r = await axios.post('https://api.manychat.com/fb/sending/sendFlow', payload, {
-            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            timeout: 60000,
-            validateStatus: () => true
-        });
-        console.log(`[ManyChat][sendFlow] http=${r.status} body=${JSON.stringify(r.data)}`);
-        if (r.status >= 200 && r.status < 300 && r.data?.status === 'success') {
-            return { ok: true, provider: 'manychat', mechanism: 'flow', flowNs: opts.flowNs };
+            const okAll = results.every(r => r?.ok);
+            return isArray ? { ok: okAll, results } : results[0];
+        } else if (provider === 'meta') {
+            const token = settings?.meta_access_token;
+            const phoneNumberId = settings?.meta_phone_number_id;
+            if (!token || !phoneNumberId) {
+                console.warn(`[${contato}] sendImage: Meta credentials missing (token: ${!!token}, phoneNumberId: ${!!phoneNumberId})`);
+                return { ok: false, reason: 'missing-meta-credentials' };
+            }
+
+            const version = settings?.meta_api_version || 'v24.0';  // Atual em outubro de 2025
+            const apiUrl = `https://graph.facebook.com/${version}/${phoneNumberId}/messages`;
+
+            const sendOneMeta = async ({ url, caption }) => {
+                if (!url || typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
+                    console.warn(`[${contato}] sendImage: Invalid URL for meta: ${truncate(url, 50)}`);
+                    return { ok: false, reason: 'invalid-url' };
+                }
+
+                const payload = {
+                    messaging_product: 'whatsapp',
+                    recipient_type: 'individual',
+                    to: String(contato),
+                    type: 'image',
+                    image: { link: url }
+                };
+                if (caption && typeof caption === 'string' && caption.trim()) {
+                    payload.image.caption = caption.trim();
+                }
+
+                try {
+                    const r = await axios.post(apiUrl, payload, {
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        timeout: 15000,
+                        validateStatus: () => true
+                    });
+
+                    console.log(`[${contato}] sendImage via meta: HTTP ${r.status} body=${JSON.stringify(r.data).slice(0, 200)}`);
+
+                    if (r.status >= 200 && r.status < 300 && r.data?.messages?.[0]?.id) {
+                        return {
+                            ok: true,
+                            provider: 'meta',
+                            mechanism: 'direct',
+                            message_id: r.data.messages[0].id
+                        };
+                    } else {
+                        return {
+                            ok: false,
+                            reason: 'api-error',
+                            status: r.status,
+                            details: r.data?.error || r.data
+                        };
+                    }
+                } catch (e) {
+                    console.error(`[${contato}] sendImage via meta erro: ${e?.message || e}`);
+                    return { ok: false, reason: 'network-error', error: e?.message || String(e) };
+                }
+            };
+
+            const results = [];
+            for (let i = 0; i < items.length; i++) {
+                const r = await sendOneMeta(items[i]);
+                results.push(r);
+                if (await preflightOptOut(st)) {
+                    results.push({ ok: false, reason: 'paused-by-optout-mid-batch' });
+                    break;
+                }
+                if (i < items.length - 1) {
+                    const [minMs, maxMs] = opts.delayBetweenMs;
+                    await delayRange(minMs, maxMs);
+                }
+            }
+
+            const okAll = results.every(r => r?.ok);
+            return isArray ? { ok: okAll, results } : results[0];
+        } else {
+            console.warn(`[${contato}] sendImage: provider=${provider} não suportado (esperado manychat ou meta).`);
+            return { ok: false, reason: 'unsupported-provider' };
         }
-        return { ok: false, reason: 'flow-send-failed', details: r.data };
-    };
-    const sender = (opts.mechanism === 'flow' || (!!opts.flowNs)) ? sendOneByFlow : sendOneByFields;
-    const results = [];
-    for (let i = 0; i < items.length; i++) {
-        const { url, caption } = items[i];
-        const r = await sender({ url: url || '', caption });
-        results.push(r);
-        if (await preflightOptOut(st)) {
-            results.push({ ok: false, reason: 'paused-by-optout-mid-batch' });
-            break;
-        }
-        if (i < items.length - 1) {
-            const [minMs, maxMs] = opts.delayBetweenMs;
-            await delayRange(minMs, maxMs);
-        }
+    } catch (e) {
+        console.error(`[${contato}] sendImage erro geral: ${e?.message || e}`);
+        return { ok: false, reason: 'general-error', error: e?.message || String(e) };
     }
-    if (!isArray) return results[0];
-    const okAll = results.every(r => r?.ok);
-    return { ok: okAll, results };
 }
 
 async function sendManychatWaFlow(contato, flowNs, dataOpt = {}) {

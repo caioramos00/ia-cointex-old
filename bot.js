@@ -1523,15 +1523,28 @@ async function processarMensagensPendentes(contato) {
 
                 await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
 
-                const FLOW_NS_IMAGEM = 'content20251005164000_207206';
-                const r2 = await sendImage(st.contato, '', {
-                    flowNs: FLOW_NS_IMAGEM,
-                    caption: 'Comprovante de transferência'
-                });
+                // Branching para envio de imagem baseado no provider
+                const { mod, settings } = await getActiveTransport();
+                const provider = mod?.name || 'unknown';
+                let r2;
+                if (provider === 'manychat') {
+                    const FLOW_NS_IMAGEM = 'content20251005164000_207206';
+                    r2 = await sendImage(st.contato, '', {
+                        flowNs: FLOW_NS_IMAGEM,
+                        caption: 'Comprovante de transferência'
+                    });
+                } else if (provider === 'meta') {
+                    const imgUrl = 'https://images2.imgbox.com/b6/bf/GC6mll55_o.jpg';
+                    r2 = await sendImage(st.contato, imgUrl, {
+                        caption: 'Comprovante de transferência'
+                    });
+                } else {
+                    console.warn(`[${st.contato}] Provider não suportado para imagem: ${provider}`);
+                    r2 = { ok: false, reason: 'unsupported-provider' };
+                }
 
                 if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-mid-batch' };
                 if (!r2?.ok) return { ok: false, reason: r2?.reason || 'image-send-failed' };
-
 
                 await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                 if (m3) {
