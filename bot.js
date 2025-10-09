@@ -1312,73 +1312,74 @@ async function processarMensagensPendentes(contato) {
                 const _prev = st.etapa;
                 st.etapa = 'validacao:send';
                 console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
-                return await processarMensagensPendentes(contato);  // Chamada recursiva para processar imediatamente a nova etapa
-            }
-            let relevante = false;
-            if (apiKey) {
-                const contexto = novasMsgs.map(m => safeStr(m?.texto || '')).join(' | ');
-                const structuredPrompt =
-                    `${promptClassificaRelevancia(contexto, false)}\n\n` +
-                    `Output only this valid JSON format with double quotes around keys and values, nothing else: ` +
-                    `{"label": "relevante"} or {"label": "irrelevante"}`;
-                const callOnce = async (maxTok) => {
-                    let r;
+                return await processarMensagensPendentes(contato); // Chamada recursiva para processar imediatamente a nova etapa
+            } else {
+                let relevante = false;
+                if (apiKey) {
+                    const contexto = novasMsgs.map(m => safeStr(m?.texto || '')).join(' | ');
+                    const structuredPrompt =
+                        `${promptClassificaRelevancia(contexto, false)}\n\n` +
+                        `Output only this valid JSON format with double quotes around keys and values, nothing else: ` +
+                        `{"label": "relevante"} or {"label": "irrelevante"}`;
+                    const callOnce = async (maxTok) => {
+                        let r;
+                        try {
+                            r = await axios.post(
+                                'https://api.openai.com/v1/responses',
+                                { model: 'gpt-5', input: structuredPrompt, max_output_tokens: maxTok, reasoning: { effort: 'low' } },
+                                { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 15000, validateStatus: () => true }
+                            );
+                        } catch {
+                            return { status: 0, picked: null };
+                        }
+                        const data = r.data;
+                        let rawText = '';
+                        if (Array.isArray(data?.output)) {
+                            data.output.forEach(item => {
+                                if (item.type === 'message' && Array.isArray(item.content) && item.content[0]?.text) {
+                                    rawText = item.content[0].text;
+                                }
+                            });
+                        }
+                        if (!rawText) rawText = extractTextForLog(data);
+                        rawText = String(rawText || '').trim();
+                        let picked = null;
+                        if (rawText) {
+                            try { const parsed = JSON.parse(rawText); if (parsed && typeof parsed.label === 'string') picked = parsed.label.toLowerCase().trim(); }
+                            catch { const m = rawText.match(/(?:"label"|label)\s*:\s*"([^"]+)"/i); if (m && m[1]) picked = m[1].toLowerCase().trim(); }
+                        }
+                        if (!picked) picked = pickLabelFromResponseData(data, ['relevante', 'irrelevante']);
+                        return { status: r.status, picked };
+                    };
                     try {
-                        r = await axios.post(
-                            'https://api.openai.com/v1/responses',
-                            { model: 'gpt-5', input: structuredPrompt, max_output_tokens: maxTok, reasoning: { effort: 'low' } },
-                            { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 15000, validateStatus: () => true }
-                        );
-                    } catch {
-                        return { status: 0, picked: null };
-                    }
-                    const data = r.data;
-                    let rawText = '';
-                    if (Array.isArray(data?.output)) {
-                        data.output.forEach(item => {
-                            if (item.type === 'message' && Array.isArray(item.content) && item.content[0]?.text) {
-                                rawText = item.content[0].text;
-                            }
-                        });
-                    }
-                    if (!rawText) rawText = extractTextForLog(data);
-                    rawText = String(rawText || '').trim();
-                    let picked = null;
-                    if (rawText) {
-                        try { const parsed = JSON.parse(rawText); if (parsed && typeof parsed.label === 'string') picked = parsed.label.toLowerCase().trim(); }
-                        catch { const m = rawText.match(/(?:"label"|label)\s*:\s*"([^"]+)"/i); if (m && m[1]) picked = m[1].toLowerCase().trim(); }
-                    }
-                    if (!picked) picked = pickLabelFromResponseData(data, ['relevante', 'irrelevante']);
-                    return { status: r.status, picked };
-                };
-                try {
-                    let resp = await callOnce(64);
-                    if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) resp = await callOnce(256);
-                    relevante = (resp.status >= 200 && resp.status < 300 && resp.picked === 'relevante');
-                    console.log(`[${st.contato}] Análise: ${resp.picked || (relevante ? 'relevante' : 'irrelevante')} ("${truncate(contexto, 140)}")`);
-                } catch { }
-            }
-            st.lastClassifiedIdx.saque = 0;
-            st.mensagensPendentes = [];
-            if (relevante) {
-                const saquePath = path.join(__dirname, 'content', 'saque.json');
-                let raw = fs.readFileSync(saquePath, 'utf8');
-                raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
-                const parsed = JSON.parse(raw);
-                const lista = Array.isArray(parsed?.msgprint) ? parsed.msgprint : [];
-                if (!lista.length) return { ok: true, classe: 'aguardando_imagem' };
-                if (!st.saquePediuPrint) {
-                    const pickLocal = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
-                    const m = pickLocal(lista);
-                    await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-                    const r = m ? await sendMessage(st.contato, m) : { ok: true };
-                    if (!r?.ok) return { ok: true, paused: r?.reason || 'send-skipped' };
-                    st.saquePediuPrint = true;
-                    return { ok: true, classe: 'relevante' };
+                        let resp = await callOnce(64);
+                        if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) resp = await callOnce(256);
+                        relevante = (resp.status >= 200 && resp.status < 300 && resp.picked === 'relevante');
+                        console.log(`[${st.contato}] Análise: ${resp.picked || (relevante ? 'relevante' : 'irrelevante')} ("${truncate(contexto, 140)}")`);
+                    } catch { }
                 }
-                return { ok: true, classe: 'aguardando_imagem' };
+                st.lastClassifiedIdx.saque = 0;
+                st.mensagensPendentes = [];
+                if (relevante) {
+                    const saquePath = path.join(__dirname, 'content', 'saque.json');
+                    let raw = fs.readFileSync(saquePath, 'utf8');
+                    raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
+                    const parsed = JSON.parse(raw);
+                    const lista = Array.isArray(parsed?.msgprint) ? parsed.msgprint : [];
+                    if (!lista.length) return { ok: true, classe: 'aguardando_imagem' };
+                    if (!st.saquePediuPrint) {
+                        const pickLocal = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
+                        const m = pickLocal(lista);
+                        await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+                        const r = m ? await sendMessage(st.contato, m) : { ok: true };
+                        if (!r?.ok) return { ok: true, paused: r?.reason || 'send-skipped' };
+                        st.saquePediuPrint = true;
+                        return { ok: true, classe: 'relevante' };
+                    }
+                    return { ok: true, classe: 'aguardando_imagem' };
+                }
+                return { ok: true, classe: 'irrelevante' };
             }
-            return { ok: true, classe: 'irrelevante' };
         }
 
         if (st.etapa === 'validacao:send') {
