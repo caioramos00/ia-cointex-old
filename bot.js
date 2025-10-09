@@ -1312,7 +1312,8 @@ async function processarMensagensPendentes(contato) {
                 const _prev = st.etapa;
                 st.etapa = 'validacao:send';
                 console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
-                return await processarMensagensPendentes(contato); // Chamada recursiva para processar imediatamente a nova etapa
+                st.enviandoMensagens = false;
+                return await processarMensagensPendentes(contato);
             } else {
                 let relevante = false;
                 if (apiKey) {
