@@ -1281,24 +1281,20 @@ async function processarMensagensPendentes(contato) {
             if (!Array.isArray(st.mensagensPendentes) || st.mensagensPendentes.length === 0) {
                 return { ok: true, noop: 'waiting-user' };
             }
-
             const totalPend = st.mensagensPendentes.length;
             const startIdx = Math.min(totalPend, Math.max(0, Number(st.lastClassifiedIdx?.saque || 0)));
             const novasMsgs = st.mensagensPendentes.slice(startIdx);
-
             if (novasMsgs.length === 0) {
                 st.mensagensPendentes = [];
                 st.lastClassifiedIdx.saque = 0;
                 return { ok: true, noop: 'no-new-messages' };
             }
-
             const apiKey = process.env.OPENAI_API_KEY;
             const looksLikeMediaUrl = (s) => {
                 const n = String(s || '');
                 return /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(n)
                     || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
             };
-
             let temImagem = false;
             for (const m of novasMsgs) {
                 const msg = safeStr(m?.texto || '').trim();
@@ -1308,7 +1304,6 @@ async function processarMensagensPendentes(contato) {
                     break;
                 }
             }
-
             if (temImagem) {
                 st.lastClassifiedIdx.saque = 0;
                 st.mensagensPendentes = [];
@@ -1317,8 +1312,8 @@ async function processarMensagensPendentes(contato) {
                 const _prev = st.etapa;
                 st.etapa = 'validacao:send';
                 console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
+                return await processarMensagensPendentes(contato);  // Chamada recursiva para processar imediatamente a nova etapa
             }
-
             let relevante = false;
             if (apiKey) {
                 const contexto = novasMsgs.map(m => safeStr(m?.texto || '')).join(' | ');
@@ -1326,7 +1321,6 @@ async function processarMensagensPendentes(contato) {
                     `${promptClassificaRelevancia(contexto, false)}\n\n` +
                     `Output only this valid JSON format with double quotes around keys and values, nothing else: ` +
                     `{"label": "relevante"} or {"label": "irrelevante"}`;
-
                 const callOnce = async (maxTok) => {
                     let r;
                     try {
@@ -1357,7 +1351,6 @@ async function processarMensagensPendentes(contato) {
                     if (!picked) picked = pickLabelFromResponseData(data, ['relevante', 'irrelevante']);
                     return { status: r.status, picked };
                 };
-
                 try {
                     let resp = await callOnce(64);
                     if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) resp = await callOnce(256);
@@ -1365,10 +1358,8 @@ async function processarMensagensPendentes(contato) {
                     console.log(`[${st.contato}] Análise: ${resp.picked || (relevante ? 'relevante' : 'irrelevante')} ("${truncate(contexto, 140)}")`);
                 } catch { }
             }
-
             st.lastClassifiedIdx.saque = 0;
             st.mensagensPendentes = [];
-
             if (relevante) {
                 const saquePath = path.join(__dirname, 'content', 'saque.json');
                 let raw = fs.readFileSync(saquePath, 'utf8');
@@ -1376,7 +1367,6 @@ async function processarMensagensPendentes(contato) {
                 const parsed = JSON.parse(raw);
                 const lista = Array.isArray(parsed?.msgprint) ? parsed.msgprint : [];
                 if (!lista.length) return { ok: true, classe: 'aguardando_imagem' };
-
                 if (!st.saquePediuPrint) {
                     const pickLocal = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
                     const m = pickLocal(lista);
@@ -1388,7 +1378,6 @@ async function processarMensagensPendentes(contato) {
                 }
                 return { ok: true, classe: 'aguardando_imagem' };
             }
-
             return { ok: true, classe: 'irrelevante' };
         }
 
