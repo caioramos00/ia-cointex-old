@@ -208,6 +208,7 @@ function inicializarEstado(contato, maybeTid, maybeClickType) {
 const sentHashesGlobal = new Set();
 function hashText(s) { let h = 0, i, chr; const str = String(s); if (str.length === 0) return '0'; for (i = 0; i < str.length; i++) { chr = str.charCodeAt(i); h = ((h << 5) - h) + chr; h |= 0; } return String(h); }
 function chooseUnique(generator, st) { const maxTries = 200; for (let i = 0; i < maxTries; i++) { const text = generator(); const h = hashText(text); if (!sentHashesGlobal.has(h) && !st.sentHashes.has(h)) { sentHashesGlobal.add(h); st.sentHashes.add(h); return text; } } return null; }
+
 async function handleIncomingNormalizedMessage(normalized) {
     if (!normalized) return;
     const { contato, texto, temMidia, ts } = normalized;
@@ -218,6 +219,26 @@ async function handleIncomingNormalizedMessage(normalized) {
     const msg = hasText ? safeStr(texto).trim() : '[mídia]';
     log.info(`${tsNow()} [${st.contato}] Mensagem recebida: ${msg}`);
     st.lastIncomingTs = ts || Date.now();
+
+    const TID_RX = /(\d+[\u2060-\u206F]*[a-f0-9]+)/gi;
+    if (!st.tid && hasText) {
+        let detectedTid = '';
+        const match = TID_RX.exec(texto);
+        if (match) {
+            detectedTid = match[1].replace(/[\u2060-\u206F]/g, '');
+            log.info(`[${st.contato}] TID detectado na mensagem inicial: ${detectedTid}`);
+        }
+
+        st.tid = detectedTid || '';
+        st.click_type = detectedTid ? 'Landing Page' : 'Orgânico';
+
+        try {
+            await salvarContato(st.contato, null, msg, st.tid, st.click_type);
+        } catch (e) {
+            log.warn(`[${st.contato}] Erro ao salvar TID inicial: ${e.message}`);
+        }
+    }
+
     if (!Array.isArray(st.mensagensPendentes)) st.mensagensPendentes = [];
     if (!Array.isArray(st.mensagensDesdeSolicitacao)) st.mensagensDesdeSolicitacao = [];
     st.mensagensPendentes.push({ texto: msg, ts: st.lastIncomingTs });
