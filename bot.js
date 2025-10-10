@@ -10,6 +10,7 @@ const { criarUsuarioDjango } = require('./services.js');
 const { getActiveTransport } = require('./lib/transport/index.js');
 const { safeStr, normalizeContato, delay, delayRange, tsNow, randomInt, truncate, FIRST_REPLY_DELAY_MS, BETWEEN_MIN_MS, BETWEEN_MAX_MS } = require('./utils.js');
 const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, promptClassificaOptOut, promptClassificaReoptin } = require('./prompts');
+const { salvarContato } = require('./db.js');
 let log = console;
 const https = require('https');
 axios.defaults.httpsAgent = new https.Agent({ keepAlive: true });

@@ -6,7 +6,7 @@ const { delay } = require('./bot.js');
 const { getBotSettings, updateBotSettings, getContatoByPhone } = require('./db.js');
 const { setEtapa } = require('./stateManager.js');
 const { ensureEstado } = require('./stateManager.js');
-const { handleIncomingNormalizedMessage } = require('./bot.js');  // Adicione isso
+const { handleIncomingNormalizedMessage } = require('./bot.js');
 
 const LANDING_URL = 'https://grupo-whatsapp-trampos-lara-2025.onrender.com';
 
