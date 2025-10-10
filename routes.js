@@ -300,20 +300,9 @@ function setupRoutes(
           let is_ctwa = false;
           const referral = msg.referral || {};
           if (referral.source_type === 'ad') {
-            tid = referral.ctwa_clid || '';
+            tid = referral.ctwa_clwa || '';
             click_type = 'CTWA';
             is_ctwa = true;
-          }
-          if (!is_ctwa && texto) {
-            const tidMatch = texto.match(/\[TID:\s*([A-Za-z0-9_-]{6,64})\]/i);
-            if (tidMatch && tidMatch[1]) { tid = tidMatch[1]; click_type = 'Landing'; }
-          }
-          if (!is_ctwa && texto && !tid) {
-            const stripInvis = (s) => String(s || '').normalize('NFKC').replace(/[\u200B-\u200F\uFEFF\u202A-\u202E]/g, '');
-            const t = stripInvis(texto);
-            const firstLine = (t.split(/\r?\n/)[0] || '').trim();
-            const m2 = /^[a-f0-9]{16}$/i.exec(firstLine);
-            if (m2) { tid = m2[0]; click_type = 'Landing'; }
           }
           const wa_id = (value?.contacts && value.contacts[0]?.wa_id) || msg.from || '';
           const profile_name = (value?.contacts && value.contacts[0]?.profile?.name) || '';
@@ -424,25 +413,13 @@ function setupRoutes(
       }
     }
 
-    let detectedTid = '';
-    let detectedClickType = 'Orgânico';
-    const tidMatch = (textIn || '').match(/\[TID:\s*([A-Za-z0-9_-]{6,64})\]/i);
-    if (tidMatch && tidMatch[1]) { detectedTid = tidMatch[1]; detectedClickType = 'Landing'; }
-    if (!detectedTid && textIn) {
-      const stripInvis = (s) => String(s || '').normalize('NFKC').replace(/[\u200B-\u200F\uFEFF\u202A-\u202E]/g, '');
-      const t = stripInvis(textIn);
-      const firstLine = (t.split(/\r?\n/)[0] || '').trim();
-      const m2 = /^[a-f0-9]{16}$/i.exec(firstLine);
-      if (m2) { detectedTid = m2[0]; detectedClickType = 'Landing'; }
-    }
-
-    let finalTid = detectedTid;
-    let finalClickType = detectedClickType;
+    let finalTid = '';
+    let finalClickType = 'Orgânico';
     try {
       const existing = await getContatoByPhone(phone);
       if (existing) {
         if (existing.tid) finalTid = existing.tid;
-        if (existing.click_type && existing.click_type !== 'Orgânico') finalClickType = existing.click_type;
+        if (existing.click_type && existing.click_type && existing.click_type !== 'Orgânico') finalClickType = existing.click_type;
         else finalClickType = finalTid ? 'Landing' : 'Orgânico';
       }
     } catch { }
