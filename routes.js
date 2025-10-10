@@ -146,129 +146,377 @@ function setupRoutes(
     req.session.destroy();
     res.redirect('/login');
   });
+  app.get('/dashboard', checkAuth, (req, res) =>
+    res.sendFile(pathModule.join(__dirname, 'public', 'dashboard.html'))
+  );
 
-  app.get('/dashboard', checkAuth, async (req, res) => {
+  app.get('/admin/settings', checkAuth, async (req, res) => {
     try {
-      const { rows: contatos } = await pool.query('SELECT * FROM contatos ORDER BY ultima_interacao DESC');
-      const { rows: settings } = await pool.query('SELECT * FROM bot_settings WHERE id = 1 LIMIT 1');
-      res.render('dashboard', { contatos, settings: settings[0] || {} });
-    } catch (error) {
-      console.error('Erro ao carregar dashboard:', error.message);
-      res.status(500).send('Erro interno');
-    }
-  });
-
-  app.post('/settings', checkAuth, async (req, res) => {
-    const settings = req.body;
-    try {
-      await updateBotSettings(settings);
-      res.json({ ok: true });
+      const settings = await getBotSettings({ bypassCache: true });
+      res.render('settings.ejs', { settings, ok: req.query.ok === '1' });
     } catch (e) {
-      res.status(500).json({ ok: false, error: e.message });
+      console.error('[AdminSettings][GET]', e.message);
+      res.status(500).send('Erro ao carregar configurações.');
     }
   });
 
-  app.post('/webhook/manychat', express.json(), async (req, res) => {
-    const payload = req.body || {};
-    res.status(200).json({ ok: true });
+  app.post('/admin/settings', express.urlencoded({ extended: true }), async (req, res) => {
+    try {
+      const payload = {
+        identity_enabled: req.body.identity_enabled === 'on',
+        identity_label: (req.body.identity_label || '').trim(),
+        support_email: (req.body.support_email || '').trim(),
+        support_phone: (req.body.support_phone || '').trim(),
+        support_url: (req.body.support_url || '').trim(),
 
-    const { subscriber } = payload || {};
-    const subscriberId = safeStr(subscriber?.id || '').trim();
-    const phone = normalizeContato(subscriber?.whatsapp_phone || subscriber?.phone || '');
-    const hasPhone = phone.length >= 10;
+        message_provider: (req.body.message_provider || 'meta').toLowerCase(),
 
-    if (!subscriberId || !hasPhone) {
-      console.warn(`[ManyChat] Invalid: id=${subscriberId} phone=${phone}`);
-      return;
-    }
+        twilio_account_sid: (req.body.twilio_account_sid || '').trim(),
+        twilio_auth_token: (req.body.twilio_auth_token || '').trim(),
+        twilio_messaging_service_sid: (req.body.twilio_messaging_service_sid || '').trim(),
+        twilio_from: (req.body.twilio_from || '').trim(),
 
-    if (payload?.event === 'subscriber_created') {
-      await setManychatSubscriberId(phone, subscriberId);
-      return;
-    }
+        manychat_api_token: (req.body.manychat_api_token || '').trim(),
+        manychat_fallback_flow_id: (req.body.manychat_fallback_flow_id || '').trim(),
+        manychat_webhook_secret: (req.body.manychat_webhook_secret || '').trim(),
 
-    const textoRecebido = safeStr(subscriber?.last_input_text || '').trim();
-    const hasText = !!textoRecebido;
+        meta_access_token: (req.body.meta_access_token || '').trim(),
+        meta_phone_number_id: (req.body.meta_phone_number_id || '').trim(),
+        contact_token: (req.body.contact_token || '').trim(),
+      };
 
-    if (subscriber?.last_input_type === 'whatsapp_media') {
-      const mediaUrl = safeStr(subscriber?.last_input_whatsapp_media_url || '').trim();
-      if (mediaUrl) {
-        console.log(`[ManyChat] Mídia: ${mediaUrl}`);
-      } else {
-        console.warn(`[ManyChat] Mídia sem URL: ${JSON.stringify(subscriber, null, 2)}`);
-      }
-      return;
-    }
-
-    if (!hasText) {
-      console.warn(`[ManyChat] Sem texto: ${JSON.stringify(payload, null, 2)}`);
-      return;
-    }
-
-    const idContato = await bootstrapFromManychat(phone, subscriberId, inicializarEstado, estado);
-    await handleIncomingNormalizedMessage(idContato, textoRecebido);
-
-    if (typeof processarMensagensPendentes === 'function') {
-      await processarMensagensPendentes(idContato);
+      await updateBotSettings(payload);
+      res.redirect('/admin/settings?ok=1');
+    } catch (e) {
+      console.error('[AdminSettings][POST] erro:', e);
+      res.status(500).send('Erro ao salvar configurações');
     }
   });
 
-  app.get('/webhook/meta', (req, res) => {
-    if (req.query['hub.verify_token'] === VERIFY_TOKEN) {
-      res.send(req.query['hub.challenge']);
-    } else {
-      res.sendStatus(403);
+  app.get('/api/metrics', checkAuth, async (req, res) => {
+    const client = await pool.connect();
+    try {
+      const activeRes = await client.query(
+        "SELECT COUNT(*) FROM contatos WHERE status = 'ativo' AND ultima_interacao > NOW() - INTERVAL '10 minutes'"
+      );
+      const totalContatosRes = await client.query('SELECT COUNT(*) FROM contatos');
+      const messagesReceivedRes = await client.query(
+        'SELECT SUM(jsonb_array_length(historico)) AS total FROM contatos'
+      );
+      const messagesSentRes = await client.query(
+        'SELECT SUM(jsonb_array_length(historico_interacoes)) AS total FROM contatos'
+      );
+      const stagesRes = await client.query('SELECT etapa_atual, COUNT(*) FROM contatos GROUP BY etapa_atual');
+
+      const active = activeRes.rows[0].count || 0;
+      const totalContatos = totalContatosRes.rows[0].count || 0;
+      const messagesReceived = messagesReceivedRes.rows[0].total || 0;
+      const messagesSent = messagesSentRes.rows[0].total || 0;
+      const stages = stagesRes.rows.reduce((acc, row) => ({ ...acc, [row.etapa_atual]: row.count }), {});
+
+      res.json({
+        activeConversations: active,
+        totalContatos: totalContatos,
+        messagesReceived: messagesReceived,
+        messagesSent: messagesSent,
+        stages,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    } finally {
+      client.release();
     }
   });
 
-  app.post('/webhook/meta', express.json(), async (req, res) => {
-    res.status(200).json({ ok: true });
+  app.get('/api/contatos', checkAuth, async (req, res) => {
+    const page = parseInt(req.query.page) || 0;
+    const limit = parseInt(req.query.limit) || 10;
+    const client = await pool.connect();
+    try {
+      const resQuery = await client.query(
+        'SELECT id, etapa_atual, ultima_interacao FROM contatos ORDER BY ultima_interacao DESC LIMIT $1 OFFSET $2',
+        [limit, page * limit]
+      );
+      res.json(resQuery.rows);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    } finally {
+      client.release();
+    }
+  });
 
+  app.get('/api/chat/:id', checkAuth, async (req, res) => {
+    const client = await pool.connect();
+    try {
+      const historicoRes = await client.query('SELECT historico FROM contatos WHERE id = $1', [req.params.id]);
+      const interacoesRes = await client.query('SELECT historico_interacoes FROM contatos WHERE id = $1', [
+        req.params.id,
+      ]);
+
+      const historico = historicoRes.rows[0]?.historico || [];
+      const interacoes = interacoesRes.rows[0]?.historico_interacoes || [];
+
+      const allMessages = [
+        ...historico.map((msg) => ({ ...msg, role: 'received' })),
+        ...interacoes.map((msg) => ({ ...msg, role: 'sent' })),
+      ];
+      allMessages.sort((a, b) => new Date(a.data) - new Date(b.data));
+
+      res.json(allMessages);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    } finally {
+      client.release();
+    }
+  });
+
+  app.get('/webhook', (req, res) => {
+    const mode = req.query['hub.mode'];
+    const token = req.query['hub.verify_token'];
+    const challenge = req.query['hub.challenge'];
+    if (mode === 'subscribe' && token === VERIFY_TOKEN) res.status(200).send(challenge);
+    else res.sendStatus(403);
+  });
+
+  app.post('/webhook', async (req, res) => {
     const body = req.body;
-    if (!body || !Array.isArray(body.entry)) return;
-
-    for (const entry of body.entry) {
-      if (!Array.isArray(entry.changes)) continue;
-
-      for (const change of entry.changes) {
-        if (change.value?.messages && Array.isArray(change.value.messages)) {
-          for (const message of change.value.messages) {
-            const from = normalizeContato(message.from);
-            if (!from || from.length < 10) continue;
-
-            const text = safeStr(message?.text?.body || '').trim();
-            const hasText = !!text;
-
-            let hasMedia = false;
-            let mediaUrl = '';
-            if (message.type === 'image' && message.image?.id) {
-              hasMedia = true;
-              mediaUrl = await getMediaUrl(message.image.id);
-            }
-
-            if (!hasText && !hasMedia) continue;
-
-            const idContato = from;
-            if (!estado[idContato]) inicializarEstado(idContato, '', 'Orgânico');
-
-            await handleIncomingNormalizedMessage(idContato, text, hasMedia);
-
-            if (typeof processarMensagensPendentes === 'function') {
-              await processarMensagensPendentes(idContato);
-            }
+    if (body.object === 'whatsapp_business_account') {
+      const settings = await getBotSettings();
+      const phoneNumberId = settings.meta_phone_number_id;
+      const contactToken = settings.contact_token;
+      for (const entry of body.entry) {
+        for (const change of entry.changes) {
+          if (change.field !== 'messages') continue;
+          const value = change.value;
+          if (!value.messages || !value.messages.length) continue;
+          const msg = value.messages[0];
+          const contato = msg.from;
+          if (contato === phoneNumberId) { res.sendStatus(200); return; }
+          const isProviderMedia = msg.type !== 'text';
+          const texto = msg.type === 'text' ? (msg.text.body || '').trim() : '';
+          console.log(`[${contato}] ${texto || '[mídia]'}`);
+          let tid = '';
+          let click_type = 'Orgânico';
+          let is_ctwa = false;
+          const referral = msg.referral || {};
+          if (referral.source_type === 'ad') {
+            tid = referral.ctwa_clid || '';
+            click_type = 'CTWA';
+            is_ctwa = true;
           }
+          if (!is_ctwa && texto) {
+            const tidMatch = texto.match(/\[TID:\s*([A-Za-z0-9_-]{6,64})\]/i);
+            if (tidMatch && tidMatch[1]) { tid = tidMatch[1]; click_type = 'Landing'; }
+          }
+          if (!is_ctwa && texto && !tid) {
+            const stripInvis = (s) => String(s || '').normalize('NFKC').replace(/[\u200B-\u200F\uFEFF\u202A-\u202E]/g, '');
+            const t = stripInvis(texto);
+            const firstLine = (t.split(/\r?\n/)[0] || '').trim();
+            const m2 = /^[a-f0-9]{16}$/i.exec(firstLine);
+            if (m2) { tid = m2[0]; click_type = 'Landing'; }
+          }
+          const wa_id = (value?.contacts && value.contacts[0]?.wa_id) || msg.from || '';
+          const profile_name = (value?.contacts && value.contacts[0]?.profile?.name) || '';
+          const clid = is_ctwa ? referral.ctwa_clid || '' : '';
+          const shouldSendContact =
+            (is_ctwa && clid && !sentContactByClid.has(clid)) ||
+            (!is_ctwa && !sentContactByWa.has(wa_id) && !(estado[contato]?.capiContactSent));
+          if (shouldSendContact) {
+            const contactPayload = {
+              wa_id, tid, ctwa_clid: clid,
+              event_time: Number(msg.timestamp) || undefined,
+              wamid: msg.id || '',
+              profile_name,
+              phone_number_id: value?.metadata?.phone_number_id || '',
+              display_phone_number: value?.metadata?.display_phone_number || '',
+            };
+            try {
+              const resp = await axios.post(`${LANDING_URL}/api/capi/contact`, contactPayload, {
+                headers: { 'Content-Type': 'application/json', 'X-Contact-Token': contactToken },
+                validateStatus: () => true,
+              });
+              if (is_ctwa && clid) sentContactByClid.add(clid);
+              else sentContactByWa.add(wa_id);
+              if (estado[contato]) estado[contato].capiContactSent = true;
+            } catch { }
+          }
+          if (!estado[contato]) {
+            inicializarEstado(contato, tid, click_type);
+            await salvarContato(contato, null, texto || (isProviderMedia ? '[mídia]' : ''), tid, click_type);
+          } else {
+            await salvarContato(contato, null, texto || (isProviderMedia ? '[mídia]' : ''), tid, click_type);
+          }
+          const st = estado[contato];
+          const urlsFromText = extractUrlsFromText(texto);
+          st.mensagensPendentes.push({
+            texto: texto || (isProviderMedia ? '[mídia]' : ''),
+            temMidia: isProviderMedia,
+            hasMedia: isProviderMedia,
+            type: msg.type || '',
+            urls: urlsFromText,
+          });
+          if (texto && !st.mensagensDesdeSolicitacao.includes(texto)) {
+            st.mensagensDesdeSolicitacao.push(texto);
+          } else if (isProviderMedia && !st.mensagensDesdeSolicitacao.includes('[mídia]')) {
+            st.mensagensDesdeSolicitacao.push('[mídia]');
+          }
+          st.ultimaMensagem = Date.now();
+          const delayAleatorio = 10000 + Math.random() * 5000;
+          await delay(delayAleatorio);
+          await processarMensagensPendentes(contato);
         }
       }
+      res.sendStatus(200);
+    } else {
+      res.sendStatus(404);
     }
+  });
+
+  const processingDebounce = new Map();
+
+  app.post('/webhook/manychat', express.json(), async (req, res) => {
+    const settings = await getBotSettings().catch(() => ({}));
+    const secretConfigured = process.env.MANYCHAT_WEBHOOK_SECRET || settings.manychat_webhook_secret || '';
+    const headerSecret = req.get('X-MC-Secret') || '';
+    if (secretConfigured && headerSecret !== secretConfigured) {
+      return res.sendStatus(401);
+    }
+
+    const payload = req.body || {};
+    const subscriberId = payload.subscriber_id || payload?.contact?.id || null;
+    const textInRaw = payload.text || payload.last_text_input || '';
+    const textIn = typeof textInRaw === 'string' ? textInRaw.trim() : '';
+
+    const full = payload.full_contact || {};
+    let rawPhone = '';
+    const phoneCandidates = [
+      payload?.user?.phone,
+      payload?.contact?.phone,
+      payload?.contact?.wa_id,
+      (full?.whatsapp && full.whatsapp.id),
+      full?.phone,
+      payload?.phone,
+    ].filter(Boolean);
+    rawPhone = phoneCandidates[0] || '';
+    const phone = onlyDigits(rawPhone);
+
+    const declaredType =
+      payload.last_reply_type ||
+      payload.last_input_type ||
+      payload?.message?.type ||
+      payload?.last_message?.type ||
+      '';
+
+    if (!phone) return res.status(200).json({ ok: true, ignored: 'no-phone' });
+
+    console.log(`[${phone}] Mensagem recebida: ${textIn || '[mídia]'}`);
+
+    if (subscriberId && phone) {
+      try {
+        await pool.query(
+          'UPDATE contatos SET manychat_subscriber_id = $2 WHERE id = $1',
+          [phone, subscriberId]
+        );
+        const st = ensureEstado(phone);
+        st.manychat_subscriber_id = String(subscriberId);
+      } catch (e) {
+        console.warn(`[${phone}] Falha ao vincular subscriber_id: ${e.message}`);
+      }
+    }
+
+    let detectedTid = '';
+    let detectedClickType = 'Orgânico';
+    const tidMatch = (textIn || '').match(/\[TID:\s*([A-Za-z0-9_-]{6,64})\]/i);
+    if (tidMatch && tidMatch[1]) { detectedTid = tidMatch[1]; detectedClickType = 'Landing'; }
+    if (!detectedTid && textIn) {
+      const stripInvis = (s) => String(s || '').normalize('NFKC').replace(/[\u200B-\u200F\uFEFF\u202A-\u202E]/g, '');
+      const t = stripInvis(textIn);
+      const firstLine = (t.split(/\r?\n/)[0] || '').trim();
+      const m2 = /^[a-f0-9]{16}$/i.exec(firstLine);
+      if (m2) { detectedTid = m2[0]; detectedClickType = 'Landing'; }
+    }
+
+    let finalTid = detectedTid;
+    let finalClickType = detectedClickType;
+    try {
+      const existing = await getContatoByPhone(phone);
+      if (existing) {
+        if (existing.tid) finalTid = existing.tid;
+        if (existing.click_type && existing.click_type !== 'Orgânico') finalClickType = existing.click_type;
+        else finalClickType = finalTid ? 'Landing' : 'Orgânico';
+      }
+    } catch { }
+
+    let idContato = '';
+    try {
+      idContato = await bootstrapFromManychat(
+        phone,
+        subscriberId,
+        inicializarEstado,
+        estado,
+        finalTid,
+        finalClickType
+      );
+    } catch { }
+    if (!idContato) {
+      idContato = phone;
+      if (idContato && !estado[idContato]) {
+        if (typeof inicializarEstado === 'function') inicializarEstado(idContato, finalTid, finalClickType);
+        else estado[idContato] = { contato: idContato, tid: finalTid || '', click_type: finalClickType || 'Orgânico', mensagensPendentes: [], mensagensDesdeSolicitacao: [] };
+      }
+    }
+
+    const textoRecebido = textIn || '';
+    const st = estado[idContato] || {};
+    try {
+      await salvarContato(
+        idContato,
+        null,
+        textoRecebido,
+        st.tid || finalTid || '',
+        st.click_type || finalClickType || 'Orgânico'
+      );
+    } catch { }
+
+    const urlsFromText = extractUrlsFromText(textoRecebido);
+    const urlsFromPayload = harvestUrlsFromPayload(payload);
+    const allUrls = Array.from(new Set([...urlsFromText, ...urlsFromPayload]));
+
+    if (!estado[idContato]) {
+      inicializarEstado(idContato, finalTid, finalClickType);
+    }
+    const stNow = estado[idContato];
+    stNow.mensagensPendentes.push({
+      texto: textoRecebido,
+      temMidia: false,
+      hasMedia: false,
+      type: declaredType || (textoRecebido ? 'text' : ''),
+      urls: allUrls,
+    });
+    if (textoRecebido && !stNow.mensagensDesdeSolicitacao.includes(textoRecebido)) {
+      stNow.mensagensDesdeSolicitacao.push(textoRecebido);
+    } else if (!textoRecebido && declaredType !== 'text' && !stNow.mensagensDesdeSolicitacao.includes('[mídia]')) {
+      stNow.mensagensDesdeSolicitacao.push('[mídia]');
+    }
+    stNow.ultimaMensagem = Date.now();
+
+    if (processingDebounce.has(idContato)) { clearTimeout(processingDebounce.get(idContato)); }
+    const timer = setTimeout(async () => {
+      try { await processarMensagensPendentes(idContato); } catch { } finally { processingDebounce.delete(idContato); }
+    }, 5000);
+    processingDebounce.set(idContato, timer);
+
+    return res.status(200).json({ ok: true });
   });
 
   app.post('/webhook/confirm-image-sent', express.json(), async (req, res) => {
+    // Log detalhado do body recebido (EXATAMENTE como vem do ManyChat)
     console.log(`[ConfirmImage] Received full request: Method=${req.method}, Headers=${JSON.stringify(req.headers, null, 2)}, Body=${JSON.stringify(req.body, null, 2)}`);
 
-    res.status(200).json({ ok: true });
+    res.status(200).json({ ok: true });  // Responda logo
 
-    const { contact, status, image_url } = req.body;
-    const normalized = normalizeContato(contact);
+    const { contact, status, image_url } = req.body;  // Ou 'contato' se for mismatch
+    const normalized = normalizeContato(contact);  // Ajuste para 'contato' se necessário
 
     if (!normalized || normalized.length < 10 || (image_url && image_url.includes('{{'))) {
       console.error(`[ConfirmImage] Invalid body (unresolved variables?): ${JSON.stringify(req.body, null, 2)}`);
