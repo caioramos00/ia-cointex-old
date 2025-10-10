@@ -6,6 +6,7 @@ const { delay } = require('./bot.js');
 const { getBotSettings, updateBotSettings, getContatoByPhone } = require('./db.js');
 const { setEtapa } = require('./stateManager.js');
 const { ensureEstado } = require('./stateManager.js');
+const { handleIncomingNormalizedMessage } = require('./bot.js');  // Adicione isso
 
 const LANDING_URL = 'https://grupo-whatsapp-trampos-lara-2025.onrender.com';
 
@@ -300,7 +301,7 @@ function setupRoutes(
           let is_ctwa = false;
           const referral = msg.referral || {};
           if (referral.source_type === 'ad') {
-            tid = referral.ctwa_clwa || '';
+            tid = referral.ctwa_clid || '';
             click_type = 'CTWA';
             is_ctwa = true;
           }
@@ -335,20 +336,14 @@ function setupRoutes(
           } else {
             await salvarContato(contato, null, texto || (isProviderMedia ? '[mídia]' : ''), tid, click_type);
           }
+          await handleIncomingNormalizedMessage({ // Adicione isso
+            contato,
+            texto,
+            temMidia: isProviderMedia,
+            ts: Number(msg.timestamp) || Date.now()
+          });
           const st = estado[contato];
           const urlsFromText = extractUrlsFromText(texto);
-          st.mensagensPendentes.push({
-            texto: texto || (isProviderMedia ? '[mídia]' : ''),
-            temMidia: isProviderMedia,
-            hasMedia: isProviderMedia,
-            type: msg.type || '',
-            urls: urlsFromText,
-          });
-          if (texto && !st.mensagensDesdeSolicitacao.includes(texto)) {
-            st.mensagensDesdeSolicitacao.push(texto);
-          } else if (isProviderMedia && !st.mensagensDesdeSolicitacao.includes('[mídia]')) {
-            st.mensagensDesdeSolicitacao.push('[mídia]');
-          }
           st.ultimaMensagem = Date.now();
           const delayAleatorio = 10000 + Math.random() * 5000;
           await delay(delayAleatorio);
@@ -419,7 +414,7 @@ function setupRoutes(
       const existing = await getContatoByPhone(phone);
       if (existing) {
         if (existing.tid) finalTid = existing.tid;
-        if (existing.click_type && existing.click_type && existing.click_type !== 'Orgânico') finalClickType = existing.click_type;
+        if (existing.click_type && existing.click_type !== 'Orgânico') finalClickType = existing.click_type;
         else finalClickType = finalTid ? 'Landing' : 'Orgânico';
       }
     } catch { }
@@ -462,19 +457,13 @@ function setupRoutes(
     if (!estado[idContato]) {
       inicializarEstado(idContato, finalTid, finalClickType);
     }
-    const stNow = estado[idContato];
-    stNow.mensagensPendentes.push({
+    await handleIncomingNormalizedMessage({ // Adicione isso
+      contato: idContato,
       texto: textoRecebido,
-      temMidia: false,
-      hasMedia: false,
-      type: declaredType || (textoRecebido ? 'text' : ''),
-      urls: allUrls,
+      temMidia: declaredType !== 'text',  // Ajuste baseado no declaredType
+      ts: Date.now()
     });
-    if (textoRecebido && !stNow.mensagensDesdeSolicitacao.includes(textoRecebido)) {
-      stNow.mensagensDesdeSolicitacao.push(textoRecebido);
-    } else if (!textoRecebido && declaredType !== 'text' && !stNow.mensagensDesdeSolicitacao.includes('[mídia]')) {
-      stNow.mensagensDesdeSolicitacao.push('[mídia]');
-    }
+    const stNow = estado[idContato];
     stNow.ultimaMensagem = Date.now();
 
     if (processingDebounce.has(idContato)) { clearTimeout(processingDebounce.get(idContato)); }
