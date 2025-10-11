@@ -1,0 +1,19 @@
+{
+  "msg1": {
+    "bloco1": [
+      "boa, agora abre o video do bug e faz igualzinho, tem que ser o mesmo valor de deposito que eu fiz no video! Se der certo vai subir o saldo dessa conta na hora",
+      "boaa, agora abre o video do bug e faz igual eu fiz, com o mesmo valor de deposito do video! Se der certo vai subir o saldo dessa conta na hora"
+    ],
+    "bloco2": [
+      "depois manda um PRINT mostrando o saldo q ficou disponível",
+      "depois manda um PRINT mostrando o saldo q ficou disponível aí",
+      "depois me manda um PRINT mostrando o saldo q ficou disponível nessa conta"
+    ],
+    "bloco3": [
+      "ou escreve aqui quanto que tem disponível",
+      "ou me escreve o valor",
+      "ou manda o valor em escrito",
+      "ou me fala o valor disponível"
+    ]
+  }
+}

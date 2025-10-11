@@ -76,16 +76,55 @@
   "pontos": {
     "p1": {
       "g1": [
-        "sua conta bancaria nunca pode ter sido registrada nessa plataforma antes",
-        "seu banco não pode ter sido registrado nessa plataforma antes"
+        "você precisa de uma conta com pix ativo pra receber",
+        "você precisa ter uma conta com pix ativo pra receber",
+        "vc precisa de uma conta com pix ativo pra receber",
+        "vc precisa ter uma conta com pix ativo pra receber",
+        "você vai precisar de uma conta com pix ativo pra receber",
+        "você precisa de uma conta com pix pra receber",
+        "você precisa ter uma conta com pix pra receber",
+        "vc precisa de uma conta com pix pra receber",
+        "vc precisa ter uma conta com pix pra receber",
+        "você vai precisar de uma conta com pix pra receber",
+        "você precisa de uma conta bancária com pix ativo pra receber",
+        "você precisa ter uma conta bancária com pix ativo pra receber",
+        "vc precisa de uma conta bancária com pix ativo pra receber",
+        "vc precisa ter uma conta bancária com pix ativo pra receber",
+        "você vai precisar de uma conta bancária com pix ativo pra receber",
+        "você precisa de uma conta bancária com pix pra receber",
+        "você precisa ter uma conta bancária com pix pra receber",
+        "vc precisa de uma conta bancária com pix pra receber",
+        "vc precisa ter uma conta bancária com pix pra receber",
+        "você vai precisar de uma conta bancária com pix pra receber"
       ],
       "g2": [
-        "tem que ser exatamente o valor de deposito que eu faço no vídeo",
-        "tem que ser exatamente a quantia de deposito que eu coloco lá no vídeo"
+        "pode ser qualquer banco",
+        "pode ser qlqr banco",
+        "qualquer banco serve",
+        "qualquer banco",
+        "qlqr banco serve"
       ],
       "g3": [
-        "se for outra não dá certo",
-        "se colocar alguma outra vai dar ruim"
+        "so nao da certo se for o SICOOB",
+        "só não dá certo se for o SICOOB",
+        "só não funciona se for o SICOOB",
+        "so nao funciona se for o SICOOB",
+        "só não dá se for o SICOOB",
+        "so nao da certo se for SICOOB",
+        "só não dá certo se for SICOOB",
+        "só não funciona se for SICOOB",
+        "so nao funciona se for SICOOB",
+        "só não dá se for SICOOB",
+        "so nao da certo se for o WISE",
+        "só não dá certo se for o WISE",
+        "só não funciona se for o WISE",
+        "so nao funciona se for o WISE",
+        "só não dá se for o WISE",
+        "so nao da certo se for WISE",
+        "só não dá certo se for WISE",
+        "só não funciona se for WISE",
+        "so nao funciona se for WISE",
+        "só não dá se for WISE"
       ]
     },
     "p2": {
@@ -164,13 +203,48 @@
         "vou te passar o e-mail e a senha de uma conta pra você entrar"
       ],
       "g2": [
-        "vc só precisa fazer o bug",
-        "você só vai precisar bugar lá a plataforma"
+        "lá vai ter um saldo disponível",
+        "lá vai ter um saldo disponivel",
+        "vai ter um saldo disponível lá",
+        "vai ter um saldo disponivel lá",
+        "lá vai ter um dinheiro disponível",
+        "lá vai ter um dinheiro disponivel",
+        "vai ter um dinheiro disponível lá",
+        "vai ter um dinheiro disponivel lá",
+        "lá vai ter uma grana disponível",
+        "lá vai ter uma grana disponivel",
+        "vai ter uma grana disponível lá",
+        "vai ter uma grana disponivel lá",
+        "vai ter um dinheiro disponível pra saque lá",
+        "vai ter um dinheiro disponivel pra saque lá",
+        "lá vai ter um dinheiro disponível pra saque",
+        "lá vai ter um dinheiro disponivel pra saque",
+        "vai ter um saldo disponível pra saque lá",
+        "vai ter um saldo disponivel pra saque lá",
+        "lá vai ter um saldo disponível pra saque",
+        "lá vai ter um saldo disponivel pra saque"
       ],
       "g3": [
-        "e depois é só você transferir pra sua conta, mais nada",
-        "e dps é só vc transferir pra sua conta, mais nada",
-        "depois é só você transferir pra sua conta bancária, mais nada"
+        "é só você transferir pra sua conta, mais nada",
+        "é só vc transferir pra sua conta, mais nada",
+        "é só você transferir pra sua conta bancária, mais nada",
+        "é só vc transferir pra sua conta bancária, mais nada",
+        "é só você sacar pra sua conta, mais nada",
+        "é só vc sacar pra sua conta, mais nada",
+        "é só você sacar pra sua conta bancária, mais nada",
+        "é só vc sacar pra sua conta bancária, mais nada",
+        "você só precisa transferir pra sua conta, mais nada",
+        "vc só precisa transferir pra sua conta, mais nada",
+        "é só vc mandar pra sua conta, mais nada",
+        "é só você mandar pra sua conta, e já era",
+        "você só precisa transferir pra sua conta bancária, e já era",
+        "vc só precisa transferir pra sua conta bancária, e já era",
+        "é só vc mandar pra sua conta bancária, e já era",
+        "é só você mandar pra sua conta bancária, e já era",
+        "você só precisa sacar pra sua conta, e já era",
+        "vc só precisa sacar pra sua conta, e já era",
+        "você só precisa sacar pra sua conta bancária, e já era",
+        "vc só precisa sacar pra sua conta bancária, e já era"
       ]
     },
     "p4": {

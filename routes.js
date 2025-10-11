@@ -1,12 +1,9 @@
 const express = require('express');
 const axios = require('axios');
 
-const { pool } = require('./db.js');
-const { delay } = require('./bot.js');
-const { getBotSettings, updateBotSettings, getContatoByPhone } = require('./db.js');
-const { setEtapa } = require('./stateManager.js');
-const { ensureEstado } = require('./stateManager.js');
-const { handleIncomingNormalizedMessage } = require('./bot.js');
+const { pool, getBotSettings, updateBotSettings, getContatoByPhone } = require('./db.js');
+const { delay, handleIncomingNormalizedMessage } = require('./bot.js');
+const { setEtapa, ensureEstado } = require('./stateManager.js');
 
 const LANDING_URL = 'https://grupo-whatsapp-trampos-lara-2025.onrender.com';
 

@@ -1,18 +1,17 @@
 'use strict';
 const fs = require('fs');
+const https = require('https');
 const path = require('path');
 const axios = require('axios');
 const { ensureEstado } = require('./stateManager.js');
 const { loadOptOutMsgs, loadOptInMsgs, isOptOut, isOptIn, preflightOptOut } = require('./optout.js');
-const { setManychatSubscriberId } = require('./db');
+const { setManychatSubscriberId, salvarContato } = require('./db');
 const { sendMessage, sendImage } = require('./senders.js');
 const { criarUsuarioDjango } = require('./services.js');
 const { getActiveTransport } = require('./lib/transport/index.js');
 const { safeStr, normalizeContato, delay, delayRange, tsNow, randomInt, truncate, FIRST_REPLY_DELAY_MS, BETWEEN_MIN_MS, BETWEEN_MAX_MS } = require('./utils.js');
 const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, promptClassificaOptOut, promptClassificaReoptin } = require('./prompts');
-const { salvarContato } = require('./db.js');
 let log = console;
-const https = require('https');
 axios.defaults.httpsAgent = new https.Agent({ keepAlive: true });
 
 function pickLabelFromResponseData(data, allowed) {
