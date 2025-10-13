@@ -3,6 +3,7 @@ const fs = require('fs');
 const https = require('https');
 const path = require('path');
 const axios = require('axios');
+
 const { ensureEstado } = require('./stateManager.js');
 const { loadOptOutMsgs, loadOptInMsgs, isOptOut, isOptIn, preflightOptOut, enterStageOptOutResetIfNeeded, finalizeOptOutBatchAtEnd } = require('./optout.js');
 const { setManychatSubscriberId, salvarContato } = require('./db');
@@ -12,6 +13,7 @@ const { getActiveTransport } = require('./lib/transport/index.js');
 const { chooseUnique, safeStr, normalizeContato, delay, delayRange, tsNow, randomInt, truncate, FIRST_REPLY_DELAY_MS, BETWEEN_MIN_MS, BETWEEN_MAX_MS } = require('./utils.js');
 const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, promptClassificaOptOut, promptClassificaReoptin } = require('./prompts');
 const { handleAberturaSend } = require('./stages/abertura');
+
 let log = console;
 axios.defaults.httpsAgent = new https.Agent({ keepAlive: true });
 
