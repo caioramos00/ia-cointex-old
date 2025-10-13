@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { normMsg, delayRange, tsNow, truncate, BETWEEN_MIN_MS, BETWEEN_MAX_MS, safeStr } = require('./utils.js');
+const { normMsg, delay, delayRange, tsNow, truncate, BETWEEN_MIN_MS, BETWEEN_MAX_MS, safeStr } = require('./utils.js');
 
 function loadJsonSafe(p) {
     let raw = fs.readFileSync(p, 'utf8');
