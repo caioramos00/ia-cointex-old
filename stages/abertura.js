@@ -79,6 +79,8 @@ async function handleAberturaWait(st) {
     const _prev = st.etapa;
     st.etapa = 'interesse:send';
     console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
+    st.mensagensPendentes = [];
+    st.mensagensDesdeSolicitacao = [];
 }
 
 module.exports = { handleAberturaSend, handleAberturaWait };
