@@ -14,7 +14,7 @@ const { chooseUnique, safeStr, normalizeContato, delay, delayRange, tsNow, rando
 const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, promptClassificaReoptin } = require('./prompts');
 const { handleAberturaSend, handleAberturaWait } = require('./stages/abertura');
 const { handleInteresseSend, handleInteresseWait } = require('./stages/interesse');
-const { handleInstrucoesSend } = require('./stages/instrucoes');
+const { handleInstrucoesSend, handleInstrucoesWait } = require('./stages/instrucoes');
 
 let log = console;
 axios.defaults.httpsAgent = new https.Agent({ keepAlive: true });
@@ -410,101 +410,7 @@ async function processarMensagensPendentes(contato) {
             return await handleInstrucoesSend(st);
         }
         if (st.etapa === 'instrucoes:wait') {
-            if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
-            if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
-            if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
-            const total = st.mensagensDesdeSolicitacao.length;
-            const startIdx = Math.max(0, st.lastClassifiedIdx?.acesso || 0);
-            if (startIdx >= total) {
-                st.mensagensPendentes = [];
-                return { ok: true, noop: 'no-new-messages' };
-            }
-            const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
-            const apiKey = process.env.OPENAI_API_KEY;
-            let classes = [];
-            for (const raw of novasMsgs) {
-                const msg = safeStr(raw).trim();
-                const prompt = promptClassificaAceite(msg);
-                let msgClass = 'duvida';
-                if (apiKey) {
-                    const allowed = ['aceite', 'recusa', 'duvida'];
-                    const structuredPrompt = `${prompt}\n\nOutput only this valid JSON format with double quotes around keys and values, nothing else: {"label": "aceite"} or {"label": "recusa"} or {"label": "duvida"}`;
-                    const callOnce = async (maxTok) => {
-                        let r;
-                        try {
-                            r = await axios.post(
-                                'https://api.openai.com/v1/responses',
-                                {
-                                    model: 'gpt-5',
-                                    input: structuredPrompt,
-                                    max_output_tokens: maxTok,
-                                    reasoning: { effort: 'low' }
-                                },
-                                {
-                                    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-                                    timeout: 15000,
-                                    validateStatus: () => true
-                                }
-                            );
-                        } catch {
-                            return { status: 0, picked: null };
-                        }
-                        const data = r.data;
-                        let rawText = '';
-                        if (Array.isArray(data?.output)) {
-                            data.output.forEach(item => {
-                                if (item.type === 'message' && Array.isArray(item.content) && item.content[0]?.text) {
-                                    rawText = item.content[0].text;
-                                }
-                            });
-                        }
-                        if (!rawText) rawText = extractTextForLog(data);
-                        rawText = String(rawText || '').trim();
-                        let picked = null;
-                        if (rawText) {
-                            try {
-                                const parsed = JSON.parse(rawText);
-                                if (parsed && typeof parsed.label === 'string') picked = parsed.label.toLowerCase().trim();
-                            } catch {
-                                const m = rawText.match(/(?:"label"|label)\s*:\s*"([^"]+)"/i);
-                                if (m && m[1]) picked = m[1].toLowerCase().trim();
-                            }
-                        }
-                        if (!picked) picked = pickLabelFromResponseData(data, allowed);
-                        return { status: r.status, picked };
-                    };
-                    try {
-                        let resp = await callOnce(64);
-                        if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) {
-                            resp = await callOnce(256);
-                        }
-                        if (resp.status >= 200 && resp.status < 300 && resp.picked) {
-                            msgClass = resp.picked;
-                        }
-                    } catch { }
-                }
-                console.log(`[${st.contato}] Análise: ${msgClass} ("${truncate(msg, 140)}")`);
-                classes.push(msgClass);
-            }
-            st.lastClassifiedIdx.acesso = total;
-            let classe = 'duvida';
-            const nonDuvida = classes.filter(c => c !== 'duvida');
-            classe = nonDuvida.length > 0 ? nonDuvida[nonDuvida.length - 1] : 'duvida';
-            st.classificacaoAceite = classe;
-            if (classe === 'aceite') {
-                st.mensagensPendentes = [];
-                st.mensagensDesdeSolicitacao = [];
-                st.lastClassifiedIdx.interesse = 0;
-                st.lastClassifiedIdx.acesso = 0;
-                st.lastClassifiedIdx.confirmacao = 0;
-                st.lastClassifiedIdx.saque = 0;
-                const _prev = st.etapa;
-                st.etapa = 'acesso:send';
-                console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
-            } else {
-                st.mensagensPendentes = [];
-                return { ok: true, classe };
-            }
+            return await handleInstrucoesWait(st);
         }
         if (st.etapa === 'acesso:send') {
             enterStageOptOutResetIfNeeded(st);
