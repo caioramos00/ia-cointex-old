@@ -10,8 +10,8 @@ const { setManychatSubscriberId, salvarContato } = require('./db');
 const { sendMessage, sendImage } = require('./senders.js');
 const { criarUsuarioDjango } = require('./services.js');
 const { getActiveTransport } = require('./lib/transport/index.js');
-const { chooseUnique, safeStr, normalizeContato, delay, delayRange, tsNow, randomInt, truncate, FIRST_REPLY_DELAY_MS, BETWEEN_MIN_MS, BETWEEN_MAX_MS } = require('./utils.js');
-const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, promptClassificaOptOut, promptClassificaReoptin } = require('./prompts');
+const { chooseUnique, safeStr, normalizeContato, delay, delayRange, tsNow, randomInt, truncate, BETWEEN_MIN_MS, BETWEEN_MAX_MS } = require('./utils.js');
+const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, promptClassificaReoptin } = require('./prompts');
 const { handleAberturaSend, handleAberturaWait } = require('./stages/abertura');
 const { handleInteresseSend, handleInteresseWait } = require('./stages/interesse');
 const { handleInstrucoesSend } = require('./stages/instrucoes');
@@ -1275,5 +1275,7 @@ module.exports = {
     delay,
     chooseUnique,
     enterStageOptOutResetIfNeeded,
+    extractTextForLog,
+    pickLabelFromResponseData,
     _utils: { normalizeContato },
 };

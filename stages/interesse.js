@@ -1,12 +1,12 @@
+const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
 const { delayRange, tsNow, chooseUnique, BETWEEN_MIN_MS, BETWEEN_MAX_MS, safeStr, truncate } = require('../utils.js');
 const { preflightOptOut, enterStageOptOutResetIfNeeded, finalizeOptOutBatchAtEnd } = require('../optout.js');
 const { sendMessage } = require('../senders.js');
-const { processarMensagensPendentes } = require('../bot.js'); // Import para chamada recursiva
-const axios = require('axios');
+const { processarMensagensPendentes } = require('../bot.js');
 const { promptClassificaAceite } = require('../prompts');
-const { extractTextForLog, pickLabelFromResponseData } = require('../bot.js'); // Ajuste se essas funções estiverem em bot.js
+const { extractTextForLog, pickLabelFromResponseData } = require('../bot.js');
 
 async function handleInteresseSend(st) {
     enterStageOptOutResetIfNeeded(st);
