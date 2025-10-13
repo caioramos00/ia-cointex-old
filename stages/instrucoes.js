@@ -3,10 +3,8 @@ const fs = require('fs');
 const { delayRange, tsNow, BETWEEN_MIN_MS, BETWEEN_MAX_MS, safeStr, truncate } = require('../utils.js');
 const { preflightOptOut, enterStageOptOutResetIfNeeded, finalizeOptOutBatchAtEnd } = require('../optout.js');
 const { sendMessage } = require('../senders.js');
-const { processarMensagensPendentes } = require('../bot.js'); // Import para chamada recursiva
 const axios = require('axios');
 const { promptClassificaAceite } = require('../prompts');
-const { extractTextForLog, pickLabelFromResponseData } = require('../bot.js'); // Ajuste se necessário
 
 async function handleInstrucoesSend(st) {
     enterStageOptOutResetIfNeeded(st);
@@ -84,7 +82,6 @@ async function handleInstrucoesWait(st) {
     if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
     if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
     if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
-    if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
     const total = st.mensagensDesdeSolicitacao.length;
     const startIdx = Math.max(0, st.lastClassifiedIdx?.acesso || 0);
     if (startIdx >= total) {
@@ -94,6 +91,8 @@ async function handleInstrucoesWait(st) {
     const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
     const apiKey = process.env.OPENAI_API_KEY;
     let classes = [];
+    const bot = require('../bot.js');
+    const { extractTextForLog, pickLabelFromResponseData } = bot;
     for (const raw of novasMsgs) {
         const msg = safeStr(raw).trim();
         const prompt = promptClassificaAceite(msg);
@@ -173,9 +172,9 @@ async function handleInstrucoesWait(st) {
         const _prev = st.etapa;
         st.etapa = 'acesso:send';
         console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
-        st.mensagensPendentes = [];  // Limpa pendentes para evitar acúmulo
-        st.mensagensDesdeSolicitacao = [];  // Limpa para consistência
-        return await processarMensagensPendentes(st.contato);  // Chama recursivamente para processar a nova etapa imediatamente
+        st.mensagensPendentes = [];
+        st.mensagensDesdeSolicitacao = [];
+        return await bot.processarMensagensPendentes(st.contato);
     } else {
         st.mensagensPendentes = [];
         return { ok: true, classe };

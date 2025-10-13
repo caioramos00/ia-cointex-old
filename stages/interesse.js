@@ -3,10 +3,8 @@ const fs = require('fs');
 const { delayRange, tsNow, chooseUnique, BETWEEN_MIN_MS, BETWEEN_MAX_MS, safeStr, truncate } = require('../utils.js');
 const { preflightOptOut, enterStageOptOutResetIfNeeded, finalizeOptOutBatchAtEnd } = require('../optout.js');
 const { sendMessage } = require('../senders.js');
-const { processarMensagensPendentes } = require('../bot.js'); // Import para chamada recursiva
 const axios = require('axios');
 const { promptClassificaAceite } = require('../prompts');
-const { extractTextForLog, pickLabelFromResponseData } = require('../bot.js'); // Assumindo que essas funções estão em bot.js; ajuste se necessário
 
 async function handleInteresseSend(st) {
     enterStageOptOutResetIfNeeded(st);
@@ -61,6 +59,8 @@ async function handleInteresseWait(st) {
     const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
     const apiKey = process.env.OPENAI_API_KEY;
     let classes = [];
+    const bot = require('../bot.js');
+    const { extractTextForLog, pickLabelFromResponseData } = bot;
     for (const raw of novasMsgs) {
         const msg = safeStr(raw).trim();
         const prompt = promptClassificaAceite(msg);
@@ -137,9 +137,9 @@ async function handleInteresseWait(st) {
         const _prev = st.etapa;
         st.etapa = 'instrucoes:send';
         console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
-        st.mensagensPendentes = [];  // Limpa pendentes para evitar acúmulo
-        st.mensagensDesdeSolicitacao = [];  // Limpa para consistência
-        return await processarMensagensPendentes(st.contato);  // Chama recursivamente para processar a nova etapa imediatamente
+        st.mensagensPendentes = [];
+        st.mensagensDesdeSolicitacao = [];
+        return await bot.processarMensagensPendentes(st.contato);
     } else {
         return { ok: true, classe };
     }
