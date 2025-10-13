@@ -1,9 +1,8 @@
 const path = require('path');
 const fs = require('fs');
-const { delay, delayRange, tsNow, FIRST_REPLY_DELAY_MS, BETWEEN_MIN_MS, BETWEEN_MAX_MS } = require('../utils.js');
-const { preflightOptOut, finalizeOptOutBatchAtEnd } = require('../optout.js');
+const { delay, delayRange, tsNow, chooseUnique, FIRST_REPLY_DELAY_MS, BETWEEN_MIN_MS, BETWEEN_MAX_MS } = require('../utils.js');
+const { preflightOptOut, enterStageOptOutResetIfNeeded, finalizeOptOutBatchAtEnd } = require('./optout.js');
 const { sendMessage } = require('../senders.js');
-const { chooseUnique, enterStageOptOutResetIfNeeded } = require('../bot.js');
 
 async function handleAberturaSend(st) {
     enterStageOptOutResetIfNeeded(st);

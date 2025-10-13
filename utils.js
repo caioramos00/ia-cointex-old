@@ -40,6 +40,10 @@ function truncate(s, n = 600) {
     const str = String(s || '');
     return str.length > n ? str.slice(0, n) + '…[truncated]' : str;
 }
+const sentHashesGlobal = new Set();
+function hashText(s) { let h = 0, i, chr; const str = String(s); if (str.length === 0) return '0'; for (i = 0; i < str.length; i++) { chr = str.charCodeAt(i); h = ((h << 5) - h) + chr; h |= 0; } return String(h); }
+function chooseUnique(generator, st) { const maxTries = 200; for (let i = 0; i < maxTries; i++) { const text = generator(); const h = hashText(text); if (!sentHashesGlobal.has(h) && !st.sentHashes.has(h)) { sentHashesGlobal.add(h); st.sentHashes.add(h); return text; } } return null; }
+
 
 module.exports = {
     safeStr,
@@ -57,6 +61,8 @@ module.exports = {
     collapseSpaces,
     removeDiacritics,
     normMsg,
+    hashText,
+    chooseUnique,
     FIRST_REPLY_DELAY_MS,
     BETWEEN_MIN_MS,
     BETWEEN_MAX_MS,
