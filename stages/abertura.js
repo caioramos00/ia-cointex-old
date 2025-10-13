@@ -72,4 +72,13 @@ async function handleAberturaSend(st) {
     return { ok: true, partial: true };
 }
 
-module.exports = { handleAberturaSend };
+async function handleAberturaWait(st) {
+    if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
+    if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
+    if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
+    const _prev = st.etapa;
+    st.etapa = 'interesse:send';
+    console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
+}
+
+module.exports = { handleAberturaSend, handleAberturaWait };

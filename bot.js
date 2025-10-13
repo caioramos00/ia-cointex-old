@@ -12,7 +12,7 @@ const { criarUsuarioDjango } = require('./services.js');
 const { getActiveTransport } = require('./lib/transport/index.js');
 const { chooseUnique, safeStr, normalizeContato, delay, delayRange, tsNow, randomInt, truncate, FIRST_REPLY_DELAY_MS, BETWEEN_MIN_MS, BETWEEN_MAX_MS } = require('./utils.js');
 const { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, promptClassificaOptOut, promptClassificaReoptin } = require('./prompts');
-const { handleAberturaSend } = require('./stages/abertura');
+const { handleAberturaSend, handleAberturaWait } = require('./stages/abertura');
 
 let log = console;
 axios.defaults.httpsAgent = new https.Agent({ keepAlive: true });
@@ -396,12 +396,7 @@ async function processarMensagensPendentes(contato) {
             return await handleAberturaSend(st);
         }
         if (st.etapa === 'abertura:wait') {
-            if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
-            if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
-            if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
-            const _prev = st.etapa;
-            st.etapa = 'interesse:send';
-            console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
+            return await handleAberturaWait(st);
         }
         if (st.etapa === 'interesse:send') {
             enterStageOptOutResetIfNeeded(st);
