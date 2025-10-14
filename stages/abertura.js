@@ -82,7 +82,8 @@ async function handleAberturaWait(st) {
     st.mensagensPendentes = [];
     st.mensagensDesdeSolicitacao = [];
     const bot = require('../bot.js');
-    return await bot.processarMensagensPendentes(st.contato);
+    process.nextTick(() => bot.processarMensagensPendentes(st.contato));
+    return { ok: true, transitioned: true };
 }
 
 module.exports = { handleAberturaSend, handleAberturaWait };

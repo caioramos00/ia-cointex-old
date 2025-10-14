@@ -59,7 +59,7 @@ async function handleInteresseWait(st) {
     const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
     const apiKey = process.env.OPENAI_API_KEY;
     let classes = [];
-    const bot = require('../bot.js');
+    const bot = require('../bot.js'); // Require dentro da função para evitar ciclo
     const { extractTextForLog, pickLabelFromResponseData } = bot;
     for (const raw of novasMsgs) {
         const msg = safeStr(raw).trim();
@@ -137,9 +137,10 @@ async function handleInteresseWait(st) {
         const _prev = st.etapa;
         st.etapa = 'instrucoes:send';
         console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
-        st.mensagensPendentes = [];
-        st.mensagensDesdeSolicitacao = [];
-        return await bot.processarMensagensPendentes(st.contato);
+        st.mensagensPendentes = [];  // Limpa pendentes para evitar acúmulo
+        st.mensagensDesdeSolicitacao = [];  // Limpa para consistência
+        process.nextTick(() => bot.processarMensagensPendentes(st.contato));
+        return { ok: true, transitioned: true };
     } else {
         return { ok: true, classe };
     }
