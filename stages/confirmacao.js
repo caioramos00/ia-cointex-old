@@ -55,13 +55,14 @@ async function handleConfirmacaoWait(st) {
     if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
     if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
     if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
-    const total = st.mensagensDesdeSolicitacao.length;
-    const startIdx = Math.max(0, st.lastClassifiedIdx?.confirmacao || 0);
-    if (startIdx >= total) {
+    const totalPend = st.mensagensPendentes.length;
+    const startIdx = Math.min(totalPend, Math.max(0, Number(st.lastClassifiedIdx?.confirmacao || 0)));
+    const novasMsgs = st.mensagensPendentes.slice(startIdx);
+    if (novasMsgs.length === 0) {
         st.mensagensPendentes = [];
+        st.lastClassifiedIdx.confirmacao = 0;
         return { ok: true, noop: 'no-new-messages' };
     }
-    const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
     const apiKey = process.env.OPENAI_API_KEY;
     const looksLikeMediaUrl = (s) => {
         const n = String(s || '');
@@ -70,8 +71,8 @@ async function handleConfirmacaoWait(st) {
     };
     let confirmado = false;
     for (const m of novasMsgs) {
-        const msg = safeStr(m.texto).trim();
-        if (m.temMidia || m.hasMedia || looksLikeMediaUrl(msg) || /^\[m[ií]dia\]$/i.test(msg)) {
+        const msg = safeStr(m?.texto || '').trim();
+        if (m?.temMidia || m?.hasMedia || looksLikeMediaUrl(msg) || /^\[m[ií]dia\]$/i.test(msg)) {
             console.log(`[${st.contato}] Análise: confirmado ("${truncate(msg, 140)}")`);
             confirmado = true;
             break;
@@ -79,7 +80,7 @@ async function handleConfirmacaoWait(st) {
     }
     if (!confirmado && apiKey) {
         const allowed = ['confirmado', 'nao_confirmado', 'duvida', 'neutro'];
-        const contexto = novasMsgs.map(m => safeStr(m.texto || m)).join(' | ');
+        const contexto = novasMsgs.map(m => safeStr(m?.texto || '')).join(' | ');
         const structuredPrompt =
             `${promptClassificaConfirmacao(contexto)}\n\n` +
             `Output only this valid JSON format with double quotes around keys and values, nothing else: ` +
@@ -137,7 +138,7 @@ async function handleConfirmacaoWait(st) {
             console.log(`[${st.contato}] Análise: ${resp.picked || 'neutro'} ("${truncate(contexto, 140)}")`);
         } catch { }
     }
-    st.lastClassifiedIdx.confirmacao = st.mensagensDesdeSolicitacao.length;
+    st.lastClassifiedIdx.confirmacao = totalPend;
     st.mensagensPendentes = [];
     if (confirmado) {
         st.mensagensDesdeSolicitacao = [];
