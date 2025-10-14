@@ -105,7 +105,7 @@ async function handleAcessoWait(st) {
     const apiKey = process.env.OPENAI_API_KEY;
     const allowed = ['confirmado', 'nao_confirmado', 'duvida', 'neutro'];
     let classes = [];
-    const bot = require('../bot.js'); // Require dentro da função para evitar ciclo
+    const bot = require('../bot.js');
     const { extractTextForLog, pickLabelFromResponseData } = bot;
     for (const raw of novasMsgs) {
         const msg = safeStr(raw).trim();
@@ -180,8 +180,8 @@ async function handleAcessoWait(st) {
         const _prev = st.etapa;
         st.etapa = 'confirmacao:send';
         console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
-        st.mensagensPendentes = [];  // Limpa pendentes para evitar acúmulo
-        st.mensagensDesdeSolicitacao = [];  // Limpa para consistência
+        st.mensagensPendentes = [];
+        st.mensagensDesdeSolicitacao = [];
         process.nextTick(() => bot.processarMensagensPendentes(st.contato));
         return { ok: true, transitioned: true };
     } else {
