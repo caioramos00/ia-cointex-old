@@ -114,6 +114,23 @@ async function handleConversaoSend(st) {
             if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-batch-end' };
             st.etapa = 'conversao:wait';
             console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
+
+            const delayMinutos = Math.floor(12 + Math.random() * 4) * 60 * 1000; // 12 a 15 minutos
+            setTimeout(async () => {
+                const m10 = [pick(conversao?.msg10?.msg10b1), pick(conversao?.msg10?.msg10b2)].filter(Boolean).join(', ') + '…\n\n' + [pick(conversao?.msg10?.msg10b3), pick(conversao?.msg10?.msg10b4)].filter(Boolean).join(', ');
+                const m11 = [pick(conversao?.msg11?.msg11b1), pick(conversao?.msg11?.msg11b2)].filter(Boolean).join(', ') + '\n\n' + [pick(conversao?.msg11?.msg11b3), pick(conversao?.msg11?.msg11b4), pick(conversao?.msg11?.msg11b5)].filter(Boolean).join(', ');
+                const m12 = [pick(conversao?.msg12?.msg12b1), pick(conversao?.msg12?.msg12b2), pick(conversao?.msg12?.msg12b3), pick(conversao?.msg12?.msg12b4)].filter(Boolean).join(', ');
+                const m13 = [pick(conversao?.msg13?.msg13b1), pick(conversao?.msg13?.msg13b2), pick(conversao?.msg13?.msg13b3)].filter(Boolean).join(', ') + '\n\n' + [pick(conversao?.msg13?.msg13b4)].filter(Boolean).join('') + '?';
+
+                const novasMsgs = [m10, m11, m12, m13];
+
+                for (const msg of novasMsgs) {
+                    if (await preflightOptOut(st)) break;
+                    await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+                    await sendMessage(st.contato, msg);
+                }
+            }, delayMinutos);
+
             return { ok: true, batch: 3, done: true };
         }
     }
