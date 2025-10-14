@@ -5,11 +5,10 @@ const path = require('path');
 const axios = require('axios');
 
 const { ensureEstado } = require('./stateManager.js');
-const { loadOptOutMsgs, loadOptInMsgs, isOptOut, isOptIn, preflightOptOut, enterStageOptOutResetIfNeeded, finalizeOptOutBatchAtEnd } = require('./optout.js');
+const { loadOptOutMsgs, loadOptInMsgs, isOptOut, isOptIn, preflightOptOut, enterStageOptOutResetIfNeeded } = require('./optout.js');
 const { setManychatSubscriberId, salvarContato } = require('./db');
-const { sendMessage, sendImage } = require('./senders.js');
-const { getActiveTransport } = require('./lib/transport/index.js');
-const { chooseUnique, safeStr, normalizeContato, delay, delayRange, tsNow, randomInt, truncate, BETWEEN_MIN_MS, BETWEEN_MAX_MS } = require('./utils.js');
+const { sendMessage } = require('./senders.js');
+const { chooseUnique, safeStr, normalizeContato, delay, delayRange, tsNow, truncate, BETWEEN_MIN_MS, BETWEEN_MAX_MS } = require('./utils.js');
 const { promptClassificaReoptin } = require('./prompts');
 const { handleAberturaSend, handleAberturaWait } = require('./stages/abertura');
 const { handleInteresseSend, handleInteresseWait } = require('./stages/interesse');
@@ -17,6 +16,8 @@ const { handleInstrucoesSend, handleInstrucoesWait } = require('./stages/instruc
 const { handleAcessoSend, handleAcessoWait } = require('./stages/acesso');
 const { handleConfirmacaoSend, handleConfirmacaoWait } = require('./stages/confirmacao');
 const { handleSaqueSend, handleSaqueWait } = require('./stages/saque');
+const { handleValidacaoSend, handleValidacaoWait, handleValidacaoCooldown } = require('./stages/validacao');
+const { handleConversaoSend, handleConversaoWait } = require('./stages/conversao');
 
 let log = console;
 axios.defaults.httpsAgent = new https.Agent({ keepAlive: true });
@@ -432,256 +433,20 @@ async function processarMensagensPendentes(contato) {
         if (st.etapa === 'saque:wait') {
             return await handleSaqueWait(st);
         }
-
         if (st.etapa === 'validacao:send') {
-            enterStageOptOutResetIfNeeded(st);
-            const validacaoPath = path.join(__dirname, 'content', 'validacao.json');
-            let validacaoData = null;
-            const loadValidacao = () => {
-                if (validacaoData) return validacaoData;
-                let raw = fs.readFileSync(validacaoPath, 'utf8');
-                raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
-                validacaoData = JSON.parse(raw);
-                return validacaoData;
-            };
-            const pick = (arr) => Array.isArray(arr) && arr.length
-                ? arr[Math.floor(Math.random() * arr.length)]
-                : '';
-            const composeMsg1 = () => {
-                const c = loadValidacao();
-                return [pick(c?.msg1?.msg1b1), pick(c?.msg1?.msg1b2)].filter(Boolean).join(', ') + (pick(c?.msg1?.msg1b3) ? `. ${pick(c?.msg1?.msg1b3)}` : '');
-            };
-            const composeMsg2 = () => {
-                const c = loadValidacao();
-                const part1 = [pick(c?.msg2?.msg2b1), pick(c?.msg2?.msg2b2)].filter(Boolean).join(', ');
-                const part2 = [pick(c?.msg2?.msg2b3), pick(c?.msg2?.msg2b4)].filter(Boolean).join(', ');
-                return [part1 && `${part1}.`, part2 && `${part2}?`].filter(Boolean).join(' ');
-            };
-
-            const m1 = chooseUnique(composeMsg1, st) || composeMsg1();
-            const m2 = chooseUnique(composeMsg2, st) || composeMsg2();
-            const msgs = [m1, m2];
-
-            let cur = Number(st.stageCursor?.[st.etapa] || 0);
-            for (let i = cur; i < msgs.length; i++) {
-                if (await preflightOptOut(st)) {
-                    return { ok: true, interrupted: 'optout-pre-batch' };
-                }
-                if (!msgs[i]) continue;
-                await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-                const r = await sendMessage(st.contato, msgs[i]);
-                if (!r?.ok) break;
-                if (await preflightOptOut(st)) {
-                    return { ok: true, interrupted: 'optout-mid-batch' };
-                }
-                st.stageCursor[st.etapa] = i + 1;
-            }
-
-            if ((st.stageCursor[st.etapa] || 0) >= msgs.length) {
-                if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-post-batch' };
-                st.stageCursor[st.etapa] = 0;
-                st.mensagensPendentes = [];
-                st.mensagensDesdeSolicitacao = [];
-                st.lastClassifiedIdx.validacao = 0;
-                st.validacaoAwaitFirstMsg = true;
-                st.validacaoTimeoutUntil = 0;
-                const _prev = st.etapa;
-                if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-batch-end' };
-                st.etapa = 'validacao:wait';
-                console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
-                return { ok: true };
-            }
-            return { ok: true, partial: true };
+            return await handleValidacaoSend(st);
         }
-
         if (st.etapa === 'validacao:wait') {
-            if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
-            if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
-            if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
-            if (st.validacaoAwaitFirstMsg && st.validacaoTimeoutUntil === 0) {
-                const FOUR = 4 * 60 * 1000;
-                const SIX = 6 * 60 * 1000;
-                const rnd = randomInt(FOUR, SIX + 1);
-                st.validacaoTimeoutUntil = Date.now() + rnd;
-                st.validacaoAwaitFirstMsg = false;
-                st.mensagensPendentes = [];
-                st.mensagensDesdeSolicitacao = [];
-                if (st.validacaoTimer) { try { clearTimeout(st.validacaoTimer); } catch { } }
-                st.validacaoTimer = setTimeout(async () => {
-                    try {
-                        await processarMensagensPendentes(contato);
-                    } catch (e) {
-                        console.warn(`[${st.contato}] validacaoTimer erro: ${e?.message || e}`);
-                    }
-                }, rnd + 100);
-                const _prev = st.etapa;
-                st.etapa = 'validacao:cooldown';
-                console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
-                return { ok: true, started: rnd };
-            }
-            st.mensagensPendentes = [];
-            return { ok: true, noop: 'await-first-message' };
+            return await handleValidacaoWait(st);
         }
-
         if (st.etapa === 'validacao:cooldown') {
-            if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-cooldown' };
-            if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-cooldown' };
-
-            const now = Date.now();
-            if (st.validacaoTimeoutUntil > 0 && now < st.validacaoTimeoutUntil) {
-                if (st.mensagensPendentes.length > 0) {
-                    st.mensagensPendentes = [];
-                    st.mensagensDesdeSolicitacao = [];
-                }
-                return { ok: true, noop: 'cooldown' };
-            }
-            st.validacaoTimeoutUntil = 0;
-            st.validacaoAwaitFirstMsg = false;
-            if (st.validacaoTimer) { try { clearTimeout(st.validacaoTimer); } catch { } st.validacaoTimer = null; }
-            st.mensagensPendentes = [];
-            st.mensagensDesdeSolicitacao = [];
-            st.lastClassifiedIdx.validacao = 0;
-            st.conversaoBatch = 0;
-            st.conversaoAwaitMsg = false;
-            if (!st.lastClassifiedIdx) st.lastClassifiedIdx = {};
-            st.lastClassifiedIdx.conversao = 0;
-            const _prev = st.etapa;
-            st.etapa = 'conversao:send';
-            console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
+            return await handleValidacaoCooldown(st);
         }
-
         if (st.etapa === 'conversao:send') {
-            enterStageOptOutResetIfNeeded(st);
-            if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-pre-batch' };
-
-            let conversao = null;
-            let raw = fs.readFileSync(path.join(__dirname, 'content', 'conversao.json'), 'utf8');
-            raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
-            conversao = JSON.parse(raw);
-            const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
-
-            if (st.conversaoBatch === 0) {
-                const m1 = [pick(conversao?.msg1?.msg1b1), pick(conversao?.msg1?.msg1b2)].filter(Boolean).join(', ');
-                const m3 = [pick(conversao?.msg3?.msg3b1), pick(conversao?.msg3?.msg3b2), pick(conversao?.msg3?.msg3b3)].filter(Boolean).join(', ');
-
-                await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-                if (m1) {
-                    const r1 = await sendMessage(st.contato, m1);
-                    if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-mid-batch' };
-                    if (!r1?.ok) return { ok: false, reason: 'send-aborted' };
-                }
-
-                await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-
-                // Branching para envio de imagem baseado no provider
-                const { mod, settings } = await getActiveTransport();
-                const provider = mod?.name || 'unknown';
-                let r2;
-                if (provider === 'manychat') {
-                    const FLOW_NS_IMAGEM = 'content20251005164000_207206';
-                    r2 = await sendImage(st.contato, '', {
-                        flowNs: FLOW_NS_IMAGEM,
-                        caption: 'Comprovante de transferência'
-                    });
-                } else if (provider === 'meta') {
-                    const imgUrl = 'https://images2.imgbox.com/b6/bf/GC6mll55_o.jpg';
-                    r2 = await sendImage(st.contato, imgUrl, {
-                        caption: 'Comprovante de transferência'
-                    });
-                } else {
-                    console.warn(`[${st.contato}] Provider não suportado para imagem: ${provider}`);
-                    r2 = { ok: false, reason: 'unsupported-provider' };
-                }
-
-                if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-mid-batch' };
-                if (!r2?.ok) return { ok: false, reason: r2?.reason || 'image-send-failed' };
-
-                await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-                if (m3) {
-                    const r3 = await sendMessage(st.contato, m3);
-                    if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-post-batch' };
-                    if (!r3?.ok) return { ok: false, reason: 'send-aborted' };
-                }
-
-                st.conversaoBatch = 1;
-                st.conversaoAwaitMsg = true;
-                st.mensagensPendentes = [];
-                st.mensagensDesdeSolicitacao = [];
-                return { ok: true, batch: 1 };
-            }
-
-            if (st.conversaoAwaitMsg) {
-                const temMsg =
-                    (Array.isArray(st.mensagensPendentes) && st.mensagensPendentes.length > 0) ||
-                    (Array.isArray(st.mensagensDesdeSolicitacao) && st.mensagensDesdeSolicitacao.length > (st.lastClassifiedIdx?.conversao || 0));
-                if (!temMsg) {
-                    st.mensagensPendentes = [];
-                    return { ok: true, noop: 'await-user-message' };
-                }
-                st.lastClassifiedIdx.conversao = st.mensagensDesdeSolicitacao.length;
-                st.mensagensPendentes = [];
-                st.mensagensDesdeSolicitacao = [];
-
-                if (st.conversaoBatch === 1) {
-                    const m4 = [pick(conversao?.msg4?.msg4b1), pick(conversao?.msg4?.msg4b2), pick(conversao?.msg4?.msg4b3), pick(conversao?.msg4?.msg4b4), pick(conversao?.msg4?.msg4b5), pick(conversao?.msg4?.msg4b6), pick(conversao?.msg4?.msg4b7)].filter(Boolean).join('. ');
-                    const m5 = [pick(conversao?.msg5?.msg5b1), pick(conversao?.msg5?.msg5b2)].filter(Boolean).join(', ');
-                    const m6 = [pick(conversao?.msg6?.msg6b1), pick(conversao?.msg6?.msg6b2), pick(conversao?.msg6?.msg6b3)].filter(Boolean).join(', ');
-
-                    await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-                    if (m4) { const r = await sendMessage(st.contato, m4); if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-mid-batch' }; if (!r?.ok) return { ok: false, reason: 'send-aborted' }; }
-                    await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-                    if (m5) { const r = await sendMessage(st.contato, m5 ? `${m5}?` : m5); if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-mid-batch' }; if (!r?.ok) return { ok: false, reason: 'send-aborted' }; }
-                    await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-                    if (m6) { const r = await sendMessage(st.contato, m6); if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-post-batch' }; if (!r?.ok) return { ok: false, reason: 'send-aborted' }; }
-
-                    st.conversaoBatch = 2;
-                    st.conversaoAwaitMsg = true;
-                    return { ok: true, batch: 2 };
-                }
-
-                if (st.conversaoBatch === 2) {
-                    const m7 = [pick(conversao?.msg7?.msg7b1), pick(conversao?.msg7?.msg7b2), pick(conversao?.msg7?.msg7b3), pick(conversao?.msg7?.msg7b4), pick(conversao?.msg7?.msg7b5)].filter(Boolean).join('. ');
-                    const m8 = [pick(conversao?.msg8?.msg8b1), pick(conversao?.msg8?.msg8b2), pick(conversao?.msg8?.msg8b3), pick(conversao?.msg8?.msg8b4)].filter(Boolean).join(', ');
-                    const m9 = [pick(conversao?.msg9?.msg9b1), pick(conversao?.msg9?.msg9b2), pick(conversao?.msg9?.msg9b3), pick(conversao?.msg9?.msg9b4), pick(conversao?.msg9?.msg9b5), pick(conversao?.msg9?.msg9b6), pick(conversao?.msg9?.msg9b7)].filter(Boolean).join('. ');
-
-                    await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-                    if (m7) { const r = await sendMessage(st.contato, m7); if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-mid-batch' }; if (!r?.ok) return { ok: false, reason: 'send-aborted' }; }
-                    await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-                    if (m8) { const r = await sendMessage(st.contato, m8); if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-mid-batch' }; if (!r?.ok) return { ok: false, reason: 'send-aborted' }; }
-                    await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-                    if (m9) { const r = await sendMessage(st.contato, m9); if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-post-batch' }; if (!r?.ok) return { ok: false, reason: 'send-aborted' }; }
-
-                    st.conversaoBatch = 3;
-                    st.conversaoAwaitMsg = false;
-                    st.mensagensPendentes = [];
-                    st.mensagensDesdeSolicitacao = [];
-                    st.lastClassifiedIdx.conversao = 0;
-                    const _prev = st.etapa;
-                    if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-batch-end' };
-                    st.etapa = 'conversao:wait';
-                    console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
-                    return { ok: true, batch: 3, done: true };
-                }
-            }
-
-            if (st.conversaoBatch >= 3) {
-                st.conversaoAwaitMsg = false;
-                st.mensagensPendentes = [];
-                st.mensagensDesdeSolicitacao = [];
-                const _prev = st.etapa;
-                st.etapa = 'conversao:wait';
-                console.log(`[${st.contato}] ${(_prev)} -> ${st.etapa}`);
-                return { ok: true, coerced: 'conversao:wait' };
-            }
-
-            return { ok: true };
+            return await handleConversaoSend(st);
         }
-
         if (st.etapa === 'conversao:wait') {
-            if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
-            if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
-            st.mensagensPendentes = [];
-            return { ok: true, noop: 'idle' };
+            return await handleConversaoWait(st);
         }
     } finally {
         st.enviandoMensagens = false;
