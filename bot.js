@@ -110,7 +110,8 @@ async function handleIncomingNormalizedMessage(normalized) {
 
     if (!Array.isArray(st.mensagensPendentes)) st.mensagensPendentes = [];
     if (!Array.isArray(st.mensagensDesdeSolicitacao)) st.mensagensDesdeSolicitacao = [];
-    st.mensagensPendentes.push({ texto: msg, ts: st.lastIncomingTs });
+
+    st.mensagensPendentes.push({ texto: msg, ts: st.lastIncomingTs, temMidia: hasMedia });
     st.mensagensDesdeSolicitacao.push(msg);
 }
 

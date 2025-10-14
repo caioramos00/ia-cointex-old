@@ -61,7 +61,7 @@ async function handleConfirmacaoWait(st) {
         st.mensagensPendentes = [];
         return { ok: true, noop: 'no-new-messages' };
     }
-    const novasMsgs = st.mensagensPendentes.slice(startIdx);
+    const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
     const apiKey = process.env.OPENAI_API_KEY;
     const looksLikeMediaUrl = (s) => {
         const n = String(s || '');
@@ -79,7 +79,7 @@ async function handleConfirmacaoWait(st) {
     }
     if (!confirmado && apiKey) {
         const allowed = ['confirmado', 'nao_confirmado', 'duvida', 'neutro'];
-        const contexto = novasMsgs.map(m => safeStr(m.texto)).join(' | ');
+        const contexto = novasMsgs.map(m => safeStr(m.texto || m)).join(' | ');
         const structuredPrompt =
             `${promptClassificaConfirmacao(contexto)}\n\n` +
             `Output only this valid JSON format with double quotes around keys and values, nothing else: ` +
@@ -137,7 +137,7 @@ async function handleConfirmacaoWait(st) {
             console.log(`[${st.contato}] Análise: ${resp.picked || 'neutro'} ("${truncate(contexto, 140)}")`);
         } catch { }
     }
-    st.lastClassifiedIdx.confirmacao = st.mensagensPendentes.length;
+    st.lastClassifiedIdx.confirmacao = st.mensagensDesdeSolicitacao.length;
     st.mensagensPendentes = [];
     if (confirmado) {
         st.mensagensDesdeSolicitacao = [];
