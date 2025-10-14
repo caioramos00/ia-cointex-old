@@ -77,8 +77,9 @@ async function handleValidacaoWait(st) {
         st.mensagensDesdeSolicitacao = [];
         if (st.validacaoTimer) { try { clearTimeout(st.validacaoTimer); } catch { } }
         st.validacaoTimer = setTimeout(async () => {
+            const bot = require('../bot.js');
             try {
-                await processarMensagensPendentes(st.contato);
+                await bot.processarMensagensPendentes(st.contato);
             } catch (e) {
                 console.warn(`[${st.contato}] validacaoTimer erro: ${e?.message || e}`);
             }
