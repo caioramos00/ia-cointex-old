@@ -137,7 +137,8 @@ async function handleSaqueWait(st) {
                         { model: 'gpt-5', input: structuredPrompt, max_output_tokens: maxTok, reasoning: { effort: 'low' } },
                         { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 15000, validateStatus: () => true }
                     );
-                } catch {
+                } catch (e) {
+                    console.error(`[${st.contato}] Erro na chamada à API: ${e.message}`);
                     return { status: 0, picked: null };
                 }
                 const data = r.data;
@@ -164,7 +165,11 @@ async function handleSaqueWait(st) {
                 if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) resp = await callOnce(256);
                 relevante = (resp.status >= 200 && resp.status < 300 && resp.picked === 'relevante');
                 console.log(`[${st.contato}] Análise: ${resp.picked || (relevante ? 'relevante' : 'irrelevante')} ("${truncate(contexto, 140)}")`);
-            } catch { }
+            } catch (e) {
+                console.error(`[${st.contato}] Erro na classificação de relevância: ${e.message}`);
+            }
+        } else {
+            console.warn(`[${st.contato}] API Key não configurada; assumindo irrelevante.`);
         }
         st.lastClassifiedIdx.saque = 0;
         st.mensagensPendentes = [];
