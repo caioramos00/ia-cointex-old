@@ -1,9 +1,10 @@
 const path = require('path');
+const axios = require('axios');
 const fs = require('fs');
+const { extractTextForLog } = require('../bot.js')
 const { delayRange, tsNow, chooseUnique, BETWEEN_MIN_MS, BETWEEN_MAX_MS, safeStr, truncate } = require('../utils.js');
 const { preflightOptOut, enterStageOptOutResetIfNeeded, finalizeOptOutBatchAtEnd } = require('../optout.js');
 const { sendMessage } = require('../senders.js');
-const axios = require('axios');
 const { promptClassificaRelevancia } = require('../prompts');
 
 async function handleSaqueSend(st) {
