@@ -10,6 +10,7 @@ const LANDING_URL = 'https://tramposlara.com';
 
 const sentContactByWa = new Set();
 const sentContactByClid = new Set();
+const sentIntakeByClid = new Set(); // evita reenvio de intake CTWA nesta execução
 
 function checkAuth(req, res, next) {
   if (req.session.loggedIn) next();
@@ -126,7 +127,8 @@ function setupRoutes(
   if (typeof processarMensagensPendentes !== 'function') {
     try { processarMensagensPendentes = require('./bot.js').processarMensagensPendentes; } catch { }
   }
-  if (typeof inicializarEstado === 'function') {
+  // corrigido: só carrega fallback se não veio função
+  if (typeof inicializarEstado !== 'function') {
     try { inicializarEstado = require('./bot.js').inicializarEstado; } catch { }
   }
   app.use('/public', express.static(pathModule.join(__dirname, 'public')));
@@ -312,6 +314,40 @@ function setupRoutes(
           const wa_id = (value?.contacts && value.contacts[0]?.wa_id) || msg.from || '';
           const profile_name = (value?.contacts && value.contacts[0]?.profile?.name) || '';
           const clid = is_ctwa ? referral.ctwa_clid || '' : '';
+
+          if (is_ctwa && !clid) {
+            console.warn(`[CTWA][RX][WARN] referral.source_type=ad mas SEM ctwa_clid (from=${contato})`);
+          }
+
+          // Garante o INTAKE CTWA com payload BRUTO (idempotente na LP por ctwa_clid)
+          if (is_ctwa && clid && !sentIntakeByClid.has(clid)) {
+            try {
+              console.log(
+                `[CTWA][INTAKE][TX] url=${LANDING_URL}/ctwa/intake token=${contactToken ? 'present' : 'missing'}`
+              );
+              const intakeResp = await axios.post(
+                `${LANDING_URL}/ctwa/intake`,
+                body, // payload BRUTO do webhook (com referral completo)
+                {
+                  headers: { 'Content-Type': 'application/json', 'X-Contact-Token': contactToken },
+                  validateStatus: () => true,
+                  timeout: 6000,
+                }
+              );
+              console.log(
+                `[CTWA][INTAKE][RX] http=${intakeResp.status} body=${truncate(JSON.stringify(intakeResp.data), 2000)}`
+              );
+              // só marca como enviado se 2xx e ok
+              if (intakeResp.status >= 200 && intakeResp.status < 300 && intakeResp?.data?.ok !== false) {
+                sentIntakeByClid.add(clid);
+              } else {
+                console.warn(`[CTWA][INTAKE][FAIL] http=${intakeResp.status}`);
+              }
+            } catch (e) {
+              console.warn(`[CTWA][INTAKE][ERR] ${e?.message || e}`);
+            }
+          }
+
           const shouldSendContact =
             (is_ctwa && clid && !sentContactByClid.has(clid)) ||
             (!is_ctwa && !sentContactByWa.has(wa_id) && !(estado[contato]?.capiContactSent));
@@ -336,39 +372,31 @@ function setupRoutes(
                 validateStatus: () => true,
               });
 
-              // ADICIONE estes logs de resposta:
               const reqId = resp?.headers?.['x-request-id'] || resp?.headers?.['X-Request-Id'] || '';
               console.log(
                 `[CAPI][RX] http=${resp.status} req=${reqId} body=${truncate(JSON.stringify(resp.data), 5000)}`
               );
-              if (resp.status < 200 || resp.status >= 300) {
+
+              const ok = resp.status >= 200 && resp.status < 300 && resp?.data?.ok !== false;
+              if (ok) {
+                if (is_ctwa && clid) sentContactByClid.add(clid);
+                else sentContactByWa.add(wa_id);
+                if (estado[contato]) estado[contato].capiContactSent = true;
+              } else {
                 console.warn(`[CAPI][FAIL] http=${resp.status} req=${reqId}`);
               }
-
-              if (is_ctwa && clid) sentContactByClid.add(clid);
-              else sentContactByWa.add(wa_id);
-              if (estado[contato]) estado[contato].capiContactSent = true;
             } catch (e) {
               console.warn(`[CAPI][ERR] send contact failed: ${e?.message || e}`);
             }
-
-            try {
-              const resp = await axios.post(`${LANDING_URL}/api/capi/contact`, contactPayload, {
-                headers: { 'Content-Type': 'application/json', 'X-Contact-Token': contactToken },
-                validateStatus: () => true,
-              });
-              if (is_ctwa && clid) sentContactByClid.add(clid);
-              else sentContactByWa.add(wa_id);
-              if (estado[contato]) estado[contato].capiContactSent = true;
-            } catch { }
           }
+
           if (!estado[contato]) {
             inicializarEstado(contato, tid, click_type);
             await salvarContato(contato, null, texto || (isProviderMedia ? '[mídia]' : ''), tid, click_type);
           } else {
             await salvarContato(contato, null, texto || (isProviderMedia ? '[mídia]' : ''), tid, click_type);
           }
-          await handleIncomingNormalizedMessage({ // Adicione isso
+          await handleIncomingNormalizedMessage({
             contato,
             texto,
             temMidia: isProviderMedia,
