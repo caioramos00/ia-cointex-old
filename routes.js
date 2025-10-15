@@ -1,11 +1,12 @@
 const express = require('express');
 const axios = require('axios');
+const { truncate } = require('./utils.js');
 
 const { pool, getBotSettings, updateBotSettings, getContatoByPhone } = require('./db.js');
 const { delay, handleIncomingNormalizedMessage } = require('./bot.js');
 const { setEtapa, ensureEstado } = require('./stateManager.js');
 
-const LANDING_URL = 'https://grupo-whatsapp-trampos-lara-2025.onrender.com';
+const LANDING_URL = 'https://tramposlara.com';
 
 const sentContactByWa = new Set();
 const sentContactByClid = new Set();
@@ -302,6 +303,12 @@ function setupRoutes(
             click_type = 'CTWA';
             is_ctwa = true;
           }
+
+          if (msg?.referral) {
+            console.log(`[CTWA][RX] contato=${contato} is_ctwa=${is_ctwa} tid_len=${(tid || '').length}`);
+            console.log(`[CTWA][RX][referral] ${truncate(JSON.stringify(msg.referral), 20000)}`);
+          }
+
           const wa_id = (value?.contacts && value.contacts[0]?.wa_id) || msg.from || '';
           const profile_name = (value?.contacts && value.contacts[0]?.profile?.name) || '';
           const clid = is_ctwa ? referral.ctwa_clid || '' : '';
@@ -317,6 +324,34 @@ function setupRoutes(
               phone_number_id: value?.metadata?.phone_number_id || '',
               display_phone_number: value?.metadata?.display_phone_number || '',
             };
+
+            console.log(
+              `[CAPI][TX] url=${LANDING_URL}/api/capi/contact token=${contactToken ? 'present' : 'missing'} ` +
+              `payload=${truncate(JSON.stringify(contactPayload), 5000)}`
+            );
+
+            try {
+              const resp = await axios.post(`${LANDING_URL}/api/capi/contact`, contactPayload, {
+                headers: { 'Content-Type': 'application/json', 'X-Contact-Token': contactToken },
+                validateStatus: () => true,
+              });
+
+              // ADICIONE estes logs de resposta:
+              const reqId = resp?.headers?.['x-request-id'] || resp?.headers?.['X-Request-Id'] || '';
+              console.log(
+                `[CAPI][RX] http=${resp.status} req=${reqId} body=${truncate(JSON.stringify(resp.data), 5000)}`
+              );
+              if (resp.status < 200 || resp.status >= 300) {
+                console.warn(`[CAPI][FAIL] http=${resp.status} req=${reqId}`);
+              }
+
+              if (is_ctwa && clid) sentContactByClid.add(clid);
+              else sentContactByWa.add(wa_id);
+              if (estado[contato]) estado[contato].capiContactSent = true;
+            } catch (e) {
+              console.warn(`[CAPI][ERR] send contact failed: ${e?.message || e}`);
+            }
+
             try {
               const resp = await axios.post(`${LANDING_URL}/api/capi/contact`, contactPayload, {
                 headers: { 'Content-Type': 'application/json', 'X-Contact-Token': contactToken },
