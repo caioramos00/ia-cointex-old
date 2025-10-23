@@ -1,6 +1,7 @@
 const { normalizeContato } = require('./utils.js');
 const estadoContatos = require('./state.js');
 const { _canonicalizeEtapa } = require('./optout.js');
+const { publishState } = require('./stream/events-bus');
 
 const KNOWN_ETAPAS = new Set([
     'abertura:send',
@@ -78,6 +79,14 @@ async function setEtapa(contato, etapa, opts = {}) {
     const st = ensureEstado(contato);
     _resetRuntime(st, opts);
     st.etapa = target;
+    try {
+        publishState({
+            wa_id: st.contato,
+            etapa: st.etapa,
+            vars: undefined,
+            ts: Date.now()
+        });
+    } catch { }
     return { ok: true, contato: st.contato, etapa: st.etapa };
 }
 

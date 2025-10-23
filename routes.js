@@ -5,6 +5,7 @@ const { truncate, findTidInText, safeStr } = require('./utils.js');
 const { pool, getBotSettings, updateBotSettings, getContatoByPhone } = require('./db.js');
 const { delay, handleIncomingNormalizedMessage } = require('./bot.js');
 const { setEtapa, ensureEstado } = require('./stateManager.js');
+const { sseRouter } = require('./stream/sse-router');
 
 const LANDING_URL = 'https://tramposlara.com';
 
@@ -709,5 +710,7 @@ function setupRoutes(
     }
   });
 }
+
+router.use(sseRouter);
 
 module.exports = { checkAuth, setupRoutes };

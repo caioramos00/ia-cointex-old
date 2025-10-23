@@ -4,6 +4,7 @@ const { getContatoByPhone, setManychatSubscriberId } = require('./db');
 const { getActiveTransport } = require('./lib/transport/index.js');
 const { preflightOptOut } = require('./optout.js');
 const { ensureEstado } = require('./stateManager.js');
+const { publishMessage } = require('./stream/events-bus');
 
 async function resolveManychatSubscriberId(contato, modOpt, settingsOpt) {
     const phone = String(contato || '').replace(/\D/g, '');
@@ -79,9 +80,32 @@ async function sendMessage(contato, texto, opts = {}) {
             if (r.status >= 400 || r.data?.status === 'error') {
                 throw new Error(`sendContent falhou: ${JSON.stringify(r.data)}`);
             }
+
+            try {
+                publishMessage({
+                    dir: 'out',
+                    wa_id: contato,
+                    wamid: '',
+                    kind: 'text',
+                    text: texto || '',
+                    media: null,
+                    ts: Date.now()
+                });
+            } catch { }
             return { ok: true, provider: 'manychat' };
         } else if (provider === 'meta') {
             await mod.sendText({ to: contato, text: texto }, settings);
+            try {
+                publishMessage({
+                    dir: 'out',
+                    wa_id: contato,
+                    wamid: '',
+                    kind: 'text',
+                    text: texto || '',
+                    media: null,
+                    ts: Date.now()
+                });
+            } catch { }
             return { ok: true, provider: 'meta' };
         } else {
             throw new Error(`provider "${provider}" não suportado`);
@@ -156,6 +180,19 @@ async function sendImage(contato, urlOrItems, captionOrOpts, opts = {}) {
                 const { url, caption } = items[i];
                 const r = await sender({ url: url || '', caption });
                 results.push(r);
+                try {
+                    if (r?.ok) {
+                        publishMessage({
+                            dir: 'out',
+                            wa_id: contato,
+                            wamid: '',
+                            kind: 'image',
+                            text: caption || '',
+                            media: { type: 'image' },
+                            ts: Date.now()
+                        });
+                    }
+                } catch { }
                 if (await preflightOptOut(st)) {
                     results.push({ ok: false, reason: 'paused-by-optout-mid-batch' });
                     break;
@@ -232,6 +269,20 @@ async function sendImage(contato, urlOrItems, captionOrOpts, opts = {}) {
             for (let i = 0; i < items.length; i++) {
                 const r = await sendOneMeta(items[i]);
                 results.push(r);
+                try {
+                    if (r?.ok) {
+                        const { url, caption } = items[i] || {};
+                        publishMessage({
+                            dir: 'out',
+                            wa_id: contato,
+                            wamid: r.message_id || '',
+                            kind: 'image',
+                            text: caption || '',
+                            media: { type: 'image' },
+                            ts: Date.now()
+                        });
+                    }
+                } catch { }
                 if (await preflightOptOut(st)) {
                     results.push({ ok: false, reason: 'paused-by-optout-mid-batch' });
                     break;

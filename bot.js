@@ -18,6 +18,7 @@ const { handleConfirmacaoSend, handleConfirmacaoWait } = require('./stages/confi
 const { handleSaqueSend, handleSaqueWait } = require('./stages/saque');
 const { handleValidacaoSend, handleValidacaoWait, handleValidacaoCooldown } = require('./stages/validacao');
 const { handleConversaoSend, handleConversaoWait } = require('./stages/conversao');
+const { publishMessage } = require('./stream/events-bus');
 
 let log = console;
 axios.defaults.httpsAgent = new https.Agent({ keepAlive: true });
@@ -111,6 +112,18 @@ async function handleIncomingNormalizedMessage(normalized) {
 
     st.mensagensPendentes.push({ texto: msg, ts: st.lastIncomingTs, temMidia: hasMedia });
     st.mensagensDesdeSolicitacao.push(msg);
+
+    try {
+        publishMessage({
+            dir: 'in',
+            wa_id: st.contato,
+            wamid: normalized?.id || normalized?.wamid || '',
+            kind: hasMedia ? 'media' : 'text',
+            text: hasText ? msg : '',
+            media: hasMedia ? { type: 'media' } : null,
+            ts: st.lastIncomingTs
+        });
+    } catch { }
 }
 
 function init(options = {}) {
