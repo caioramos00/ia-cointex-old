@@ -1,24 +1,24 @@
 const express = require('express');
 const axios = require('axios');
-const { truncate } = require('./utils.js');
 
+const { truncate, findTidInText, safeStr } = require('./utils.js');
 const { pool, getBotSettings, updateBotSettings, getContatoByPhone } = require('./db.js');
 const { delay, handleIncomingNormalizedMessage } = require('./bot.js');
 const { setEtapa, ensureEstado } = require('./stateManager.js');
 
 const LANDING_URL = 'https://tramposlara.com';
 
-const sentContactByWa = new Set();
 const sentContactByClid = new Set();
-const sentIntakeByClid = new Set(); // evita reenvio de intake CTWA nesta execução
+const sentIntakeByClid = new Set();
 
 function checkAuth(req, res, next) {
   if (req.session.loggedIn) next();
   else res.redirect('/login');
 }
 
-function safeStr(v) { return (v === null || v === undefined) ? '' : String(v); }
-function normalizeContato(raw) { return safeStr(raw).replace(/\D/g, ''); }
+function normalizeContato(raw) {
+  return safeStr(raw).replace(/\D/g, '');
+}
 
 function onlyDigits(v) {
   return String(v || '').replace(/\D/g, '');
@@ -35,11 +35,9 @@ function extractUrlsFromText(text = '') {
 
 function harvestUrlsFromPayload(payload = {}) {
   const urls = new Set();
-
   const tryPush = (v) => {
     if (typeof v === 'string' && /^https?:\/\//i.test(v)) urls.add(v);
   };
-
   tryPush(payload.url);
   tryPush(payload.mediaUrl);
   tryPush(payload.image_url);
@@ -47,12 +45,11 @@ function harvestUrlsFromPayload(payload = {}) {
   tryPush(payload?.payload?.url);
   tryPush(payload?.attachment?.payload?.url);
 
-  const attachments =
-    payload.attachments ||
-    payload?.message?.attachments ||
-    payload?.last_message?.attachments ||
-    payload?.payload?.attachments ||
-    [];
+  const attachments = payload.attachments
+    || payload?.message?.attachments
+    || payload?.last_message?.attachments
+    || payload?.payload?.attachments
+    || [];
 
   if (Array.isArray(attachments)) {
     attachments.forEach(a => {
@@ -114,7 +111,6 @@ async function bootstrapFromManychat(
   return idContato;
 }
 
-
 function setupRoutes(
   app,
   pathModule,
@@ -127,13 +123,14 @@ function setupRoutes(
   if (typeof processarMensagensPendentes !== 'function') {
     try { processarMensagensPendentes = require('./bot.js').processarMensagensPendentes; } catch { }
   }
-  // corrigido: só carrega fallback se não veio função
   if (typeof inicializarEstado !== 'function') {
     try { inicializarEstado = require('./bot.js').inicializarEstado; } catch { }
   }
+
   app.use('/public', express.static(pathModule.join(__dirname, 'public')));
 
   app.get('/login', (req, res) => res.sendFile(pathModule.join(__dirname, 'public', 'login.html')));
+
   app.post('/login', (req, res) => {
     const { username, password } = req.body;
     if (username === 'ncfp' && password === '8065537Ncfp@') {
@@ -143,10 +140,12 @@ function setupRoutes(
       res.send('Login inválido. <a href="/login">Tente novamente</a>');
     }
   });
+
   app.get('/logout', (req, res) => {
     req.session.destroy();
     res.redirect('/login');
   });
+
   app.get('/dashboard', checkAuth, (req, res) =>
     res.sendFile(pathModule.join(__dirname, 'public', 'dashboard.html'))
   );
@@ -169,23 +168,18 @@ function setupRoutes(
         support_email: (req.body.support_email || '').trim(),
         support_phone: (req.body.support_phone || '').trim(),
         support_url: (req.body.support_url || '').trim(),
-
         message_provider: (req.body.message_provider || 'meta').toLowerCase(),
-
         twilio_account_sid: (req.body.twilio_account_sid || '').trim(),
         twilio_auth_token: (req.body.twilio_auth_token || '').trim(),
         twilio_messaging_service_sid: (req.body.twilio_messaging_service_sid || '').trim(),
         twilio_from: (req.body.twilio_from || '').trim(),
-
         manychat_api_token: (req.body.manychat_api_token || '').trim(),
         manychat_fallback_flow_id: (req.body.manychat_fallback_flow_id || '').trim(),
         manychat_webhook_secret: (req.body.manychat_webhook_secret || '').trim(),
-
         meta_access_token: (req.body.meta_access_token || '').trim(),
         meta_phone_number_id: (req.body.meta_phone_number_id || '').trim(),
         contact_token: (req.body.contact_token || '').trim(),
       };
-
       await updateBotSettings(payload);
       res.redirect('/admin/settings?ok=1');
     } catch (e) {
@@ -214,14 +208,7 @@ function setupRoutes(
       const messagesReceived = messagesReceivedRes.rows[0].total || 0;
       const messagesSent = messagesSentRes.rows[0].total || 0;
       const stages = stagesRes.rows.reduce((acc, row) => ({ ...acc, [row.etapa_atual]: row.count }), {});
-
-      res.json({
-        activeConversations: active,
-        totalContatos: totalContatos,
-        messagesReceived: messagesReceived,
-        messagesSent: messagesSent,
-        stages,
-      });
+      res.json({ activeConversations: active, totalContatos, messagesReceived, messagesSent, stages });
     } catch (error) {
       res.status(500).json({ error: error.message });
     } finally {
@@ -250,9 +237,7 @@ function setupRoutes(
     const client = await pool.connect();
     try {
       const historicoRes = await client.query('SELECT historico FROM contatos WHERE id = $1', [req.params.id]);
-      const interacoesRes = await client.query('SELECT historico_interacoes FROM contatos WHERE id = $1', [
-        req.params.id,
-      ]);
+      const interacoesRes = await client.query('SELECT historico_interacoes FROM contatos WHERE id = $1', [req.params.id]);
 
       const historico = historicoRes.rows[0]?.historico || [];
       const interacoes = interacoesRes.rows[0]?.historico_interacoes || [];
@@ -262,7 +247,6 @@ function setupRoutes(
         ...interacoes.map((msg) => ({ ...msg, role: 'sent' })),
       ];
       allMessages.sort((a, b) => new Date(a.data) - new Date(b.data));
-
       res.json(allMessages);
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -271,6 +255,7 @@ function setupRoutes(
     }
   });
 
+  // Webhook de verificação (Meta)
   app.get('/webhook', (req, res) => {
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
@@ -279,26 +264,38 @@ function setupRoutes(
     else res.sendStatus(403);
   });
 
+  // Webhook principal (Meta)
   app.post('/webhook', async (req, res) => {
     const body = req.body;
+
     if (body.object === 'whatsapp_business_account') {
       const settings = await getBotSettings();
       const phoneNumberId = settings.meta_phone_number_id;
       const contactToken = settings.contact_token;
+
       for (const entry of body.entry) {
         for (const change of entry.changes) {
           if (change.field !== 'messages') continue;
+
           const value = change.value;
           if (!value.messages || !value.messages.length) continue;
+
           const msg = value.messages[0];
           const contato = msg.from;
+
+          // ignora eco
           if (contato === phoneNumberId) { res.sendStatus(200); return; }
+
           const isProviderMedia = msg.type !== 'text';
           const texto = msg.type === 'text' ? (msg.text.body || '').trim() : '';
+          const adminTid = findTidInText(safeStr(texto));
+
           console.log(`[${contato}] ${texto || '[mídia]'}`);
+
           let tid = '';
           let click_type = 'Orgânico';
           let is_ctwa = false;
+
           const referral = msg.referral || {};
           if (referral.source_type === 'ad') {
             tid = referral.ctwa_clid || '';
@@ -313,31 +310,26 @@ function setupRoutes(
 
           const wa_id = (value?.contacts && value.contacts[0]?.wa_id) || msg.from || '';
           const profile_name = (value?.contacts && value.contacts[0]?.profile?.name) || '';
-          const clid = is_ctwa ? referral.ctwa_clid || '' : '';
+          const clid = is_ctwa ? (referral.ctwa_clid || '') : '';
 
           if (is_ctwa && !clid) {
             console.warn(`[CTWA][RX][WARN] referral.source_type=ad mas SEM ctwa_clid (from=${contato})`);
           }
 
-          // Garante o INTAKE CTWA com payload BRUTO (idempotente na LP por ctwa_clid)
+          // INTAKE CTWA (idempotente na LP por ctwa_clid)
           if (is_ctwa && clid && !sentIntakeByClid.has(clid)) {
             try {
-              console.log(
-                `[CTWA][INTAKE][TX] url=${LANDING_URL}/ctwa/intake token=${contactToken ? 'present' : 'missing'}`
-              );
+              console.log(`[CTWA][INTAKE][TX] url=${LANDING_URL}/ctwa/intake token=${contactToken ? 'present' : 'missing'}`);
               const intakeResp = await axios.post(
                 `${LANDING_URL}/ctwa/intake`,
-                body, // payload BRUTO do webhook (com referral completo)
+                body, // payload bruto do webhook
                 {
                   headers: { 'Content-Type': 'application/json', 'X-Contact-Token': contactToken },
                   validateStatus: () => true,
                   timeout: 6000,
                 }
               );
-              console.log(
-                `[CTWA][INTAKE][RX] http=${intakeResp.status} body=${truncate(JSON.stringify(intakeResp.data), 2000)}`
-              );
-              // só marca como enviado se 2xx e ok
+              console.log(`[CTWA][INTAKE][RX] http=${intakeResp.status} body=${truncate(JSON.stringify(intakeResp.data), 2000)}`);
               if (intakeResp.status >= 200 && intakeResp.status < 300 && intakeResp?.data?.ok !== false) {
                 sentIntakeByClid.add(clid);
               } else {
@@ -348,63 +340,87 @@ function setupRoutes(
             }
           }
 
-          const shouldSendContact =
-            (is_ctwa && clid && !sentContactByClid.has(clid)) ||
-            (!is_ctwa && !sentContactByWa.has(wa_id) && !(estado[contato]?.capiContactSent));
-          if (shouldSendContact) {
-            const contactPayload = {
-              wa_id, tid, ctwa_clid: clid,
-              event_time: Number(msg.timestamp) || undefined,
-              wamid: msg.id || '',
-              profile_name,
-              phone_number_id: value?.metadata?.phone_number_id || '',
-              display_phone_number: value?.metadata?.display_phone_number || '',
-            };
+          if (is_ctwa) {
+            // CONTACT CTWA para /api/capi/contact
+            const shouldSendCtwaContact = clid && !sentContactByClid.has(clid);
+            if (shouldSendCtwaContact) {
+              const contactPayload = {
+                wa_id,
+                tid,
+                ctwa_clid: clid,
+                event_time: Number(msg.timestamp) || undefined,
+                wamid: msg.id || '',
+                profile_name,
+                phone_number_id: value?.metadata?.phone_number_id || '',
+                display_phone_number: value?.metadata?.display_phone_number || '',
+              };
 
-            console.log(
-              `[CAPI][TX] url=${LANDING_URL}/api/capi/contact token=${contactToken ? 'present' : 'missing'} ` +
-              `payload=${truncate(JSON.stringify(contactPayload), 5000)}`
-            );
-
-            try {
-              const resp = await axios.post(`${LANDING_URL}/api/capi/contact`, contactPayload, {
-                headers: { 'Content-Type': 'application/json', 'X-Contact-Token': contactToken },
-                validateStatus: () => true,
-              });
-
-              const reqId = resp?.headers?.['x-request-id'] || resp?.headers?.['X-Request-Id'] || '';
               console.log(
-                `[CAPI][RX] http=${resp.status} req=${reqId} body=${truncate(JSON.stringify(resp.data), 5000)}`
+                `[CAPI][TX][CTWA] url=${LANDING_URL}/api/capi/contact token=${contactToken ? 'present' : 'missing'} ` +
+                `payload=${truncate(JSON.stringify(contactPayload), 5000)}`
               );
 
-              const ok = resp.status >= 200 && resp.status < 300 && resp?.data?.ok !== false;
-              if (ok) {
-                if (is_ctwa && clid) sentContactByClid.add(clid);
-                else sentContactByWa.add(wa_id);
-                if (estado[contato]) estado[contato].capiContactSent = true;
-              } else {
-                console.warn(`[CAPI][FAIL] http=${resp.status} req=${reqId}`);
+              try {
+                const resp = await axios.post(`${LANDING_URL}/api/capi/contact`, contactPayload, {
+                  headers: { 'Content-Type': 'application/json', 'X-Contact-Token': contactToken },
+                  validateStatus: () => true,
+                });
+                const reqId = resp?.headers?.['x-request-id'] || resp?.headers?.['X-Request-Id'] || '';
+                console.log(`[CAPI][RX][CTWA] http=${resp.status} req=${reqId} body=${truncate(JSON.stringify(resp.data), 5000)}`);
+
+                const ok = resp.status >= 200 && resp.status < 300 && resp?.data?.ok !== false;
+                if (ok) sentContactByClid.add(clid);
+                else console.warn(`[CAPI][FAIL][CTWA] http=${resp.status} req=${reqId}`);
+              } catch (e) {
+                console.warn(`[CAPI][ERR][CTWA] ${e?.message || e}`);
               }
-            } catch (e) {
-              console.warn(`[CAPI][ERR] send contact failed: ${e?.message || e}`);
+            }
+          } else {
+            // CONTACT LP para /api/capi/contact-lp (quando houver TID do ADMIN no texto)
+            if (adminTid) {
+              const lpPayload = {
+                tid: adminTid,
+                event_time: Number(msg.timestamp) || undefined,
+              };
+
+              console.log(
+                `[CAPI][TX][LP] url=${LANDING_URL}/api/capi/contact-lp token=${contactToken ? 'present' : 'missing'} ` +
+                `payload=${truncate(JSON.stringify(lpPayload), 1000)}`
+              );
+
+              try {
+                const resp = await axios.post(`${LANDING_URL}/api/capi/contact-lp`, lpPayload, {
+                  headers: { 'Content-Type': 'application/json', 'X-Contact-Token': contactToken },
+                  validateStatus: () => true,
+                  timeout: 6000
+                });
+                const reqId = resp?.headers?.['x-request-id'] || resp?.headers?.['X-Request-Id'] || '';
+                console.log(`[CAPI][RX][LP] http=${resp.status} req=${reqId} body=${truncate(JSON.stringify(resp.data), 2000)}`);
+              } catch (e) {
+                console.warn(`[CAPI][ERR][LP] ${e?.message || e}`);
+              }
             }
           }
 
+          // Persistência do contato e processamento normal
           if (!estado[contato]) {
             inicializarEstado(contato, tid, click_type);
             await salvarContato(contato, null, texto || (isProviderMedia ? '[mídia]' : ''), tid, click_type);
           } else {
             await salvarContato(contato, null, texto || (isProviderMedia ? '[mídia]' : ''), tid, click_type);
           }
+
           await handleIncomingNormalizedMessage({
             contato,
             texto,
             temMidia: isProviderMedia,
             ts: Number(msg.timestamp) || Date.now()
           });
+
           const st = estado[contato];
           const urlsFromText = extractUrlsFromText(texto);
           st.ultimaMensagem = Date.now();
+
           const delayAleatorio = 10000 + Math.random() * 5000;
           await delay(delayAleatorio);
           await processarMensagensPendentes(contato);
@@ -418,8 +434,10 @@ function setupRoutes(
 
   const processingDebounce = new Map();
 
+  // Webhook ManyChat
   app.post('/webhook/manychat', express.json(), async (req, res) => {
     const settings = await getBotSettings().catch(() => ({}));
+
     const secretConfigured = process.env.MANYCHAT_WEBHOOK_SECRET || settings.manychat_webhook_secret || '';
     const headerSecret = req.get('X-MC-Secret') || '';
     if (secretConfigured && headerSecret !== secretConfigured) {
@@ -428,8 +446,33 @@ function setupRoutes(
 
     const payload = req.body || {};
     const subscriberId = payload.subscriber_id || payload?.contact?.id || null;
+
     const textInRaw = payload.text || payload.last_text_input || '';
     const textIn = typeof textInRaw === 'string' ? textInRaw.trim() : '';
+
+    // Disparo Contact-LP se houver TID no texto ManyChat
+    const tidFromText = findTidInText(safeStr(textIn));
+    if (tidFromText) {
+      try {
+        const contactToken = settings.contact_token || '';
+        const lpPayload = {
+          tid: tidFromText,
+          event_time: Math.floor(Date.now() / 1000)
+        };
+        console.log(
+          `[CAPI][TX][LP][ManyChat] url=${LANDING_URL}/api/capi/contact-lp token=${contactToken ? 'present' : 'missing'} ` +
+          `payload=${truncate(JSON.stringify(lpPayload), 1000)}`
+        );
+        const resp = await axios.post(`${LANDING_URL}/api/capi/contact-lp`, lpPayload, {
+          headers: { 'Content-Type': 'application/json', 'X-Contact-Token': contactToken },
+          validateStatus: () => true,
+          timeout: 6000
+        });
+        console.log(`[CAPI][RX][LP][ManyChat] http=${resp.status} body=${truncate(JSON.stringify(resp.data), 2000)}`);
+      } catch (e) {
+        console.warn(`[CAPI][LP][ERR][ManyChat] ${e?.message || e}`);
+      }
+    }
 
     const full = payload.full_contact || {};
     let rawPhone = '';
@@ -445,11 +488,11 @@ function setupRoutes(
     const phone = onlyDigits(rawPhone);
 
     const declaredType =
-      payload.last_reply_type ||
-      payload.last_input_type ||
-      payload?.message?.type ||
-      payload?.last_message?.type ||
-      '';
+      payload.last_reply_type
+      || payload.last_input_type
+      || payload?.message?.type
+      || payload?.last_message?.type
+      || '';
 
     if (!phone) return res.status(200).json({ ok: true, ignored: 'no-phone' });
 
@@ -457,10 +500,7 @@ function setupRoutes(
 
     if (subscriberId && phone) {
       try {
-        await pool.query(
-          'UPDATE contatos SET manychat_subscriber_id = $2 WHERE id = $1',
-          [phone, subscriberId]
-        );
+        await pool.query('UPDATE contatos SET manychat_subscriber_id = $2 WHERE id = $1', [phone, subscriberId]);
         const st = ensureEstado(phone);
         st.manychat_subscriber_id = String(subscriberId);
       } catch (e) {
@@ -482,24 +522,30 @@ function setupRoutes(
     let idContato = '';
     try {
       idContato = await bootstrapFromManychat(
-        phone,
-        subscriberId,
-        inicializarEstado,
-        estado,
-        finalTid,
-        finalClickType
+        phone, subscriberId, inicializarEstado, estado, finalTid, finalClickType
       );
     } catch { }
+
     if (!idContato) {
       idContato = phone;
       if (idContato && !estado[idContato]) {
-        if (typeof inicializarEstado === 'function') inicializarEstado(idContato, finalTid, finalClickType);
-        else estado[idContato] = { contato: idContato, tid: finalTid || '', click_type: finalClickType || 'Orgânico', mensagensPendentes: [], mensagensDesdeSolicitacao: [] };
+        if (typeof inicializarEstado === 'function') {
+          inicializarEstado(idContato, finalTid, finalClickType);
+        } else {
+          estado[idContato] = {
+            contato: idContato,
+            tid: finalTid || '',
+            click_type: finalClickType || 'Orgânico',
+            mensagensPendentes: [],
+            mensagensDesdeSolicitacao: []
+          };
+        }
       }
     }
 
     const textoRecebido = textIn || '';
     const st = estado[idContato] || {};
+
     try {
       await salvarContato(
         idContato,
@@ -513,22 +559,31 @@ function setupRoutes(
     const urlsFromText = extractUrlsFromText(textoRecebido);
     const urlsFromPayload = harvestUrlsFromPayload(payload);
     const allUrls = Array.from(new Set([...urlsFromText, ...urlsFromPayload]));
+    void allUrls; // silencioso (pode ser útil depois)
 
     if (!estado[idContato]) {
       inicializarEstado(idContato, finalTid, finalClickType);
     }
-    await handleIncomingNormalizedMessage({ // Adicione isso
+
+    await handleIncomingNormalizedMessage({
       contato: idContato,
       texto: textoRecebido,
-      temMidia: declaredType !== 'text',  // Ajuste baseado no declaredType
+      temMidia: declaredType !== 'text',
       ts: Date.now()
     });
+
     const stNow = estado[idContato];
     stNow.ultimaMensagem = Date.now();
 
-    if (processingDebounce.has(idContato)) { clearTimeout(processingDebounce.get(idContato)); }
+    if (processingDebounce.has(idContato)) {
+      clearTimeout(processingDebounce.get(idContato));
+    }
     const timer = setTimeout(async () => {
-      try { await processarMensagensPendentes(idContato); } catch { } finally { processingDebounce.delete(idContato); }
+      try {
+        await processarMensagensPendentes(idContato);
+      } catch { } finally {
+        processingDebounce.delete(idContato);
+      }
     }, 5000);
     processingDebounce.set(idContato, timer);
 
@@ -536,19 +591,17 @@ function setupRoutes(
   });
 
   app.post('/webhook/confirm-image-sent', express.json(), async (req, res) => {
-    // Log detalhado do body recebido (EXATAMENTE como vem do ManyChat)
-    console.log(`[ConfirmImage] Received full request: Method=${req.method}, Headers=${JSON.stringify(req.headers, null, 2)}, Body=${JSON.stringify(req.body, null, 2)}`);
+    console.log(
+      `[ConfirmImage] Received full request: Method=${req.method}, Headers=${JSON.stringify(req.headers, null, 2)}, Body=${JSON.stringify(req.body, null, 2)}`
+    );
+    res.status(200).json({ ok: true });
 
-    res.status(200).json({ ok: true });  // Responda logo
-
-    const { contact, status, image_url } = req.body;  // Ou 'contato' se for mismatch
-    const normalized = normalizeContato(contact);  // Ajuste para 'contato' se necessário
-
+    const { contact, status, image_url } = req.body;
+    const normalized = normalizeContato(contact);
     if (!normalized || normalized.length < 10 || (image_url && image_url.includes('{{'))) {
       console.error(`[ConfirmImage] Invalid body (unresolved variables?): ${JSON.stringify(req.body, null, 2)}`);
       return;
     }
-
     if (status === 'sent') {
       console.log(`[${normalized}] Imagem confirmada: ${image_url}`);
       await processarMensagensPendentes(normalized);
@@ -559,7 +612,6 @@ function setupRoutes(
     try {
       const contato = (req.body.contato || req.query.contato || '').replace(/\D/g, '');
       const etapa = (req.body.etapa || req.query.etapa || '').trim();
-
       if (!contato) return res.status(400).json({ ok: false, error: 'contato obrigatório' });
       if (!etapa) return res.status(400).json({ ok: false, error: 'etapa obrigatória' });
 
@@ -567,7 +619,6 @@ function setupRoutes(
         autoCreateUser: req.body.autoCreateUser === '1' || req.query.autoCreateUser === '1',
         clearCredenciais: req.body.clearCredenciais === '1' || req.query.clearCredenciais === '1',
       };
-
       if (req.body.seedEmail || req.body.seedPassword || req.body.seedLoginUrl) {
         opts.seedCredenciais = {
           email: req.body.seedEmail || '',
@@ -581,7 +632,7 @@ function setupRoutes(
       try {
         await pool.query('UPDATE contatos SET etapa_atual = $2 WHERE id = $1', [contato, etapa]);
       } catch (e) {
-        console.warn(`[SetEtapa] falha ao atualizar DB: ${e.message}`);
+        console.warn('[SetEtapa] falha ao atualizar DB:', e.message);
       }
 
       const runNow = req.body.run === '1' || req.query.run === '1';
@@ -594,6 +645,7 @@ function setupRoutes(
       res.status(400).json({ ok: false, error: e.message || String(e) });
     }
   });
+
   app.post('/admin/test-image', checkAuth, express.json(), async (req, res) => {
     try {
       const { phone, url, caption } = req.body || {};
@@ -609,11 +661,13 @@ function setupRoutes(
       return res.status(500).json({ ok: false, error: e.message });
     }
   });
+
   app.post('/admin/test-text', checkAuth, express.json(), async (req, res) => {
     try {
       const { phone, text } = req.body || {};
       const id = (phone || '').replace(/\D/g, '');
       if (!id || !text) return res.status(400).json({ ok: false, error: 'Informe phone e text' });
+
       const { sendMessage } = require('./bot.js');
       const r = await sendMessage(id, text);
       return res.json({ ok: true, result: r });

@@ -8,7 +8,7 @@ const { ensureEstado } = require('./stateManager.js');
 const { loadOptOutMsgs, loadOptInMsgs, isOptOut, isOptIn, preflightOptOut, enterStageOptOutResetIfNeeded } = require('./optout.js');
 const { setManychatSubscriberId, salvarContato } = require('./db');
 const { sendMessage } = require('./senders.js');
-const { chooseUnique, safeStr, normalizeContato, delay, delayRange, tsNow, truncate, BETWEEN_MIN_MS, BETWEEN_MAX_MS } = require('./utils.js');
+const { chooseUnique, safeStr, normalizeContato, delay, delayRange, tsNow, truncate, findTidInText, BETWEEN_MIN_MS, BETWEEN_MAX_MS } = require('./utils.js');
 const { promptClassificaReoptin } = require('./prompts');
 const { handleAberturaSend, handleAberturaWait } = require('./stages/abertura');
 const { handleInteresseSend, handleInteresseWait } = require('./stages/interesse');
@@ -89,18 +89,16 @@ async function handleIncomingNormalizedMessage(normalized) {
     log.info(`${tsNow()} [${st.contato}] Mensagem recebida: ${msg}`);
     st.lastIncomingTs = ts || Date.now();
 
-    const TID_RX = /(\d+[\u2060-\u206F]*[a-f0-9]+)/gi;
     if (!st.tid && hasText) {
-        let detectedTid = '';
-        const match = TID_RX.exec(texto);
-        if (match) {
-            detectedTid = match[1].replace(/[\u2060-\u206F]/g, '');
-            log.info(`[${st.contato}] TID detectado na mensagem inicial: ${detectedTid}`);
+        const detectedTid = findTidInText(texto);
+        if (detectedTid) {
+            st.tid = detectedTid;
+            st.click_type = 'Landing Page';
+            log.info(`[${st.contato}] TID detectado na mensagem inicial: ${st.tid}`);
+        } else {
+            st.tid = '';
+            st.click_type = 'Orgânico';
         }
-
-        st.tid = detectedTid || '';
-        st.click_type = detectedTid ? 'Landing Page' : 'Orgânico';
-
         try {
             await salvarContato(st.contato, null, msg, st.tid, st.click_type);
         } catch (e) {

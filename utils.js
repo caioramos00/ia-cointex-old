@@ -44,6 +44,32 @@ const sentHashesGlobal = new Set();
 function hashText(s) { let h = 0, i, chr; const str = String(s); if (str.length === 0) return '0'; for (i = 0; i < str.length; i++) { chr = str.charCodeAt(i); h = ((h << 5) - h) + chr; h |= 0; } return String(h); }
 function chooseUnique(generator, st) { const maxTries = 200; for (let i = 0; i < maxTries; i++) { const text = generator(); const h = hashText(text); if (!sentHashesGlobal.has(h) && !st.sentHashes.has(h)) { sentHashesGlobal.add(h); st.sentHashes.add(h); return text; } } return null; }
 
+const INVIS_RX = /[\u200B-\u200F\u202A-\u202E\u2060-\u2069]/g;
+
+const TID_RX = /\b([a-f0-9]{16})\b/i;
+
+function findTidInText(raw) {
+  const txt = safeStr(raw).replace(INVIS_RX, '');
+  const m = txt.match(TID_RX);
+  if (m) return m[1].toLowerCase();
+
+  const urls = txt.match(/https?:\/\/\S+/gi) || [];
+  for (const s of urls) {
+    try {
+      const u = new URL(s);
+      const t = u.searchParams.get('tid');
+      if (t && /^[a-f0-9]{16}$/i.test(t)) return t.toLowerCase();
+    } catch {}
+  }
+
+  try {
+    const u = new URL(txt.trim());
+    const t = u.searchParams.get('tid');
+    if (t && /^[a-f0-9]{16}$/i.test(t)) return t.toLowerCase();
+  } catch {}
+
+  return '';
+}
 
 module.exports = {
     safeStr,
@@ -63,6 +89,7 @@ module.exports = {
     normMsg,
     hashText,
     chooseUnique,
+    findTidInText,
     FIRST_REPLY_DELAY_MS,
     BETWEEN_MIN_MS,
     BETWEEN_MAX_MS,
