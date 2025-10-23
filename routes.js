@@ -131,6 +131,8 @@ function setupRoutes(
 
   app.use('/public', express.static(pathModule.join(__dirname, 'public')));
 
+  app.use(sseRouter);
+
   app.get('/login', (req, res) => res.sendFile(pathModule.join(__dirname, 'public', 'login.html')));
 
   app.post('/login', (req, res) => {
@@ -710,7 +712,5 @@ function setupRoutes(
     }
   });
 }
-
-router.use(sseRouter);
 
 module.exports = { checkAuth, setupRoutes };
