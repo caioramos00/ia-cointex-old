@@ -341,32 +341,57 @@ function setupRoutes(
           }
 
           if (is_ctwa) {
-            // CONTACT CTWA → enviar apenas wa_id (+ event_time)
+            // CONTACT CTWA → enviar apenas após confirmar intake
             const shouldSendCtwaContact = wa_id && !sentContactByWa.has(wa_id);
             if (shouldSendCtwaContact) {
-              const contactPayload = {
-                wa_id,
-                event_time: Number(msg.timestamp) || undefined
-              };
+              let intakeOk = clid ? sentIntakeByClid.has(clid) : false;
 
-              console.log(
-                `[CAPI][TX][CTWA] url=${LANDING_URL}/api/capi/contact token=${contactToken ? 'present' : 'missing'} ` +
-                `payload=${truncate(JSON.stringify(contactPayload), 500)}`
-              );
+              // Poll curto no /ctwa/get se ainda não confirmado
+              if (!intakeOk && clid) {
+                for (let i = 0; i < 4; i++) {
+                  try {
+                    const check = await axios.get(`${LANDING_URL}/ctwa/get`, {
+                      params: { ctwa_clid: clid },
+                      validateStatus: () => true,
+                      timeout: 2500
+                    });
+                    if (check.status === 200 && check.data?.ok) {
+                      intakeOk = true;
+                      break;
+                    }
+                  } catch (_) { /* ignore */ }
+                  // backoff: 150ms, 300ms, 450ms, 600ms
+                  await delay(150 * (i + 1));
+                }
+              }
 
-              try {
-                const resp = await axios.post(`${LANDING_URL}/api/capi/contact`, contactPayload, {
-                  headers: { 'Content-Type': 'application/json', 'X-Contact-Token': contactToken },
-                  validateStatus: () => true,
-                });
-                const reqId = resp?.headers?.['x-request-id'] || resp?.headers?.['X-Request-Id'] || '';
-                console.log(`[CAPI][RX][CTWA] http=${resp.status} req=${reqId} body=${truncate(JSON.stringify(resp.data), 1000)}`);
+              if (!intakeOk) {
+                console.warn(`[CTWA][GATE] intake não confirmado (clid=${clid}). NÃO envia /api/capi/contact agora.`);
+              } else {
+                const contactPayload = {
+                  wa_id,
+                  event_time: Number(msg.timestamp) || undefined
+                };
 
-                const ok = resp.status >= 200 && resp.status < 300 && resp?.data?.ok !== false;
-                if (ok) sentContactByWa.add(wa_id);
-                else console.warn(`[CAPI][FAIL][CTWA] http=${resp.status} req=${reqId}`);
-              } catch (e) {
-                console.warn(`[CAPI][ERR][CTWA] ${e?.message || e}`);
+                console.log(
+                  `[CAPI][TX][CTWA] url=${LANDING_URL}/api/capi/contact token=${contactToken ? 'present' : 'missing'} ` +
+                  `payload=${truncate(JSON.stringify(contactPayload), 500)}`
+                );
+
+                try {
+                  const resp = await axios.post(`${LANDING_URL}/api/capi/contact`, contactPayload, {
+                    headers: { 'Content-Type': 'application/json', 'X-Contact-Token': contactToken },
+                    validateStatus: () => true,
+                  });
+                  const reqId = resp?.headers?.['x-request-id'] || resp?.headers?.['X-Request-Id'] || '';
+                  console.log(`[CAPI][RX][CTWA] http=${resp.status} req=${reqId} body=${truncate(JSON.stringify(resp.data), 1000)}`);
+
+                  const ok = resp.status >= 200 && resp.status < 300 && resp?.data?.ok !== false;
+                  if (ok) sentContactByWa.add(wa_id);
+                  else console.warn(`[CAPI][FAIL][CTWA] http=${resp.status} req=${reqId}`);
+                } catch (e) {
+                  console.warn(`[CAPI][ERR][CTWA] ${e?.message || e}`);
+                }
               }
             }
           } else {
