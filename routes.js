@@ -265,7 +265,67 @@ function setupRoutes(
     else res.sendStatus(403);
   });
 
-  // Webhook principal (Meta)
+  // auxiliares de gate (coloque estas três linhas perto dos outros Sets do arquivo)
+  const postedIntakeByClid = sentIntakeByClid; // reaproveita o Set existente (após POST OK)
+  const confirmedIntakeByClid = new Set();     // confirmado via /ctwa/get
+  const inflightIntakeByClid = new Map();      // promessa em voo por clid
+
+  async function ensureCtwaIntakeConfirmed(clid, rawWebhookBody, contactToken) {
+    if (!clid) return false;
+    if (confirmedIntakeByClid.has(clid)) return true;
+
+    if (inflightIntakeByClid.has(clid)) {
+      try { return await inflightIntakeByClid.get(clid); }
+      catch { return false; }
+    }
+
+    const run = (async () => {
+      try {
+        if (!postedIntakeByClid.has(clid)) {
+          const r = await axios.post(
+            `${LANDING_URL}/ctwa/intake`,
+            rawWebhookBody,
+            {
+              headers: { 'Content-Type': 'application/json', 'X-Contact-Token': contactToken },
+              validateStatus: () => true,
+              timeout: 6000,
+            }
+          );
+          if (r.status >= 200 && r.status < 300 && r?.data?.ok !== false) {
+            postedIntakeByClid.add(clid);
+          } else {
+            console.warn(`[CTWA][INTAKE][FAIL] http=${r.status}`);
+            return false;
+          }
+        }
+
+        // poll curto até confirmar persistência no projeto da LP
+        const tries = [80, 140, 200, 260, 340, 420, 520, 650, 800, 950]; // ~4s máx
+        for (let i = 0; i < tries.length; i++) {
+          try {
+            const g = await axios.get(`${LANDING_URL}/ctwa/get`, {
+              params: { ctwa_clid: clid },
+              validateStatus: () => true,
+              timeout: 2500,
+            });
+            if (g.status === 200 && g.data && g.data.ok) {
+              confirmedIntakeByClid.add(clid);
+              return true;
+            }
+          } catch { }
+          await delay(tries[i]);
+        }
+        console.warn(`[CTWA][GATE][TIMEOUT] clid=${clid} não confirmado a tempo`);
+        return false;
+      } finally {
+        inflightIntakeByClid.delete(clid);
+      }
+    })();
+
+    inflightIntakeByClid.set(clid, run);
+    return run;
+  }
+
   app.post('/webhook', async (req, res) => {
     const body = req.body;
 
@@ -284,7 +344,6 @@ function setupRoutes(
           const msg = value.messages[0];
           const contato = msg.from;
 
-          // ignora eco
           if (contato === phoneNumberId) { res.sendStatus(200); return; }
 
           const isProviderMedia = msg.type !== 'text';
@@ -316,58 +375,14 @@ function setupRoutes(
             console.warn(`[CTWA][RX][WARN] referral.source_type=ad mas SEM ctwa_clid (from=${contato})`);
           }
 
-          // INTAKE CTWA (idempotente na LP por ctwa_clid)
-          if (is_ctwa && clid && !sentIntakeByClid.has(clid)) {
-            try {
-              console.log(`[CTWA][INTAKE][TX] url=${LANDING_URL}/ctwa/intake token=${contactToken ? 'present' : 'missing'}`);
-              const intakeResp = await axios.post(
-                `${LANDING_URL}/ctwa/intake`,
-                body, // payload bruto do webhook
-                {
-                  headers: { 'Content-Type': 'application/json', 'X-Contact-Token': contactToken },
-                  validateStatus: () => true,
-                  timeout: 6000,
-                }
-              );
-              console.log(`[CTWA][INTAKE][RX] http=${intakeResp.status} body=${truncate(JSON.stringify(intakeResp.data), 2000)}`);
-              if (intakeResp.status >= 200 && intakeResp.status < 300 && intakeResp?.data?.ok !== false) {
-                sentIntakeByClid.add(clid);
-              } else {
-                console.warn(`[CTWA][INTAKE][FAIL] http=${intakeResp.status}`);
-              }
-            } catch (e) {
-              console.warn(`[CTWA][INTAKE][ERR] ${e?.message || e}`);
-            }
-          }
-
           if (is_ctwa) {
-            // CONTACT CTWA → enviar apenas após confirmar intake
-            const shouldSendCtwaContact = wa_id && !sentContactByWa.has(wa_id);
-            if (shouldSendCtwaContact) {
-              let intakeOk = clid ? sentIntakeByClid.has(clid) : false;
-
-              // Poll curto no /ctwa/get se ainda não confirmado
-              if (!intakeOk && clid) {
-                for (let i = 0; i < 4; i++) {
-                  try {
-                    const check = await axios.get(`${LANDING_URL}/ctwa/get`, {
-                      params: { ctwa_clid: clid },
-                      validateStatus: () => true,
-                      timeout: 2500
-                    });
-                    if (check.status === 200 && check.data?.ok) {
-                      intakeOk = true;
-                      break;
-                    }
-                  } catch (_) { /* ignore */ }
-                  // backoff: 150ms, 300ms, 450ms, 600ms
-                  await delay(150 * (i + 1));
-                }
-              }
-
-              if (!intakeOk) {
-                console.warn(`[CTWA][GATE] intake não confirmado (clid=${clid}). NÃO envia /api/capi/contact agora.`);
-              } else {
+            // gate: só envia /api/capi/contact depois do intake confirmado
+            const ok = await ensureCtwaIntakeConfirmed(clid, body, contactToken);
+            if (!ok) {
+              console.warn(`[CTWA][GATE] Bloqueado envio de Contact (clid=${clid}) — intake ainda não confirmado.`);
+            } else {
+              const shouldSendCtwaContact = wa_id && !sentContactByWa.has(wa_id);
+              if (shouldSendCtwaContact) {
                 const contactPayload = {
                   wa_id,
                   event_time: Number(msg.timestamp) || undefined
@@ -386,8 +401,8 @@ function setupRoutes(
                   const reqId = resp?.headers?.['x-request-id'] || resp?.headers?.['X-Request-Id'] || '';
                   console.log(`[CAPI][RX][CTWA] http=${resp.status} req=${reqId} body=${truncate(JSON.stringify(resp.data), 1000)}`);
 
-                  const ok = resp.status >= 200 && resp.status < 300 && resp?.data?.ok !== false;
-                  if (ok) sentContactByWa.add(wa_id);
+                  const ok2 = resp.status >= 200 && resp.status < 300 && resp?.data?.ok !== false;
+                  if (ok2) sentContactByWa.add(wa_id);
                   else console.warn(`[CAPI][FAIL][CTWA] http=${resp.status} req=${reqId}`);
                 } catch (e) {
                   console.warn(`[CAPI][ERR][CTWA] ${e?.message || e}`);
@@ -395,7 +410,6 @@ function setupRoutes(
               }
             }
           } else {
-            // CONTACT LP → quando houver TID do ADMIN no texto
             if (adminTid) {
               const lpPayload = {
                 tid: adminTid,
@@ -421,7 +435,6 @@ function setupRoutes(
             }
           }
 
-          // Persistência do contato e processamento normal
           if (!estado[contato]) {
             inicializarEstado(contato, tid, click_type);
             await salvarContato(contato, null, texto || (isProviderMedia ? '[mídia]' : ''), tid, click_type);
