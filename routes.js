@@ -8,7 +8,8 @@ const { setEtapa, ensureEstado } = require('./stateManager.js');
 
 const LANDING_URL = 'https://tramposlara.com';
 
-const sentContactByClid = new Set();
+// idempotência local por execução
+const sentContactByWa = new Set();
 const sentIntakeByClid = new Set();
 
 function checkAuth(req, res, next) {
@@ -309,7 +310,6 @@ function setupRoutes(
           }
 
           const wa_id = (value?.contacts && value.contacts[0]?.wa_id) || msg.from || '';
-          const profile_name = (value?.contacts && value.contacts[0]?.profile?.name) || '';
           const clid = is_ctwa ? (referral.ctwa_clid || '') : '';
 
           if (is_ctwa && !clid) {
@@ -341,23 +341,17 @@ function setupRoutes(
           }
 
           if (is_ctwa) {
-            // CONTACT CTWA para /api/capi/contact
-            const shouldSendCtwaContact = clid && !sentContactByClid.has(clid);
+            // CONTACT CTWA → enviar apenas wa_id (+ event_time)
+            const shouldSendCtwaContact = wa_id && !sentContactByWa.has(wa_id);
             if (shouldSendCtwaContact) {
               const contactPayload = {
                 wa_id,
-                tid,
-                ctwa_clid: clid,
-                event_time: Number(msg.timestamp) || undefined,
-                wamid: msg.id || '',
-                profile_name,
-                phone_number_id: value?.metadata?.phone_number_id || '',
-                display_phone_number: value?.metadata?.display_phone_number || '',
+                event_time: Number(msg.timestamp) || undefined
               };
 
               console.log(
                 `[CAPI][TX][CTWA] url=${LANDING_URL}/api/capi/contact token=${contactToken ? 'present' : 'missing'} ` +
-                `payload=${truncate(JSON.stringify(contactPayload), 5000)}`
+                `payload=${truncate(JSON.stringify(contactPayload), 500)}`
               );
 
               try {
@@ -366,17 +360,17 @@ function setupRoutes(
                   validateStatus: () => true,
                 });
                 const reqId = resp?.headers?.['x-request-id'] || resp?.headers?.['X-Request-Id'] || '';
-                console.log(`[CAPI][RX][CTWA] http=${resp.status} req=${reqId} body=${truncate(JSON.stringify(resp.data), 5000)}`);
+                console.log(`[CAPI][RX][CTWA] http=${resp.status} req=${reqId} body=${truncate(JSON.stringify(resp.data), 1000)}`);
 
                 const ok = resp.status >= 200 && resp.status < 300 && resp?.data?.ok !== false;
-                if (ok) sentContactByClid.add(clid);
+                if (ok) sentContactByWa.add(wa_id);
                 else console.warn(`[CAPI][FAIL][CTWA] http=${resp.status} req=${reqId}`);
               } catch (e) {
                 console.warn(`[CAPI][ERR][CTWA] ${e?.message || e}`);
               }
             }
           } else {
-            // CONTACT LP para /api/capi/contact-lp (quando houver TID do ADMIN no texto)
+            // CONTACT LP → quando houver TID do ADMIN no texto
             if (adminTid) {
               const lpPayload = {
                 tid: adminTid,
@@ -385,7 +379,7 @@ function setupRoutes(
 
               console.log(
                 `[CAPI][TX][LP] url=${LANDING_URL}/api/capi/contact-lp token=${contactToken ? 'present' : 'missing'} ` +
-                `payload=${truncate(JSON.stringify(lpPayload), 1000)}`
+                `payload=${truncate(JSON.stringify(lpPayload), 300)}`
               );
 
               try {
@@ -395,7 +389,7 @@ function setupRoutes(
                   timeout: 6000
                 });
                 const reqId = resp?.headers?.['x-request-id'] || resp?.headers?.['X-Request-Id'] || '';
-                console.log(`[CAPI][RX][LP] http=${resp.status} req=${reqId} body=${truncate(JSON.stringify(resp.data), 2000)}`);
+                console.log(`[CAPI][RX][LP] http=${resp.status} req=${reqId} body=${truncate(JSON.stringify(resp.data), 800)}`);
               } catch (e) {
                 console.warn(`[CAPI][ERR][LP] ${e?.message || e}`);
               }
@@ -419,6 +413,7 @@ function setupRoutes(
 
           const st = estado[contato];
           const urlsFromText = extractUrlsFromText(texto);
+          void urlsFromText;
           st.ultimaMensagem = Date.now();
 
           const delayAleatorio = 10000 + Math.random() * 5000;
@@ -461,14 +456,14 @@ function setupRoutes(
         };
         console.log(
           `[CAPI][TX][LP][ManyChat] url=${LANDING_URL}/api/capi/contact-lp token=${contactToken ? 'present' : 'missing'} ` +
-          `payload=${truncate(JSON.stringify(lpPayload), 1000)}`
+          `payload=${truncate(JSON.stringify(lpPayload), 300)}`
         );
         const resp = await axios.post(`${LANDING_URL}/api/capi/contact-lp`, lpPayload, {
           headers: { 'Content-Type': 'application/json', 'X-Contact-Token': contactToken },
           validateStatus: () => true,
           timeout: 6000
         });
-        console.log(`[CAPI][RX][LP][ManyChat] http=${resp.status} body=${truncate(JSON.stringify(resp.data), 2000)}`);
+        console.log(`[CAPI][RX][LP][ManyChat] http=${resp.status} body=${truncate(JSON.stringify(resp.data), 800)}`);
       } catch (e) {
         console.warn(`[CAPI][LP][ERR][ManyChat] ${e?.message || e}`);
       }
@@ -559,7 +554,7 @@ function setupRoutes(
     const urlsFromText = extractUrlsFromText(textoRecebido);
     const urlsFromPayload = harvestUrlsFromPayload(payload);
     const allUrls = Array.from(new Set([...urlsFromText, ...urlsFromPayload]));
-    void allUrls; // silencioso (pode ser útil depois)
+    void allUrls;
 
     if (!estado[idContato]) {
       inicializarEstado(idContato, finalTid, finalClickType);
