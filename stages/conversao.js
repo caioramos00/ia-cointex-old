@@ -115,7 +115,7 @@ async function handleConversaoSend(st) {
             st.etapa = 'conversao:wait';
             console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
 
-            const delayMinutos = Math.floor(12 + Math.random() * 4) * 60 * 1000; // 12 a 15 minutos
+            const delayMinutos = Math.floor(12 + Math.random() * 4) * 60 * 1000;
             setTimeout(async () => {
                 const m10 = [pick(conversao?.msg10?.msg10b1), pick(conversao?.msg10?.msg10b2)].filter(Boolean).join(', ') + '…\n\n' + [pick(conversao?.msg10?.msg10b3), pick(conversao?.msg10?.msg10b4)].filter(Boolean).join(', ');
                 const m11 = [pick(conversao?.msg11?.msg11b1), pick(conversao?.msg11?.msg11b2)].filter(Boolean).join(', ') + '\n\n' + [pick(conversao?.msg11?.msg11b3), pick(conversao?.msg11?.msg11b4), pick(conversao?.msg11?.msg11b5)].filter(Boolean).join(', ');
@@ -129,6 +129,24 @@ async function handleConversaoSend(st) {
                     await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                     await sendMessage(st.contato, msg);
                 }
+
+                if (await preflightOptOut(st)) return;
+
+                const delayUltimoBlocoMs = Math.floor(15 + Math.random() * 6) * 60 * 1000;
+                setTimeout(async () => {
+                    const m14 = [pick(conversao?.msg14?.msg14b1), pick(conversao?.msg14?.msg14b2)].filter(Boolean).join(', ');
+                    const m15 = [pick(conversao?.msg15?.msg15b1), pick(conversao?.msg15?.msg15b2), pick(conversao?.msg15?.msg15b3)].filter(Boolean).join(', ');
+                    const m16 = [pick(conversao?.msg16?.msg16b1), pick(conversao?.msg16?.msg16b2), pick(conversao?.msg16?.msg16b3)].filter(Boolean).join(', ') + '?';
+                    const m17 = [pick(conversao?.msg17?.msg17b1), pick(conversao?.msg17?.msg17b2), pick(conversao?.msg17?.msg17b3)].filter(Boolean).join(', ') + '?';
+
+                    const ultimasMsgs = [m14, m15, m16, m17];
+
+                    for (const msg of ultimasMsgs) {
+                        if (await preflightOptOut(st)) break;
+                        await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+                        await sendMessage(st.contato, msg);
+                    }
+                }, delayUltimoBlocoMs);
             }, delayMinutos);
 
             return { ok: true, batch: 3, done: true };

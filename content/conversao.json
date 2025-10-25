@@ -908,5 +908,46 @@
     "msg13b4": [
       "depois te chamo aí dmr?"
     ]
+  },
+  "msg14": {
+    "msg14b1": [
+      "falei com a mina lá de dentro de novo"
+    ],
+    "msg14b2": [
+      "nenhuma conta que a gente fez desde manhã caiu o dinheiro ainda"
+    ]
+  },
+  "msg15": {
+    "msg15b1": [
+      "ela disse que é o sistema de pix deles"
+    ],
+    "msg15b2": [
+      "que ainda tá passando por atualização"
+    ],
+    "msg15b3": [
+      "é um sistema novo"
+    ]
+  },
+  "msg16": {
+    "msg16b1": [
+      "mas se o pix não cair"
+    ],
+    "msg16b2": [
+      "o valor da taxa é reembolsado do mesmo jeito"
+    ],
+    "msg16b3": [
+      "beleza"
+    ]
+  },
+  "msg17": {
+    "msg17b1": [
+      "e amanhã tem trampo em outra plataforma também"
+    ],
+    "msg17b2": [
+      "que nunca deu problema pra nós"
+    ],
+    "msg17b3": [
+      "posso te chamar"
+    ]
   }
 }
