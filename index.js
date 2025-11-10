@@ -29,7 +29,16 @@ app.use(session({
 const server = http.createServer(app);
 const io = socketIo(server);
 
-setupRoutes(app, path, processarMensagensPendentes, inicializarEstado, require('./db.js').salvarContato, process.env.VERIFY_TOKEN, estadoContatos);
+// rotas antes de escutar a porta
+setupRoutes(
+  app,
+  path,
+  processarMensagensPendentes,
+  inicializarEstado,
+  require('./db.js').salvarContato,
+  process.env.VERIFY_TOKEN,
+  estadoContatos
+);
 
 io.on('connection', (socket) => {
   console.log('Usuário conectado ao dashboard');
@@ -38,9 +47,33 @@ io.on('connection', (socket) => {
   });
 });
 
-initDatabase().then(() => {
-  const PORT = process.env.PORT || 3000;
-  server.listen(PORT, () => {
-    console.log(`[✅ Servidor rodando na porta ${PORT}]`);
-  });
-}).catch(err => console.error('Erro ao init DB:', err));
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`[✅ Servidor rodando na porta ${PORT}]`);
+});
+
+// Inicializa o DB em background com retentativas e backoff exponencial
+(async function bootstrapDb() {
+  let attempt = 0;
+  while (attempt < 8) {
+    try {
+      await initDatabase();
+      console.log('[DB] pronto');
+      return;
+    } catch (e) {
+      const transientCodes = ['57P01', '57P03'];
+      const transient = transientCodes.includes(e?.code) ||
+                        ['ECONNRESET', 'ETIMEDOUT'].includes(e?.code) ||
+                        /shutting down/i.test(e?.message || '');
+      const wait = Math.min(10_000, 500 * 2 ** attempt);
+      console.warn(`[DB] init falhou (${e?.code || e?.message}); retry em ${wait}ms...`);
+      await new Promise(r => setTimeout(r, wait));
+      attempt++;
+      if (!transient && attempt >= 3) {
+        console.error('[DB] erro não transitório detectado; parando retentativas por agora.');
+        break;
+      }
+    }
+  }
+  console.error('[DB] init não concluiu; app segue em modo degradado (sem DB).');
+})();

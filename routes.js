@@ -268,7 +268,7 @@ function setupRoutes(
     else res.sendStatus(403);
   });
 
-  // auxiliares de gate (coloque estas três linhas perto dos outros Sets do arquivo)
+  // auxiliares de gate
   const postedIntakeByClid = sentIntakeByClid; // reaproveita o Set existente (após POST OK)
   const confirmedIntakeByClid = new Set();     // confirmado via /ctwa/get
   const inflightIntakeByClid = new Map();      // promessa em voo por clid
@@ -329,142 +329,161 @@ function setupRoutes(
     return run;
   }
 
+  // ===== WHATSAPP WEBHOOK (ACK RÁPIDO + FALLBACK DE DB) =====
   app.post('/webhook', async (req, res) => {
     const body = req.body;
 
-    if (body.object === 'whatsapp_business_account') {
-      const settings = await getBotSettings();
-      const phoneNumberId = settings.meta_phone_number_id;
-      const contactToken = settings.contact_token;
+    // ACK automático em até 2.5s para cortar retries do Meta
+    const ackTimer = setTimeout(() => {
+      if (!res.headersSent) res.sendStatus(200);
+    }, 2500);
 
-      for (const entry of body.entry) {
-        for (const change of entry.changes) {
-          if (change.field !== 'messages') continue;
+    try {
+      if (body.object === 'whatsapp_business_account') {
+        // Fallback defensivo se o DB estiver reiniciando
+        const settings = await getBotSettings().catch(() => ({}));
+        const phoneNumberId = settings?.meta_phone_number_id || '';
+        const contactToken = settings?.contact_token || '';
 
-          const value = change.value;
-          if (!value.messages || !value.messages.length) continue;
+        for (const entry of (body.entry || [])) {
+          for (const change of (entry.changes || [])) {
+            if (change.field !== 'messages') continue;
 
-          const msg = value.messages[0];
-          const contato = msg.from;
+            const value = change.value || {};
+            if (!value.messages || !value.messages.length) continue;
 
-          if (contato === phoneNumberId) { res.sendStatus(200); return; }
+            const msg = value.messages[0];
+            const contato = msg.from;
 
-          const isProviderMedia = msg.type !== 'text';
-          const texto = msg.type === 'text' ? (msg.text.body || '').trim() : '';
-          const adminTid = findTidInText(safeStr(texto));
+            if (contato === phoneNumberId) {
+              if (!res.headersSent) res.sendStatus(200);
+              clearTimeout(ackTimer);
+              return;
+            }
 
-          console.log(`[${contato}] ${texto || '[mídia]'}`);
+            const isProviderMedia = msg.type !== 'text';
+            const texto = msg.type === 'text' ? (msg.text.body || '').trim() : '';
+            const adminTid = findTidInText(safeStr(texto));
 
-          let tid = '';
-          let click_type = 'Orgânico';
-          let is_ctwa = false;
+            console.log(`[${contato}] ${texto || '[mídia]'}`);
 
-          const referral = msg.referral || {};
-          if (referral.source_type === 'ad') {
-            tid = referral.ctwa_clid || '';
-            click_type = 'CTWA';
-            is_ctwa = true;
-          }
+            let tid = '';
+            let click_type = 'Orgânico';
+            let is_ctwa = false;
 
-          if (msg?.referral) {
-            console.log(`[CTWA][RX] contato=${contato} is_ctwa=${is_ctwa} tid_len=${(tid || '').length}`);
-            console.log(`[CTWA][RX][referral] ${truncate(JSON.stringify(msg.referral), 20000)}`);
-          }
+            const referral = msg.referral || {};
+            if (referral.source_type === 'ad') {
+              tid = referral.ctwa_clid || '';
+              click_type = 'CTWA';
+              is_ctwa = true;
+            }
 
-          const wa_id = (value?.contacts && value.contacts[0]?.wa_id) || msg.from || '';
-          const clid = is_ctwa ? (referral.ctwa_clid || '') : '';
+            if (msg?.referral) {
+              console.log(`[CTWA][RX] contato=${contato} is_ctwa=${is_ctwa} tid_len=${(tid || '').length}`);
+              console.log(`[CTWA][RX][referral] ${truncate(JSON.stringify(msg.referral), 20000)}`);
+            }
 
-          if (is_ctwa && !clid) {
-            console.warn(`[CTWA][RX][WARN] referral.source_type=ad mas SEM ctwa_clid (from=${contato})`);
-          }
+            const wa_id = (value?.contacts && value.contacts[0]?.wa_id) || msg.from || '';
+            const clid = is_ctwa ? (referral.ctwa_clid || '') : '';
 
-          if (is_ctwa) {
-            // gate: só envia /api/capi/contact depois do intake confirmado
-            const ok = await ensureCtwaIntakeConfirmed(clid, body, contactToken);
-            if (!ok) {
-              console.warn(`[CTWA][GATE] Bloqueado envio de Contact (clid=${clid}) — intake ainda não confirmado.`);
+            if (is_ctwa && !clid) {
+              console.warn(`[CTWA][RX][WARN] referral.source_type=ad mas SEM ctwa_clid (from=${contato})`);
+            }
+
+            if (is_ctwa) {
+              // gate: só envia /api/capi/contact depois do intake confirmado
+              const ok = await ensureCtwaIntakeConfirmed(clid, body, contactToken);
+              if (!ok) {
+                console.warn(`[CTWA][GATE] Bloqueado envio de Contact (clid=${clid}) — intake ainda não confirmado.`);
+              } else {
+                const shouldSendCtwaContact = wa_id && !sentContactByWa.has(wa_id);
+                if (shouldSendCtwaContact) {
+                  const contactPayload = {
+                    wa_id,
+                    event_time: Number(msg.timestamp) || undefined
+                  };
+
+                  console.log(
+                    `[CAPI][TX][CTWA] url=${LANDING_URL}/api/capi/contact token=${contactToken ? 'present' : 'missing'} ` +
+                    `payload=${truncate(JSON.stringify(contactPayload), 500)}`
+                  );
+
+                  try {
+                    const resp = await axios.post(`${LANDING_URL}/api/capi/contact`, contactPayload, {
+                      headers: { 'Content-Type': 'application/json', 'X-Contact-Token': contactToken },
+                      validateStatus: () => true,
+                    });
+                    const reqId = resp?.headers?.['x-request-id'] || resp?.headers?.['X-Request-Id'] || '';
+                    console.log(`[CAPI][RX][CTWA] http=${resp.status} req=${reqId} body=${truncate(JSON.stringify(resp.data), 1000)}`);
+
+                    const ok2 = resp.status >= 200 && resp.status < 300 && resp?.data?.ok !== false;
+                    if (ok2) sentContactByWa.add(wa_id);
+                    else console.warn(`[CAPI][FAIL][CTWA] http=${resp.status} req=${reqId}`);
+                  } catch (e) {
+                    console.warn(`[CAPI][ERR][CTWA] ${e?.message || e}`);
+                  }
+                }
+              }
             } else {
-              const shouldSendCtwaContact = wa_id && !sentContactByWa.has(wa_id);
-              if (shouldSendCtwaContact) {
-                const contactPayload = {
-                  wa_id,
-                  event_time: Number(msg.timestamp) || undefined
+              if (adminTid) {
+                const lpPayload = {
+                  tid: adminTid,
+                  event_time: Number(msg.timestamp) || undefined,
                 };
 
                 console.log(
-                  `[CAPI][TX][CTWA] url=${LANDING_URL}/api/capi/contact token=${contactToken ? 'present' : 'missing'} ` +
-                  `payload=${truncate(JSON.stringify(contactPayload), 500)}`
+                  `[CAPI][TX][LP] url=${LANDING_URL}/api/capi/contact-lp token=${contactToken ? 'present' : 'missing'} ` +
+                  `payload=${truncate(JSON.stringify(lpPayload), 300)}`
                 );
 
                 try {
-                  const resp = await axios.post(`${LANDING_URL}/api/capi/contact`, contactPayload, {
+                  const resp = await axios.post(`${LANDING_URL}/api/capi/contact-lp`, lpPayload, {
                     headers: { 'Content-Type': 'application/json', 'X-Contact-Token': contactToken },
                     validateStatus: () => true,
+                    timeout: 6000
                   });
                   const reqId = resp?.headers?.['x-request-id'] || resp?.headers?.['X-Request-Id'] || '';
-                  console.log(`[CAPI][RX][CTWA] http=${resp.status} req=${reqId} body=${truncate(JSON.stringify(resp.data), 1000)}`);
-
-                  const ok2 = resp.status >= 200 && resp.status < 300 && resp?.data?.ok !== false;
-                  if (ok2) sentContactByWa.add(wa_id);
-                  else console.warn(`[CAPI][FAIL][CTWA] http=${resp.status} req=${reqId}`);
+                  console.log(`[CAPI][RX][LP] http=${resp.status} req=${reqId} body=${truncate(JSON.stringify(resp.data), 800)}`);
                 } catch (e) {
-                  console.warn(`[CAPI][ERR][CTWA] ${e?.message || e}`);
+                  console.warn(`[CAPI][ERR][LP] ${e?.message || e}`);
                 }
               }
             }
-          } else {
-            if (adminTid) {
-              const lpPayload = {
-                tid: adminTid,
-                event_time: Number(msg.timestamp) || undefined,
-              };
 
-              console.log(
-                `[CAPI][TX][LP] url=${LANDING_URL}/api/capi/contact-lp token=${contactToken ? 'present' : 'missing'} ` +
-                `payload=${truncate(JSON.stringify(lpPayload), 300)}`
-              );
-
-              try {
-                const resp = await axios.post(`${LANDING_URL}/api/capi/contact-lp`, lpPayload, {
-                  headers: { 'Content-Type': 'application/json', 'X-Contact-Token': contactToken },
-                  validateStatus: () => true,
-                  timeout: 6000
-                });
-                const reqId = resp?.headers?.['x-request-id'] || resp?.headers?.['X-Request-Id'] || '';
-                console.log(`[CAPI][RX][LP] http=${resp.status} req=${reqId} body=${truncate(JSON.stringify(resp.data), 800)}`);
-              } catch (e) {
-                console.warn(`[CAPI][ERR][LP] ${e?.message || e}`);
-              }
+            if (!estado[contato]) {
+              inicializarEstado(contato, tid, click_type);
+              await salvarContato(contato, null, texto || (isProviderMedia ? '[mídia]' : ''), tid, click_type);
+            } else {
+              await salvarContato(contato, null, texto || (isProviderMedia ? '[mídia]' : ''), tid, click_type);
             }
+
+            await handleIncomingNormalizedMessage({
+              contato,
+              texto,
+              temMidia: isProviderMedia,
+              ts: Number(msg.timestamp) || Date.now()
+            });
+
+            const st = estado[contato];
+            const urlsFromText = extractUrlsFromText(texto);
+            void urlsFromText;
+            st.ultimaMensagem = Date.now();
+
+            const delayAleatorio = 10000 + Math.random() * 5000;
+            await delay(delayAleatorio);
+            await processarMensagensPendentes(contato);
           }
-
-          if (!estado[contato]) {
-            inicializarEstado(contato, tid, click_type);
-            await salvarContato(contato, null, texto || (isProviderMedia ? '[mídia]' : ''), tid, click_type);
-          } else {
-            await salvarContato(contato, null, texto || (isProviderMedia ? '[mídia]' : ''), tid, click_type);
-          }
-
-          await handleIncomingNormalizedMessage({
-            contato,
-            texto,
-            temMidia: isProviderMedia,
-            ts: Number(msg.timestamp) || Date.now()
-          });
-
-          const st = estado[contato];
-          const urlsFromText = extractUrlsFromText(texto);
-          void urlsFromText;
-          st.ultimaMensagem = Date.now();
-
-          const delayAleatorio = 10000 + Math.random() * 5000;
-          await delay(delayAleatorio);
-          await processarMensagensPendentes(contato);
         }
+        if (!res.headersSent) res.sendStatus(200);
+      } else {
+        if (!res.headersSent) res.sendStatus(404);
       }
-      res.sendStatus(200);
-    } else {
-      res.sendStatus(404);
+    } catch (err) {
+      console.error('[WEBHOOK][ERR]', err?.message || err);
+      // mesmo com erro, envia 200 para evitar retry storm
+      if (!res.headersSent) res.sendStatus(200);
+    } finally {
+      clearTimeout(ackTimer);
     }
   });
 

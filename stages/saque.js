@@ -1,7 +1,6 @@
 const path = require('path');
 const axios = require('axios');
 const fs = require('fs');
-const { extractTextForLog } = require('../bot.js')
 const { delayRange, tsNow, chooseUnique, BETWEEN_MIN_MS, BETWEEN_MAX_MS, safeStr, truncate } = require('../utils.js');
 const { preflightOptOut, enterStageOptOutResetIfNeeded, finalizeOptOutBatchAtEnd } = require('../optout.js');
 const { sendMessage } = require('../senders.js');
@@ -142,8 +141,10 @@ async function handleSaqueWait(st) {
                     console.error(`[${st.contato}] Erro na chamada à API: ${e.message}`);
                     return { status: 0, picked: null };
                 }
+
                 const data = r.data;
                 let rawText = '';
+
                 if (Array.isArray(data?.output)) {
                     data.output.forEach(item => {
                         if (item.type === 'message' && Array.isArray(item.content) && item.content[0]?.text) {
@@ -151,14 +152,42 @@ async function handleSaqueWait(st) {
                         }
                     });
                 }
-                if (!rawText) rawText = extractTextForLog(data);
+
+                if (!rawText) {
+                    try {
+                        const { extractTextForLog } = require('../bot.js');
+                        if (typeof extractTextForLog === 'function') {
+                            rawText = String(extractTextForLog(data) || '').trim();
+                        }
+                    } catch (e) {
+                    }
+                }
+
                 rawText = String(rawText || '').trim();
+
                 let picked = null;
                 if (rawText) {
-                    try { const parsed = JSON.parse(rawText); if (parsed && typeof parsed.label === 'string') picked = parsed.label.toLowerCase().trim(); }
-                    catch { const m = rawText.match(/(?:"label"|label)\s*:\s*"([^"]+)"/i); if (m && m[1]) picked = m[1].toLowerCase().trim(); }
+                    try {
+                        const parsed = JSON.parse(rawText);
+                        if (parsed && typeof parsed.label === 'string') {
+                            picked = parsed.label.toLowerCase().trim();
+                        }
+                    } catch {
+                        const m = rawText.match(/(?:"label"|label)\s*:\s*"([^"]+)"/i);
+                        if (m && m[1]) picked = m[1].toLowerCase().trim();
+                    }
                 }
-                if (!picked) picked = pickLabelFromResponseData(data, ['relevante', 'irrelevante']);
+
+                if (!picked) {
+                    try {
+                        const { pickLabelFromResponseData } = require('../bot.js');
+                        if (typeof pickLabelFromResponseData === 'function') {
+                            picked = pickLabelFromResponseData(data, ['relevante', 'irrelevante']) || null;
+                        }
+                    } catch (e) {
+                    }
+                }
+
                 return { status: r.status, picked };
             };
             try {

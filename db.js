@@ -6,7 +6,18 @@ const SETTINGS_TTL_MS = 60_000;
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: false },
+  // ajustes para robustez em produção
+  keepAlive: true,
+  max: Number(process.env.PGPOOL_MAX || 10),
+  idleTimeoutMillis: Number(process.env.PG_IDLE_TIMEOUT || 30000),
+  connectionTimeoutMillis: Number(process.env.PG_CONN_TIMEOUT || 5000),
+});
+
+// EVITA derrubar o processo quando um cliente do pool falha durante restart do Postgres
+pool.on('error', (err) => {
+  console.error('[PG][POOL][ERROR]', { code: err?.code, message: err?.message });
+  // não relança o erro aqui
 });
 
 async function initDatabase() {
@@ -92,6 +103,7 @@ async function initDatabase() {
 
   } catch (error) {
     console.error('[DB] Erro ao inicializar tabela:', error.message);
+    throw error; // deixa o chamador decidir como proceder (com backoff no index.js)
   } finally {
     client.release();
   }
