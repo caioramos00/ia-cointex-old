@@ -1,28 +1,9 @@
 'use strict';
-const fs = require('fs');
-const https = require('https');
-const path = require('path');
-const axios = require('axios');
 
-const { ensureEstado } = require('./stateManager.js');
-const { loadOptOutMsgs, loadOptInMsgs, isOptOut, isOptIn, preflightOptOut, enterStageOptOutResetIfNeeded } = require('./optout.js');
-const { setManychatSubscriberId, salvarContato } = require('./db');
-const { sendMessage } = require('./senders.js');
-const { chooseUnique, safeStr, normalizeContato, delay, delayRange, tsNow, truncate, findTidInText, BETWEEN_MIN_MS, BETWEEN_MAX_MS } = require('./utils.js');
-const { promptClassificaReoptin } = require('./prompts');
-const { handleAberturaSend, handleAberturaWait } = require('./stages/abertura');
-const { handleInteresseSend, handleInteresseWait } = require('./stages/interesse');
-const { handleInstrucoesSend, handleInstrucoesWait } = require('./stages/instrucoes');
-const { handleAcessoSend, handleAcessoWait } = require('./stages/acesso');
-const { handleConfirmacaoSend, handleConfirmacaoWait } = require('./stages/confirmacao');
-const { handleSaqueSend, handleSaqueWait } = require('./stages/saque');
-const { handleValidacaoSend, handleValidacaoWait, handleValidacaoCooldown } = require('./stages/validacao');
-const { handleConversaoSend, handleConversaoWait } = require('./stages/conversao');
-const { publishMessage } = require('./stream/events-bus');
+const __exports = {};
+module.exports = __exports;
 
-let log = console;
-axios.defaults.httpsAgent = new https.Agent({ keepAlive: true });
-
+// Helpers publicadas cedo (mantêm o mesmo corpo original)
 function pickLabelFromResponseData(data, allowed) {
     const S = new Set((allowed || []).map(s => String(s).toLowerCase()));
     let label =
@@ -71,6 +52,35 @@ function extractTextForLog(data) {
         return '';
     }
 }
+
+// Anexa as helpers ao export cedo (fundamental p/ quebrar o ciclo)
+__exports.pickLabelFromResponseData = pickLabelFromResponseData;
+__exports.extractTextForLog = extractTextForLog;
+
+/** ====== RESTANTE DOS IMPORTS ====== */
+const fs = require('fs');
+const https = require('https');
+const path = require('path');
+const axios = require('axios');
+
+const { ensureEstado } = require('./stateManager.js');
+const { loadOptOutMsgs, loadOptInMsgs, isOptOut, isOptIn, preflightOptOut, enterStageOptOutResetIfNeeded } = require('./optout.js');
+const { setManychatSubscriberId, salvarContato } = require('./db');
+const { sendMessage } = require('./senders.js');
+const { chooseUnique, safeStr, normalizeContato, delay, delayRange, tsNow, truncate, findTidInText, BETWEEN_MIN_MS, BETWEEN_MAX_MS } = require('./utils.js');
+const { promptClassificaReoptin } = require('./prompts');
+const { handleAberturaSend, handleAberturaWait } = require('./stages/abertura');
+const { handleInteresseSend, handleInteresseWait } = require('./stages/interesse');
+const { handleInstrucoesSend, handleInstrucoesWait } = require('./stages/instrucoes');
+const { handleAcessoSend, handleAcessoWait } = require('./stages/acesso');
+const { handleConfirmacaoSend, handleConfirmacaoWait } = require('./stages/confirmacao');
+const { handleSaqueSend, handleSaqueWait } = require('./stages/saque');
+const { handleValidacaoSend, handleValidacaoWait, handleValidacaoCooldown } = require('./stages/validacao');
+const { handleConversaoSend, handleConversaoWait } = require('./stages/conversao');
+const { publishMessage } = require('./stream/events-bus');
+
+let log = console;
+axios.defaults.httpsAgent = new https.Agent({ keepAlive: true });
 
 function inicializarEstado(contato, maybeTid, maybeClickType) {
     const st = ensureEstado(contato);
@@ -465,7 +475,12 @@ async function processarMensagensPendentes(contato) {
     }
 }
 
-module.exports = {
+/**
+ * ====== EXPORT FINAL ======
+ * Usa Object.assign para manter a MESMA referência de module.exports
+ * já entregue aos stages durante o carregamento.
+ */
+Object.assign(module.exports, {
     init,
     handleManyChatWebhook,
     handleIncomingNormalizedMessage,
@@ -477,4 +492,4 @@ module.exports = {
     extractTextForLog,
     pickLabelFromResponseData,
     _utils: { normalizeContato },
-};
+});

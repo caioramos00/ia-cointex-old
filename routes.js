@@ -291,7 +291,7 @@ function setupRoutes(
             {
               headers: { 'Content-Type': 'application/json', 'X-Contact-Token': contactToken },
               validateStatus: () => true,
-              timeout: 6000,
+              timeout: 10000,
             }
           );
           if (r.status >= 200 && r.status < 300 && r?.data?.ok !== false) {
@@ -440,7 +440,7 @@ function setupRoutes(
                   const resp = await axios.post(`${LANDING_URL}/api/capi/contact-lp`, lpPayload, {
                     headers: { 'Content-Type': 'application/json', 'X-Contact-Token': contactToken },
                     validateStatus: () => true,
-                    timeout: 6000
+                    timeout: 10000
                   });
                   const reqId = resp?.headers?.['x-request-id'] || resp?.headers?.['X-Request-Id'] || '';
                   console.log(`[CAPI][RX][LP] http=${resp.status} req=${reqId} body=${truncate(JSON.stringify(resp.data), 800)}`);
@@ -521,7 +521,7 @@ function setupRoutes(
         const resp = await axios.post(`${LANDING_URL}/api/capi/contact-lp`, lpPayload, {
           headers: { 'Content-Type': 'application/json', 'X-Contact-Token': contactToken },
           validateStatus: () => true,
-          timeout: 6000
+          timeout: 10000
         });
         console.log(`[CAPI][RX][LP][ManyChat] http=${resp.status} body=${truncate(JSON.stringify(resp.data), 800)}`);
       } catch (e) {
