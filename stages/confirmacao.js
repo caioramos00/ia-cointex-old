@@ -6,6 +6,9 @@ const { sendMessage } = require('../senders.js');
 const axios = require('axios');
 const { promptClassificaConfirmacao } = require('../prompts');
 
+// Helpers exportadas cedo por bot.js (quebra de ciclo já tratada naquele arquivo)
+const { extractTextForLog, pickLabelFromResponseData } = require('../bot.js');
+
 async function handleConfirmacaoSend(st) {
     enterStageOptOutResetIfNeeded(st);
     const confirmacaoPath = path.join(__dirname, '../content', 'confirmacao.json');
@@ -43,7 +46,9 @@ async function handleConfirmacaoSend(st) {
 
     st.mensagensPendentes = [];
     st.mensagensDesdeSolicitacao = [];
+    st.lastClassifiedIdx = st.lastClassifiedIdx || {};
     st.lastClassifiedIdx.confirmacao = 0;
+
     const _prev = st.etapa;
     if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-batch-end' };
     st.etapa = 'confirmacao:wait';
@@ -55,21 +60,35 @@ async function handleConfirmacaoWait(st) {
     if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
     if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
     if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
+
     const totalPend = st.mensagensPendentes.length;
-    const startIdx = Math.min(totalPend, Math.max(0, Number(st.lastClassifiedIdx?.confirmacao || 0)));
+
+    // ==== FIX #1: guard contra "pular a primeira" quando o buffer foi recriado ====
+    st.lastClassifiedIdx = st.lastClassifiedIdx || {};
+    let startIdx = Math.max(0, Number(st.lastClassifiedIdx.confirmacao || 0));
+    if (startIdx >= totalPend) {
+        // Se o array foi reconstruído/encurtado, começamos do zero para não perder a 1ª mensagem
+        startIdx = 0;
+    }
+    // ==============================================================================
+
     const novasMsgs = st.mensagensPendentes.slice(startIdx);
     if (novasMsgs.length === 0) {
         st.mensagensPendentes = [];
-        st.lastClassifiedIdx.confirmacao = 0;
+        st.lastClassifiedIdx.confirmacao = 0; // manter coerência: array vazio => índice zerado
         return { ok: true, noop: 'no-new-messages' };
     }
+
     const apiKey = process.env.OPENAI_API_KEY;
     const looksLikeMediaUrl = (s) => {
         const n = String(s || '');
         return /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(n)
             || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
     };
+
     let confirmado = false;
+
+    // Heurística atual para mídia (se quiser 100% LLM, remover este bloco)
     for (const m of novasMsgs) {
         const msg = safeStr(m?.texto || '').trim();
         if (m?.temMidia || m?.hasMedia || looksLikeMediaUrl(msg) || /^\[m[ií]dia\]$/i.test(msg)) {
@@ -78,6 +97,7 @@ async function handleConfirmacaoWait(st) {
             break;
         }
     }
+
     if (!confirmado && apiKey) {
         const allowed = ['confirmado', 'nao_confirmado', 'duvida', 'neutro'];
         const contexto = novasMsgs.map(m => safeStr(m?.texto || '')).join(' | ');
@@ -106,6 +126,8 @@ async function handleConfirmacaoWait(st) {
                 return { status: 0, picked: null };
             }
             const data = r.data;
+
+            // Tenta extrair texto (compatível com os formatos comuns do endpoint /responses)
             let rawText = '';
             if (Array.isArray(data?.output)) {
                 data.output.forEach(item => {
@@ -116,6 +138,7 @@ async function handleConfirmacaoWait(st) {
             }
             if (!rawText) rawText = extractTextForLog(data);
             rawText = String(rawText || '').trim();
+
             let picked = null;
             if (rawText) {
                 try {
@@ -138,8 +161,12 @@ async function handleConfirmacaoWait(st) {
             console.log(`[${st.contato}] Análise: ${resp.picked || 'neutro'} ("${truncate(contexto, 140)}")`);
         } catch { }
     }
-    st.lastClassifiedIdx.confirmacao = totalPend;
+
+    // ==== FIX #2: ao esvaziar o buffer, o índice precisa ser ZERADO ====
     st.mensagensPendentes = [];
+    st.lastClassifiedIdx.confirmacao = 0;
+    // ===================================================================
+
     if (confirmado) {
         st.mensagensDesdeSolicitacao = [];
         st.lastClassifiedIdx.saque = 0;
@@ -148,6 +175,9 @@ async function handleConfirmacaoWait(st) {
         console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
         st.mensagensPendentes = [];
         st.mensagensDesdeSolicitacao = [];
+        // garantir índice zerado ao sair confirmado
+        st.lastClassifiedIdx.confirmacao = 0;
+
         const bot = require('../bot.js');
         process.nextTick(() => bot.processarMensagensPendentes(st.contato));
         return { ok: true, transitioned: true };
