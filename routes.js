@@ -333,6 +333,31 @@ function setupRoutes(
   app.post('/webhook', async (req, res) => {
     const body = req.body;
 
+    // LOG: payload completo de recebimento (Meta Webhook)
+    try {
+      const e = ((body || {}).entry || [])[0] || {};
+      const c = ((e.changes || [])[0]) || {};
+      const v = c.value || {};
+      const md = v.metadata || {};
+
+      // O waba_id vem de entry.id; phone_number_id/display_phone_number vêm de metadata
+      const rxInfo = {
+        waba_id: e.id || '',
+        phone_number_id: md.phone_number_id || '',
+        display_phone_number: md.display_phone_number || '',
+      };
+
+      // Loga o payload inteiro recebido + IDs principais
+      console.log(
+        `[META][RX] waba_id=${rxInfo.waba_id || '-'} ` +
+        `phone_number_id=${rxInfo.phone_number_id || '-'} ` +
+        `display=${rxInfo.display_phone_number || '-'} ` +
+        `payload=${JSON.stringify(body)}`
+      );
+    } catch (err) {
+      console.warn('[META][RX][LOG][ERR]', err?.message || err);
+    }
+
     // ACK automático em até 2.5s para cortar retries do Meta
     const ackTimer = setTimeout(() => {
       if (!res.headersSent) res.sendStatus(200);
