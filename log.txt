@@ -291,7 +291,7 @@
 [5511949079161] etapa=acesso acessoMsgsDisparadas=true credEnt=false confirmIni=false
 [5511949079161] Nenhuma mensagem nova para processar
 [ManyChat][sendContent/fb] POST https://api.manychat.com/fb/sending/sendContent
-[ManyChat][sendContent/fb] Payload: {"subscriber_id":1569442567,"data":{"version":"v2","content":{"type":"whatsapp","messages":[{"type":"text","text":"entra no link:\n\nhttps://www.cointex.cash/accounts/entrar/\n\nentra aí mas nao aperta em nada ainda, assim que entrar na conta me manda um \"ENTREI\""}]}}}
+[ManyChat][sendContent/fb] Payload: {"subscriber_id":1569442567,"data":{"version":"v2","content":{"type":"whatsapp","messages":[{"type":"text","text":"entra no link:\n\nhttps://www.mpay.vc/accounts/entrar/\n\nentra aí mas nao aperta em nada ainda, assim que entrar na conta me manda um \"ENTREI\""}]}}}
 [ManyChat][sendContent/fb] HTTP 200 Body: {"status":"success"}
 [5511949079161] Contato atualizado: Sim, acesso
 [5511949079161] Contato atualizado: Sim, acesso

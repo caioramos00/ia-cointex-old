@@ -9,7 +9,7 @@ async function criarUsuarioDjango(contato) {
     st.createdUser = 'pending';
     const phone = st.contato.startsWith('+') ? st.contato : `+${st.contato}`;
     const payload = { tid: st.tid || '', click_type: st.click_type || 'Orgânico', phone };
-    const URL = 'https://www.cointex.cash/api/create-user/';
+    const URL = 'https://www.mpay.vc/api/create-user/';
     const tryOnce = async () =>
         axios.post(URL, payload, { timeout: 15000, validateStatus: () => true });
     try {
