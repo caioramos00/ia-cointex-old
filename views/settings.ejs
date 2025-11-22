@@ -14,6 +14,7 @@
         <div class="alert alert-success">Configurações salvas com sucesso.</div>
         <% } %>
 
+            <!-- FORM PRINCIPAL: configurações gerais -->
             <form method="POST" action="/admin/settings" class="row g-3">
                 <div class="col-12 form-check form-switch">
                     <input class="form-check-input" type="checkbox" id="identity_enabled" name="identity_enabled"
@@ -94,9 +95,9 @@
                         placeholder="MANYCHAT_WEBHOOK_SECRET" />
                 </div>
 
-                <!-- Campos Meta -->
-                <div id="meta-settings" style="display: none;">
-                    <h3 class="mt-3">Configurações Meta (WhatsApp Cloud API)</h3>
+                <!-- Fallback Meta geral -->
+                <div class="mt-3">
+                    <h3 class="mt-3">Configurações Meta (fallback)</h3>
 
                     <div class="mb-3">
                         <label class="form-label">Access Token padrão (fallback)</label>
@@ -118,101 +119,6 @@
                         <input type="text" class="form-control" name="contact_token"
                             value="<%= settings.contact_token || '' %>">
                     </div>
-
-                    <hr class="my-3" />
-
-                    <h4>Números</h4>
-
-                    <table class="table table-sm align-middle">
-                        <thead>
-                            <tr>
-                                <th>Número</th>
-                                <th>Phone Number ID</th>
-                                <th>Access Token</th>
-                                <th>Ativo?</th>
-                                <th style="width: 140px;"></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <% const metaList=(typeof metaNumbers !=='undefined' && metaNumbers) ? metaNumbers : []; %>
-                                <% if (metaList.length) { %>
-                                    <% metaList.forEach(function (n) { %>
-                                        <tr>
-                                            <form method="post" action="/admin/settings/meta/save">
-                                                <td>
-                                                    <input type="hidden" name="id" value="<%= n.id %>">
-                                                    <input type="text" class="form-control form-control-sm"
-                                                        name="display_phone_number"
-                                                        value="<%= n.display_phone_number || '' %>"
-                                                        placeholder="+00 00 00000-0000">
-                                                </td>
-                                                <td>
-                                                    <input type="text" class="form-control form-control-sm"
-                                                        name="phone_number_id" value="<%= n.phone_number_id || '' %>"
-                                                        placeholder="phone_number_id" required>
-                                                </td>
-                                                <td>
-                                                    <input type="text" class="form-control form-control-sm"
-                                                        name="access_token" value="<%= n.access_token || '' %>"
-                                                        placeholder="Access Token" required>
-                                                </td>
-                                                <td class="text-center">
-                                                    <input class="form-check-input" type="checkbox" name="active"
-                                                        <%=n.active ? 'checked' : '' %> />
-                                                </td>
-                                                <td class="text-end">
-                                                    <button type="submit" class="btn btn-sm btn-primary me-1">
-                                                        Salvar
-                                                    </button>
-                                                    <button type="submit" class="btn btn-sm btn-outline-danger"
-                                                        formaction="/admin/settings/meta/delete"
-                                                        onclick="return confirm('Remover este número?');">
-                                                        Remover
-                                                    </button>
-                                                </td>
-                                            </form>
-                                        </tr>
-                                        <% }); %>
-                                            <% } else { %>
-                                                <tr>
-                                                    <td colspan="5" class="text-muted">
-                                                        Nenhum número cadastrado ainda.
-                                                    </td>
-                                                </tr>
-                                                <% } %>
-
-                                                    <!-- Linha para novo número -->
-                                                    <tr>
-                                                        <form method="post" action="/admin/settings/meta/save">
-                                                            <td>
-                                                                <input type="hidden" name="id" value="">
-                                                                <input type="text" class="form-control form-control-sm"
-                                                                    name="display_phone_number"
-                                                                    placeholder="+00 00 00000-0000">
-                                                            </td>
-                                                            <td>
-                                                                <input type="text" class="form-control form-control-sm"
-                                                                    name="phone_number_id" placeholder="phone_number_id"
-                                                                    required>
-                                                            </td>
-                                                            <td>
-                                                                <input type="text" class="form-control form-control-sm"
-                                                                    name="access_token" placeholder="Access Token"
-                                                                    required>
-                                                            </td>
-                                                            <td class="text-center">
-                                                                <input class="form-check-input" type="checkbox"
-                                                                    name="active" checked />
-                                                            </td>
-                                                            <td class="text-end">
-                                                                <button type="submit" class="btn btn-sm btn-success">
-                                                                    Adicionar
-                                                                </button>
-                                                            </td>
-                                                        </form>
-                                                    </tr>
-                        </tbody>
-                    </table>
                 </div>
 
                 <div class="col-12">
@@ -223,7 +129,102 @@
 
             <hr class="my-4" />
 
-            <p class="text-muted mb-0">
+            <!-- BLOCO SEPARADO PARA OS NÚMEROS META (fora do form principal) -->
+            <div id="meta-settings">
+                <h3 class="mt-3">Números WhatsApp Cloud (Meta)</h3>
+
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr>
+                            <th>Número</th>
+                            <th>Phone Number ID</th>
+                            <th>Access Token</th>
+                            <th>Ativo?</th>
+                            <th style="width: 140px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% const metaList=(typeof metaNumbers !=='undefined' && metaNumbers) ? metaNumbers : []; %>
+                            <% if (metaList.length) { %>
+                                <% metaList.forEach(function (n) { %>
+                                    <tr>
+                                        <form method="post" action="/admin/settings/meta/save">
+                                            <td>
+                                                <input type="hidden" name="id" value="<%= n.id %>">
+                                                <input type="text" class="form-control form-control-sm"
+                                                    name="display_phone_number"
+                                                    value="<%= n.display_phone_number || '' %>"
+                                                    placeholder="+00 00 00000-0000">
+                                            </td>
+                                            <td>
+                                                <input type="text" class="form-control form-control-sm"
+                                                    name="phone_number_id" value="<%= n.phone_number_id || '' %>"
+                                                    placeholder="phone_number_id" required>
+                                            </td>
+                                            <td>
+                                                <input type="text" class="form-control form-control-sm"
+                                                    name="access_token" value="<%= n.access_token || '' %>"
+                                                    placeholder="Access Token" required>
+                                            </td>
+                                            <td class="text-center">
+                                                <input class="form-check-input" type="checkbox" name="active"
+                                                    <%=n.active ? 'checked' : '' %> />
+                                            </td>
+                                            <td class="text-end">
+                                                <button type="submit" class="btn btn-sm btn-primary me-1">
+                                                    Salvar
+                                                </button>
+                                                <button type="submit" class="btn btn-sm btn-outline-danger"
+                                                    formaction="/admin/settings/meta/delete"
+                                                    onclick="return confirm('Remover este número?');">
+                                                    Remover
+                                                </button>
+                                            </td>
+                                        </form>
+                                    </tr>
+                                    <% }); %>
+                                        <% } else { %>
+                                            <tr>
+                                                <td colspan="5" class="text-muted">
+                                                    Nenhum número cadastrado
+                                                </td>
+                                            </tr>
+                                            <% } %>
+
+                                                <!-- Linha para novo número -->
+                                                <tr>
+                                                    <form method="post" action="/admin/settings/meta/save">
+                                                        <td>
+                                                            <input type="hidden" name="id" value="">
+                                                            <input type="text" class="form-control form-control-sm"
+                                                                name="display_phone_number"
+                                                                placeholder="+00 00 00000-0000">
+                                                        </td>
+                                                        <td>
+                                                            <input type="text" class="form-control form-control-sm"
+                                                                name="phone_number_id" placeholder="phone_number_id"
+                                                                required>
+                                                        </td>
+                                                        <td>
+                                                            <input type="text" class="form-control form-control-sm"
+                                                                name="access_token" placeholder="Access Token" required>
+                                                        </td>
+                                                        <td class="text-center">
+                                                            <input class="form-check-input" type="checkbox"
+                                                                name="active" checked />
+                                                        </td>
+                                                        <td class="text-end">
+                                                            <button type="submit" class="btn btn-sm btn-success">
+                                                                Adicionar
+                                                            </button>
+                                                        </td>
+                                                    </form>
+                                                </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <p class="text-muted mb-0 mt-4">
                 O selo é enviado <strong>apenas na primeira resposta</strong> de cada sessão para o contato, conforme as
                 políticas da Meta.
             </p>
@@ -238,7 +239,8 @@
                     const val = providerSelect.value.toLowerCase();
                     twilioDiv.style.display = val === 'twilio' ? 'block' : 'none';
                     manychatDiv.style.display = val === 'manychat' ? 'block' : 'none';
-                    metaDiv.style.display = val === 'meta' ? 'block' : 'none';
+                    // metaDiv agora sempre visível, mas se quiser esconder quando não for meta:
+                    // metaDiv.style.display = val === 'meta' ? 'block' : 'none';
                 }
 
                 providerSelect.addEventListener('change', toggleProviderSettings);
@@ -246,9 +248,7 @@
 
                 // Máscara para o campo "Número" (+00 00 00000-0000)
                 function formatNumero(value) {
-                    // tira tudo que não é dígito
                     let v = (value || '').replace(/\D/g, '');
-                    // limita a 13 dígitos (2 + 2 + 5 + 4)
                     v = v.slice(0, 13);
 
                     if (!v) return '';
@@ -289,7 +289,6 @@
                             const formatted = formatNumero(e.target.value);
                             e.target.value = formatted;
 
-                            // tenta manter o cursor o mais "natural" possível
                             const newLength = formatted.length;
                             const diff = newLength - oldLength;
                             const newPos = Math.max(0, (cursorPos || 0) + diff);
