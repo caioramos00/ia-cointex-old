@@ -217,7 +217,6 @@ function setupRoutes(
         phone_number_id: (req.body.phone_number_id || '').trim(),
         display_phone_number: (req.body.display_phone_number || '').trim(),
         access_token: (req.body.access_token || '').trim(),
-        label: (req.body.label || '').trim(),
         active: req.body.active === 'on',
       };
 

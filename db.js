@@ -231,7 +231,7 @@ async function listMetaNumbers() {
   const client = await pool.connect();
   try {
     const { rows } = await client.query(
-      `SELECT id, phone_number_id, display_phone_number, access_token, label, active, created_at, updated_at
+      `SELECT id, phone_number_id, display_phone_number, access_token, active, created_at, updated_at
        FROM bot_meta_numbers
        ORDER BY id ASC`
     );
@@ -261,7 +261,7 @@ async function getMetaNumberByPhoneNumberId(phoneNumberId) {
   const client = await pool.connect();
   try {
     const { rows } = await client.query(
-      `SELECT id, phone_number_id, display_phone_number, access_token, label, active, created_at, updated_at
+      `SELECT id, phone_number_id, display_phone_number, access_token, active, created_at, updated_at
        FROM bot_meta_numbers
        WHERE phone_number_id = $1
        AND active = TRUE
@@ -278,7 +278,7 @@ async function getDefaultMetaNumber() {
   const client = await pool.connect();
   try {
     const { rows } = await client.query(
-      `SELECT id, phone_number_id, display_phone_number, access_token, label, active, created_at, updated_at
+      `SELECT id, phone_number_id, display_phone_number, access_token, active, created_at, updated_at
        FROM bot_meta_numbers
        WHERE active = TRUE
        ORDER BY id ASC
@@ -290,16 +290,21 @@ async function getDefaultMetaNumber() {
   }
 }
 
-async function createMetaNumber({ phone_number_id, display_phone_number, access_token, label, active = true }) {
+async function createMetaNumber({
+  phone_number_id,
+  display_phone_number,
+  access_token,
+  active = true,
+}) {
   const client = await pool.connect();
   try {
     const { rows } = await client.query(
       `INSERT INTO bot_meta_numbers (
-         phone_number_id, display_phone_number, access_token, label, active
+         phone_number_id, display_phone_number, access_token, active
        )
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, phone_number_id, display_phone_number, access_token, label, active, created_at, updated_at`,
-      [phone_number_id, display_phone_number || null, access_token, label || null, !!active]
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, phone_number_id, display_phone_number, access_token, active, created_at, updated_at`,
+      [phone_number_id, display_phone_number || null, access_token, !!active]
     );
     return rows[0];
   } finally {
@@ -307,7 +312,15 @@ async function createMetaNumber({ phone_number_id, display_phone_number, access_
   }
 }
 
-async function updateMetaNumber(id, { phone_number_id, display_phone_number, access_token, label, active = true }) {
+async function updateMetaNumber(
+  id,
+  {
+    phone_number_id,
+    display_phone_number,
+    access_token,
+    active = true,
+  }
+) {
   const client = await pool.connect();
   try {
     const { rows } = await client.query(
@@ -315,12 +328,11 @@ async function updateMetaNumber(id, { phone_number_id, display_phone_number, acc
        SET phone_number_id = $2,
            display_phone_number = $3,
            access_token = $4,
-           label = $5,
-           active = $6,
+           active = $5,
            updated_at = NOW()
        WHERE id = $1
-       RETURNING id, phone_number_id, display_phone_number, access_token, label, active, created_at, updated_at`,
-      [id, phone_number_id, display_phone_number || null, access_token, label || null, !!active]
+       RETURNING id, phone_number_id, display_phone_number, access_token, active, created_at, updated_at`,
+      [id, phone_number_id, display_phone_number || null, access_token, !!active]
     );
     return rows[0] || null;
   } finally {
