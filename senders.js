@@ -1,10 +1,15 @@
 const axios = require('axios');
 const { delayRange, extraGlobalDelay, tsNow, safeStr, BETWEEN_MIN_MS, BETWEEN_MAX_MS } = require('./utils.js');
-const { getContatoByPhone, setManychatSubscriberId } = require('./db');
 const { getActiveTransport } = require('./lib/transport/index.js');
 const { preflightOptOut } = require('./optout.js');
 const { ensureEstado } = require('./stateManager.js');
 const { publishMessage } = require('./stream/events-bus');
+const {
+    getContatoByPhone,
+    setManychatSubscriberId,
+    getMetaNumberByPhoneNumberId,
+    getDefaultMetaNumber,
+} = require('./db');
 
 async function resolveManychatSubscriberId(contato, modOpt, settingsOpt) {
     const phone = String(contato || '').replace(/\D/g, '');
@@ -51,6 +56,51 @@ async function resolveManychatSubscriberId(contato, modOpt, settingsOpt) {
     return subscriberId;
 }
 
+async function resolveMetaCredentialsForContato(contato, settings, opts = {}) {
+    const st = ensureEstado(contato);
+    const explicitPhoneNumberId = opts.meta_phone_number_id;
+    const candidatePhoneNumberId =
+        explicitPhoneNumberId ||
+        st.meta_phone_number_id ||
+        settings?.meta_phone_number_id ||
+        null;
+
+    let metaNumber = null;
+
+    if (candidatePhoneNumberId) {
+        try {
+            metaNumber = await getMetaNumberByPhoneNumberId(candidatePhoneNumberId);
+        } catch (e) {
+            console.warn(
+                `[${contato}] resolveMetaCredentialsForContato getMetaNumberByPhoneNumberId erro: ${e?.message || e}`
+            );
+        }
+    }
+
+    if (!metaNumber) {
+        try {
+            metaNumber = await getDefaultMetaNumber();
+        } catch (e) {
+            console.warn(
+                `[${contato}] resolveMetaCredentialsForContato getDefaultMetaNumber erro: ${e?.message || e}`
+            );
+        }
+    }
+
+    if (metaNumber && metaNumber.active !== false) {
+        return {
+            phoneNumberId: metaNumber.phone_number_id,
+            token: metaNumber.access_token,
+        };
+    }
+
+    // Fallback legado: usa os campos únicos do bot_settings
+    return {
+        phoneNumberId: settings?.meta_phone_number_id || null,
+        token: settings?.meta_access_token || null,
+    };
+}
+
 async function sendMessage(contato, texto, opts = {}) {
     await extraGlobalDelay();
     const st = ensureEstado(contato);
@@ -94,7 +144,23 @@ async function sendMessage(contato, texto, opts = {}) {
             } catch { }
             return { ok: true, provider: 'manychat' };
         } else if (provider === 'meta') {
-            await mod.sendText({ to: contato, text: texto }, settings);
+            const { phoneNumberId, token } = await resolveMetaCredentialsForContato(contato, settings, opts);
+
+            if (!token || !phoneNumberId) {
+                console.warn(
+                    `[${contato}] sendMessage: Meta credentials missing (token: ${!!token}, phoneNumberId: ${!!phoneNumberId})`
+                );
+                return { ok: false, reason: 'missing-meta-credentials' };
+            }
+
+            const metaSettings = {
+                ...settings,
+                meta_access_token: token,
+                meta_phone_number_id: phoneNumberId,
+            };
+
+            await mod.sendText({ to: contato, text: texto }, metaSettings);
+
             try {
                 publishMessage({
                     dir: 'out',
@@ -103,10 +169,12 @@ async function sendMessage(contato, texto, opts = {}) {
                     kind: 'text',
                     text: texto || '',
                     media: null,
-                    ts: Date.now()
+                    ts: Date.now(),
                 });
             } catch { }
-            return { ok: true, provider: 'meta' };
+
+            return { ok: true, provider: 'meta', phone_number_id: phoneNumberId };
+
         } else {
             throw new Error(`provider "${provider}" não suportado`);
         }
@@ -205,29 +273,31 @@ async function sendImage(contato, urlOrItems, captionOrOpts, opts = {}) {
             const okAll = results.every(r => r?.ok);
             return isArray ? { ok: okAll, results } : results[0];
         } else if (provider === 'meta') {
-            const token = settings?.meta_access_token;
-            const phoneNumberId = settings?.meta_phone_number_id;
+            const { phoneNumberId, token } = await resolveMetaCredentialsForContato(contato, settings, opts);
+
             if (!token || !phoneNumberId) {
-                console.warn(`[${contato}] sendImage: Meta credentials missing (token: ${!!token}, phoneNumberId: ${!!phoneNumberId})`);
+                console.warn(
+                    `[${contato}] sendImage: Meta credentials missing (token: ${!!token}, phoneNumberId: ${!!phoneNumberId})`
+                );
                 return { ok: false, reason: 'missing-meta-credentials' };
             }
 
-            const version = settings?.meta_api_version || 'v24.0';  // Atual em outubro de 2025
+            const version = settings?.meta_api_version || 'v24.0';
             const apiUrl = `https://graph.facebook.com/${version}/${phoneNumberId}/messages`;
 
             const sendOneMeta = async ({ url, caption }) => {
                 if (!url || typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
-                    console.warn(`[${contato}] sendImage: Invalid URL for meta: ${truncate(url, 50)}`);
+                    console.warn(`[${contato}] sendImage: Invalid URL for meta`);
                     return { ok: false, reason: 'invalid-url' };
                 }
 
                 const payload = {
                     messaging_product: 'whatsapp',
-                    recipient_type: 'individual',
-                    to: String(contato),
+                    to: contato,
                     type: 'image',
-                    image: { link: url }
+                    image: { link: url },
                 };
+
                 if (caption && typeof caption === 'string' && caption.trim()) {
                     payload.image.caption = caption.trim();
                 }
@@ -236,65 +306,57 @@ async function sendImage(contato, urlOrItems, captionOrOpts, opts = {}) {
                     const r = await axios.post(apiUrl, payload, {
                         headers: {
                             Authorization: `Bearer ${token}`,
-                            'Content-Type': 'application/json'
+                            'Content-Type': 'application/json',
                         },
                         timeout: 15000,
-                        validateStatus: () => true
+                        validateStatus: () => true,
                     });
 
-                    console.log(`[${contato}] sendImage via meta: HTTP ${r.status} body=${JSON.stringify(r.data).slice(0, 200)}`);
+                    console.log(
+                        `[${contato}] sendImage(meta) http=${r.status} body=${JSON.stringify(
+                            r.data || {}
+                        ).slice(0, 500)}`
+                    );
 
-                    if (r.status >= 200 && r.status < 300 && r.data?.messages?.[0]?.id) {
-                        return {
-                            ok: true,
-                            provider: 'meta',
-                            mechanism: 'direct',
-                            message_id: r.data.messages[0].id
-                        };
-                    } else {
-                        return {
-                            ok: false,
-                            reason: 'api-error',
-                            status: r.status,
-                            details: r.data?.error || r.data
-                        };
+                    if (r.status >= 200 && r.status < 300) {
+                        return { ok: true };
                     }
+                    return { ok: false, reason: 'meta-http-error', status: r.status, body: r.data };
                 } catch (e) {
-                    console.error(`[${contato}] sendImage via meta erro: ${e?.message || e}`);
-                    return { ok: false, reason: 'network-error', error: e?.message || String(e) };
+                    console.warn(`[${contato}] sendImage(meta) error=${e?.message || e}`);
+                    return { ok: false, reason: 'meta-exception', error: e?.message || String(e) };
                 }
             };
 
             const results = [];
             for (let i = 0; i < items.length; i++) {
-                const r = await sendOneMeta(items[i]);
+                const { url, caption } = items[i];
+                const r = await sendOneMeta({ url: url || '', caption });
                 results.push(r);
+
                 try {
                     if (r?.ok) {
-                        const { url, caption } = items[i] || {};
                         publishMessage({
                             dir: 'out',
                             wa_id: contato,
-                            wamid: r.message_id || '',
+                            wamid: '',
                             kind: 'image',
                             text: caption || '',
                             media: { type: 'image' },
-                            ts: Date.now()
+                            ts: Date.now(),
                         });
                     }
                 } catch { }
-                if (await preflightOptOut(st)) {
-                    results.push({ ok: false, reason: 'paused-by-optout-mid-batch' });
-                    break;
-                }
-                if (i < items.length - 1) {
+
+                if (opts.delayBetweenMs && i < items.length - 1) {
                     const [minMs, maxMs] = opts.delayBetweenMs;
                     await delayRange(minMs, maxMs);
                 }
             }
 
-            const okAll = results.every(r => r?.ok);
+            const okAll = results.every((r) => r?.ok);
             return isArray ? { ok: okAll, results } : results[0];
+
         } else {
             console.warn(`[${contato}] sendImage: provider=${provider} não suportado (esperado manychat ou meta).`);
             return { ok: false, reason: 'unsupported-provider' };

@@ -2,10 +2,20 @@ const express = require('express');
 const axios = require('axios');
 
 const { truncate, findTidInText, safeStr } = require('./utils.js');
-const { pool, getBotSettings, updateBotSettings, getContatoByPhone } = require('./db.js');
 const { delay, handleIncomingNormalizedMessage } = require('./bot.js');
 const { setEtapa, ensureEstado } = require('./stateManager.js');
 const { sseRouter } = require('./stream/sse-router');
+const {
+  pool,
+  getBotSettings,
+  updateBotSettings,
+  getContatoByPhone,
+  listMetaNumbers,
+  createMetaNumber,
+  updateMetaNumber,
+  deleteMetaNumber,
+} = require('./db.js');
+
 
 const LANDING_URL = 'https://tramposlara.com';
 
@@ -157,7 +167,12 @@ function setupRoutes(
   app.get('/admin/settings', checkAuth, async (req, res) => {
     try {
       const settings = await getBotSettings({ bypassCache: true });
-      res.render('settings.ejs', { settings, ok: req.query.ok === '1' });
+      const metaNumbers = await listMetaNumbers().catch(() => []);
+      res.render('settings.ejs', {
+        settings,
+        metaNumbers,
+        ok: req.query.ok === '1',
+      });
     } catch (e) {
       console.error('[AdminSettings][GET]', e.message);
       res.status(500).send('Erro ao carregar configurações.');
@@ -191,6 +206,57 @@ function setupRoutes(
       res.status(500).send('Erro ao salvar configurações');
     }
   });
+
+  app.post(
+    '/admin/settings/meta/save',
+    checkAuth,
+    express.urlencoded({ extended: true }),
+    async (req, res) => {
+      const id = (req.body.id || '').trim();
+      const payload = {
+        phone_number_id: (req.body.phone_number_id || '').trim(),
+        display_phone_number: (req.body.display_phone_number || '').trim(),
+        access_token: (req.body.access_token || '').trim(),
+        label: (req.body.label || '').trim(),
+        active: req.body.active === 'on',
+      };
+
+      try {
+        if (!payload.phone_number_id || !payload.access_token) {
+          throw new Error('phone_number_id e access_token são obrigatórios');
+        }
+
+        if (id) {
+          await updateMetaNumber(Number(id), payload);
+        } else {
+          await createMetaNumber(payload);
+        }
+
+        res.redirect('/admin/settings?ok=1');
+      } catch (e) {
+        console.error('[AdminSettings][MetaSave] erro:', e);
+        res.status(500).send('Erro ao salvar número Meta');
+      }
+    }
+  );
+
+  app.post(
+    '/admin/settings/meta/delete',
+    checkAuth,
+    express.urlencoded({ extended: true }),
+    async (req, res) => {
+      const id = Number((req.body.id || '').trim() || 0);
+      try {
+        if (id) {
+          await deleteMetaNumber(id);
+        }
+        res.redirect('/admin/settings?ok=1');
+      } catch (e) {
+        console.error('[AdminSettings][MetaDelete] erro:', e);
+        res.status(500).send('Erro ao remover número Meta');
+      }
+    }
+  );
 
   app.get('/api/metrics', checkAuth, async (req, res) => {
     const client = await pool.connect();
@@ -375,6 +441,10 @@ function setupRoutes(
             if (change.field !== 'messages') continue;
 
             const value = change.value || {};
+            const metadata = value.metadata || {};
+            const rxPhoneNumberId = metadata.phone_number_id || rxInfo.phone_number_id || '';
+            const rxDisplayPhone = metadata.display_phone_number || rxInfo.display_phone_number || '';
+
             if (!value.messages || !value.messages.length) continue;
 
             const msg = value.messages[0];
@@ -480,6 +550,32 @@ function setupRoutes(
               await salvarContato(contato, null, texto || (isProviderMedia ? '[mídia]' : ''), tid, click_type);
             } else {
               await salvarContato(contato, null, texto || (isProviderMedia ? '[mídia]' : ''), tid, click_type);
+            }
+
+            try {
+              const stMeta = ensureEstado(contato);
+              if (rxPhoneNumberId) stMeta.meta_phone_number_id = rxPhoneNumberId;
+              if (rxDisplayPhone) stMeta.meta_display_phone_number = rxDisplayPhone;
+
+              if (rxPhoneNumberId) {
+                // Persistimos no DB para sobreviver a restart
+                pool
+                  .query(
+                    'UPDATE contatos SET meta_phone_number_id = $1 WHERE id = $2',
+                    [rxPhoneNumberId, contato]
+                  )
+                  .catch((e) => {
+                    console.warn(
+                      '[META][RX] erro ao atualizar meta_phone_number_id no contato',
+                      e?.message || e
+                    );
+                  });
+              }
+            } catch (e) {
+              console.warn(
+                '[META][RX] erro ao propagar meta_phone_number_id para o estado',
+                e?.message || e
+              );
             }
 
             await handleIncomingNormalizedMessage({

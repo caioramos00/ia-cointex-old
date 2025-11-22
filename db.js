@@ -65,6 +65,26 @@ async function initDatabase() {
     console.log('[DB] Colunas de opt-out OK.');
 
     await client.query(`
+      ALTER TABLE contatos
+      ADD COLUMN IF NOT EXISTS meta_phone_number_id VARCHAR(50) DEFAULT '';
+    `);
+    console.log('[DB] Coluna meta_phone_number_id em contatos OK.');
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS bot_meta_numbers (
+        id SERIAL PRIMARY KEY,
+        phone_number_id VARCHAR(50) NOT NULL UNIQUE,
+        display_phone_number VARCHAR(50),
+        access_token TEXT NOT NULL,
+        label TEXT,
+        active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('[DB] Tabela bot_meta_numbers criada ou já existe.');
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS bot_settings (
         id SERIAL PRIMARY KEY,
         message_provider VARCHAR(50) DEFAULT 'meta',
@@ -207,6 +227,116 @@ async function updateBotSettings(payload) {
   }
 }
 
+async function listMetaNumbers() {
+  const client = await pool.connect();
+  try {
+    const { rows } = await client.query(
+      `SELECT id, phone_number_id, display_phone_number, access_token, label, active, created_at, updated_at
+       FROM bot_meta_numbers
+       ORDER BY id ASC`
+    );
+    return rows;
+  } finally {
+    client.release();
+  }
+}
+
+async function getMetaNumberById(id) {
+  const client = await pool.connect();
+  try {
+    const { rows } = await client.query(
+      `SELECT id, phone_number_id, display_phone_number, access_token, label, active, created_at, updated_at
+       FROM bot_meta_numbers
+       WHERE id = $1
+       LIMIT 1`,
+      [id]
+    );
+    return rows[0] || null;
+  } finally {
+    client.release();
+  }
+}
+
+async function getMetaNumberByPhoneNumberId(phoneNumberId) {
+  const client = await pool.connect();
+  try {
+    const { rows } = await client.query(
+      `SELECT id, phone_number_id, display_phone_number, access_token, label, active, created_at, updated_at
+       FROM bot_meta_numbers
+       WHERE phone_number_id = $1
+       AND active = TRUE
+       LIMIT 1`,
+      [phoneNumberId]
+    );
+    return rows[0] || null;
+  } finally {
+    client.release();
+  }
+}
+
+async function getDefaultMetaNumber() {
+  const client = await pool.connect();
+  try {
+    const { rows } = await client.query(
+      `SELECT id, phone_number_id, display_phone_number, access_token, label, active, created_at, updated_at
+       FROM bot_meta_numbers
+       WHERE active = TRUE
+       ORDER BY id ASC
+       LIMIT 1`
+    );
+    return rows[0] || null;
+  } finally {
+    client.release();
+  }
+}
+
+async function createMetaNumber({ phone_number_id, display_phone_number, access_token, label, active = true }) {
+  const client = await pool.connect();
+  try {
+    const { rows } = await client.query(
+      `INSERT INTO bot_meta_numbers (
+         phone_number_id, display_phone_number, access_token, label, active
+       )
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, phone_number_id, display_phone_number, access_token, label, active, created_at, updated_at`,
+      [phone_number_id, display_phone_number || null, access_token, label || null, !!active]
+    );
+    return rows[0];
+  } finally {
+    client.release();
+  }
+}
+
+async function updateMetaNumber(id, { phone_number_id, display_phone_number, access_token, label, active = true }) {
+  const client = await pool.connect();
+  try {
+    const { rows } = await client.query(
+      `UPDATE bot_meta_numbers
+       SET phone_number_id = $2,
+           display_phone_number = $3,
+           access_token = $4,
+           label = $5,
+           active = $6,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, phone_number_id, display_phone_number, access_token, label, active, created_at, updated_at`,
+      [id, phone_number_id, display_phone_number || null, access_token, label || null, !!active]
+    );
+    return rows[0] || null;
+  } finally {
+    client.release();
+  }
+}
+
+async function deleteMetaNumber(id) {
+  const client = await pool.connect();
+  try {
+    await client.query(`DELETE FROM bot_meta_numbers WHERE id = $1`, [id]);
+  } finally {
+    client.release();
+  }
+}
+
 async function salvarContato(contatoId, grupoId = null, mensagem = null, tid = '', click_type = 'Orgânico') {
   try {
     const agora = new Date().toISOString();
@@ -322,4 +452,11 @@ module.exports = {
   pool,
   getContatoByPhone,
   setManychatSubscriberId,
+  listMetaNumbers,
+  getMetaNumberById,
+  getMetaNumberByPhoneNumberId,
+  getDefaultMetaNumber,
+  createMetaNumber,
+  updateMetaNumber,
+  deleteMetaNumber
 };
