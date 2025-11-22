@@ -224,10 +224,14 @@
                 </table>
             </div>
 
-            <p class="text-muted mb-0 mt-4">
-                O selo é enviado <strong>apenas na primeira resposta</strong> de cada sessão para o contato, conforme as
-                políticas da Meta.
-            </p>
+            <div class="mt-4">
+                <form method="post" action="/admin/settings/reset-state"
+                    onsubmit="return confirm('Tem certeza que deseja resetar a memória do bot para TODOS os contatos? O bot vai recomeçar a conversa do zero com quem falar depois disso.');">
+                    <button type="submit" class="btn btn-sm btn-danger">
+                        Resetar conversas em memória
+                    </button>
+                </form>
+            </div>
 
             <script>
                 const providerSelect = document.querySelector('select[name="message_provider"]');

@@ -5,6 +5,7 @@ const { truncate, findTidInText, safeStr } = require('./utils.js');
 const { delay, handleIncomingNormalizedMessage } = require('./bot.js');
 const { setEtapa, ensureEstado } = require('./stateManager.js');
 const { sseRouter } = require('./stream/sse-router');
+const estadoContatos = require('./state.js');
 const {
   pool,
   getBotSettings,
@@ -252,6 +253,26 @@ function setupRoutes(
       } catch (e) {
         console.error('[AdminSettings][MetaDelete] erro:', e);
         res.status(500).send('Erro ao remover número Meta');
+      }
+    }
+  );
+
+  app.post(
+    '/admin/settings/reset-state',
+    checkAuth,
+    express.urlencoded({ extended: true }),
+    async (req, res) => {
+      try {
+        Object.keys(estadoContatos).forEach((k) => {
+          delete estadoContatos[k];
+        });
+
+        console.log('[AdminSettings][RESET_STATE] Estado de memória do bot resetado manualmente.');
+
+        res.redirect('/admin/settings?ok=1');
+      } catch (e) {
+        console.error('[AdminSettings][RESET_STATE] erro:', e);
+        res.status(500).send('Erro ao resetar memória do bot');
       }
     }
   );
