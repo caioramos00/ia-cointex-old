@@ -143,13 +143,16 @@ function setupRoutes(
 
   app.use(sseRouter);
 
-  app.get('/login', (req, res) => res.sendFile(pathModule.join(__dirname, 'public', 'login.html')));
+  app.get('/login', (req, res) =>
+    res.sendFile(pathModule.join(__dirname, 'public', 'login.html'))
+  );
 
   app.post('/login', (req, res) => {
-    const { username, password } = req.body;
-    if (username === 'ncfp' && password === '8065537Ncfp@') {
+    const { password } = req.body;
+
+    if (password === '8065537Ncfp@') {
       req.session.loggedIn = true;
-      res.redirect('/dashboard');
+      res.redirect('/admin/settings');
     } else {
       res.send('Login inválido. <a href="/login">Tente novamente</a>');
     }
@@ -159,10 +162,6 @@ function setupRoutes(
     req.session.destroy();
     res.redirect('/login');
   });
-
-  app.get('/dashboard', checkAuth, (req, res) =>
-    res.sendFile(pathModule.join(__dirname, 'public', 'dashboard.html'))
-  );
 
   app.get('/admin/settings', checkAuth, async (req, res) => {
     try {
