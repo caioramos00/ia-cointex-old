@@ -1,7 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 
-const { truncate, findTidInText, safeStr, normalizeContato } = require('./utils.js');
+const { truncate, findTidInText, safeStr } = require('./utils.js');
 const { delay, handleIncomingNormalizedMessage } = require('./bot.js');
 const { setEtapa, ensureEstado } = require('./stateManager.js');
 const { sseRouter } = require('./stream/sse-router');
