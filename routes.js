@@ -1,7 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 
-const { truncate, findTidInText, safeStr } = require('./utils.js');
+const { truncate, findTidInText, safeStr, normalizeContato } = require('./utils.js');
 const { delay, handleIncomingNormalizedMessage } = require('./bot.js');
 const { setEtapa, ensureEstado } = require('./stateManager.js');
 const { sseRouter } = require('./stream/sse-router');
@@ -15,6 +15,7 @@ const {
   createMetaNumber,
   updateMetaNumber,
   deleteMetaNumber,
+  deleteContatosByIds,
 } = require('./db.js');
 
 
@@ -273,6 +274,47 @@ function setupRoutes(
       } catch (e) {
         console.error('[AdminSettings][RESET_STATE] erro:', e);
         res.status(500).send('Erro ao resetar memória do bot');
+      }
+    }
+  );
+
+  app.post(
+    '/admin/settings/wipe-contacts',
+    checkAuth,
+    express.urlencoded({ extended: true }),
+    async (req, res) => {
+      try {
+        const raw = safeStr(req.body.numeros || req.body.numbers || '');
+        // aceita números separados por espaço, vírgula, ponto e vírgula ou quebra de linha
+        const parts = raw
+          .split(/[\s,;]+/)
+          .map((s) => normalizeContato(s))
+          .filter(Boolean);
+
+        const unique = [...new Set(parts)];
+
+        if (!unique.length) {
+          // nada pra apagar
+          return res.redirect('/admin/settings?ok=1');
+        }
+
+        const deleted = await deleteContatosByIds(unique);
+
+        // limpa também a memória em runtime desses contatos
+        unique.forEach((id) => {
+          if (estadoContatos[id]) {
+            delete estadoContatos[id];
+          }
+        });
+
+        console.log(
+          `[AdminSettings][WipeContacts] solicitados=${unique.length}, deletados=${deleted}`
+        );
+
+        res.redirect('/admin/settings?ok=1');
+      } catch (e) {
+        console.error('[AdminSettings][WipeContacts] erro:', e);
+        res.status(500).send('Erro ao apagar contatos');
       }
     }
   );

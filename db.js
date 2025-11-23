@@ -455,6 +455,28 @@ async function setManychatSubscriberId(phone, subscriberId) {
   }
 }
 
+async function deleteContatosByIds(ids = []) {
+  const normIds = (ids || [])
+    .map((v) => String(v || '').replace(/\D/g, ''))
+    .filter((v, idx, arr) => v && arr.indexOf(v) === idx);
+
+  if (!normIds.length) return 0;
+
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      'DELETE FROM contatos WHERE id = ANY($1::text[])',
+      [normIds]
+    );
+    console.log(
+      `[DB] deleteContatosByIds: removidos ${result.rowCount} contatos (ids=${normIds.join(',')})`
+    );
+    return result.rowCount;
+  } finally {
+    client.release();
+  }
+}
+
 module.exports = {
   initDatabase,
   salvarContato,
@@ -470,5 +492,6 @@ module.exports = {
   getDefaultMetaNumber,
   createMetaNumber,
   updateMetaNumber,
-  deleteMetaNumber
+  deleteMetaNumber,
+  deleteContatosByIds
 };
