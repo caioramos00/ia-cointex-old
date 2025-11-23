@@ -226,17 +226,11 @@
 
             <div class="mt-4">
                 <h4>Apagar dados de contatos (por número)</h4>
-                <p class="text-muted small">
-                    Digite um ou mais números de WhatsApp (com ou sem +, DDD, espaços ou traços),
-                    separados por espaço, vírgula ou quebra de linha.
-                    Esses contatos serão removidos da tabela <code>contatos</code>, e o bot vai tratá-los
-                    como novos na próxima mensagem.
-                </p>
                 <form method="post" action="/admin/settings/wipe-contacts"
                     onsubmit="return confirm('Tem certeza que deseja apagar DEFINITIVAMENTE os dados desses contatos no banco?');">
                     <div class="mb-2">
-                        <textarea class="form-control" name="numeros" rows="3" placeholder="+55 11 90000-0000
-+55 21 98888-7777"></textarea>
+                        <textarea class="form-control" name="numeros" rows="3" placeholder="5511999999999
+5511999999999"></textarea>
                     </div>
                     <button type="submit" class="btn btn-sm btn-danger">
                         Apagar contatos do banco
