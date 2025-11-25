@@ -72,6 +72,7 @@ const { promptClassificaReoptin } = require('./prompts');
 const { handleAberturaSend, handleAberturaWait } = require('./stages/abertura');
 const { handleInteresseSend, handleInteresseWait } = require('./stages/interesse');
 const { handleInstrucoesSend, handleInstrucoesWait } = require('./stages/instrucoes');
+const { handlePreAcessoSend, handlePreAcessoWait } = require('./stages/pre-acesso');
 const { handleAcessoSend, handleAcessoWait } = require('./stages/acesso');
 const { handleConfirmacaoSend, handleConfirmacaoWait } = require('./stages/confirmacao');
 const { handleSaqueSend, handleSaqueWait } = require('./stages/saque');
@@ -436,6 +437,12 @@ async function processarMensagensPendentes(contato) {
         }
         if (st.etapa === 'instrucoes:wait') {
             return await handleInstrucoesWait(st);
+        }
+        if (st.etapa === 'pre-acesso:send') {
+            return await handlePreAcessoSend(st);
+        }
+        if (st.etapa === 'pre-acesso:wait') {
+            return await handlePreAcessoWait(st);
         }
         if (st.etapa === 'acesso:send') {
             return await handleAcessoSend(st);

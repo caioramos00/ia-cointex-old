@@ -1,23 +1,35 @@
 const path = require('path');
 const fs = require('fs');
-const { delayRange, tsNow, BETWEEN_MIN_MS, BETWEEN_MAX_MS, safeStr, truncate } = require('../utils.js');
-const { preflightOptOut, enterStageOptOutResetIfNeeded, finalizeOptOutBatchAtEnd } = require('../optout.js');
+const {
+    delayRange,
+    tsNow,
+    chooseUnique,
+    BETWEEN_MIN_MS,
+    BETWEEN_MAX_MS,
+    safeStr,
+    truncate
+} = require('../utils.js');
+const {
+    preflightOptOut,
+    enterStageOptOutResetIfNeeded,
+    finalizeOptOutBatchAtEnd
+} = require('../optout.js');
 const { sendMessage } = require('../senders.js');
 const axios = require('axios');
 const { promptClassificaAceite } = require('../prompts');
 
-async function handleInstrucoesSend(st) {
+async function handlePreAcessoSend(st) {
     enterStageOptOutResetIfNeeded(st);
 
-    const instrucoesPath = path.join(__dirname, '../content', 'instrucoes.json');
-    let instrucoesData = null;
+    const preAcessoPath = path.join(__dirname, '../content', 'pre-acesso.json');
+    let preAcessoData = null;
 
-    const loadInstrucoes = () => {
-        if (instrucoesData) return instrucoesData;
-        let raw = fs.readFileSync(instrucoesPath, 'utf8');
+    const loadPreAcesso = () => {
+        if (preAcessoData) return preAcessoData;
+        let raw = fs.readFileSync(preAcessoPath, 'utf8');
         raw = raw.replace(/^\uFEFF/, '').replace(/,\s*([}\]])/g, '$1');
-        instrucoesData = JSON.parse(raw);
-        return instrucoesData;
+        preAcessoData = JSON.parse(raw);
+        return preAcessoData;
     };
 
     const pick = (arr) =>
@@ -25,83 +37,35 @@ async function handleInstrucoesSend(st) {
             ? arr[Math.floor(Math.random() * arr.length)]
             : '';
 
-    // MSG 1: agora usa msg1.grupo1, msg1.grupo2 e msg2.grupo1
-    const composeMsg1 = () => {
-        const c = loadInstrucoes();
-        const g1 = pick(c?.msg1?.grupo1);
-        const g2 = pick(c?.msg1?.grupo2);
-        const g3 = pick(c?.msg2?.grupo1); // frase que puxa pros pontos
-        return [
-            g1 && `${g1}?`,
-            g2 && `${g2}…`,
-            g3 && `${g3}:`
-        ].filter(Boolean).join(' ');
+    // msg1: g1 / g2
+    const composePreAcessoMsg1 = () => {
+        const c = loadPreAcesso();
+        const g1 = pick(c?.msg1?.g1);
+        const g2 = pick(c?.msg1?.g2);
+        return [g1, g2].filter(Boolean).join(' ');
     };
 
-    // MSG 2: pontos p1–p4, agora considerando g1..g4
-    const composeMsg2 = () => {
-        const c = loadInstrucoes();
-
-        const p1 = [
-            pick(c?.pontos?.p1?.g1),
-            pick(c?.pontos?.p1?.g2),
-            pick(c?.pontos?.p1?.g3),
-            pick(c?.pontos?.p1?.g4)
-        ].filter(Boolean).join(', ');
-
-        const p2 = [
-            pick(c?.pontos?.p2?.g1),
-            pick(c?.pontos?.p2?.g2),
-            pick(c?.pontos?.p2?.g3),
-            pick(c?.pontos?.p2?.g4)
-        ].filter(Boolean).join(', ');
-
-        const p3 = [
-            pick(c?.pontos?.p3?.g1),
-            pick(c?.pontos?.p3?.g2),
-            pick(c?.pontos?.p3?.g3),
-            pick(c?.pontos?.p3?.g4)
-        ].filter(Boolean).join(', ');
-
-        const p4 = [
-            pick(c?.pontos?.p4?.g1),
-            pick(c?.pontos?.p4?.g2),
-            pick(c?.pontos?.p4?.g3),
-            pick(c?.pontos?.p4?.g4)
-        ].filter(Boolean).join(', ');
-
-        let out = [
-            p1 && `• ${p1}`,
-            '',
-            p2 && `• ${p2}`,
-            '',
-            p3 && `• ${p3}`,
-            '',
-            p4 && `• ${p4}`
-        ].filter(v => v !== undefined).join('\n');
-
-        out = out
-            .replace(/\r\n/g, '\n')
-            .replace(/\n{3,}/g, '\n\n')
-            .trim();
-
-        return out;
+    // msg2: g1 / g2 / g3
+    const composePreAcessoMsg2 = () => {
+        const c = loadPreAcesso();
+        const g1 = pick(c?.msg2?.g1);
+        const g2 = pick(c?.msg2?.g2);
+        const g3 = pick(c?.msg2?.g3);
+        return [g1, g2, g3].filter(Boolean).join(' ');
     };
 
-    // MSG 3: continua igual, usando msg3.grupo1 / msg3.grupo2
-    const composeMsg3 = () => {
-        const c = loadInstrucoes();
-        const g1 = pick(c?.msg3?.grupo1);
-        const g2 = pick(c?.msg3?.grupo2);
-        return [
-            g1 && `${g1}…`,
-            g2 && `${g2}?`
-        ].filter(Boolean).join(' ');
+    // msg3: g1 / g2
+    const composePreAcessoMsg3 = () => {
+        const c = loadPreAcesso();
+        const g1 = pick(c?.msg3?.g1);
+        const g2 = pick(c?.msg3?.g2);
+        return [g1, g2].filter(Boolean).join(' ');
     };
 
-    const m1 = composeMsg1();
-    const m2 = composeMsg2();
-    const m3 = composeMsg3();
+    const m1 = chooseUnique(composePreAcessoMsg1, st) || composePreAcessoMsg1();
+    const m2 = chooseUnique(composePreAcessoMsg2, st) || composePreAcessoMsg2();
+    const m3 = chooseUnique(composePreAcessoMsg3, st) || composePreAcessoMsg3();
+
     const msgs = [m1, m2, m3];
 
     let cur = Number(st.stageCursor?.[st.etapa] || 0);
@@ -111,45 +75,44 @@ async function handleInstrucoesSend(st) {
             return { ok: true, interrupted: 'optout-pre-batch' };
         }
 
-        if (!msgs[i]) continue;
+        if (!msgs[i]) {
+            st.stageCursor[st.etapa] = i + 1;
+            continue;
+        }
 
-        if (i === 0) {
-            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-        }
-        if (i === 1) {
-            await delayRange(20000, 30000);
-            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-        }
-        if (i === 2) {
-            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-        }
+        // intervalo antes de cada mensagem
+        await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
 
         const r = await sendMessage(st.contato, msgs[i]);
-        if (!r?.ok) break;
+        if (!r?.ok) {
+            st.mensagensPendentes = [];
+            return { ok: true, paused: r?.reason || 'send-skipped', idx: i };
+        }
+
+        st.stageCursor[st.etapa] = i + 1;
 
         if (await preflightOptOut(st)) {
             return { ok: true, interrupted: 'optout-mid-batch' };
         }
-
-        st.stageCursor[st.etapa] = i + 1;
     }
 
     if ((st.stageCursor[st.etapa] || 0) >= msgs.length) {
-        if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-post-batch' };
+        if (await preflightOptOut(st)) {
+            return { ok: true, interrupted: 'optout-post-batch' };
+        }
 
+        // fim do batch
         st.stageCursor[st.etapa] = 0;
         st.mensagensPendentes = [];
         st.mensagensDesdeSolicitacao = [];
-        st.lastClassifiedIdx.acesso = 0;
-        st.lastClassifiedIdx.confirmacao = 0;
-        st.lastClassifiedIdx.saque = 0;
+        st.lastClassifiedIdx.preAcesso = 0;
 
         const _prev = st.etapa;
         if (await finalizeOptOutBatchAtEnd(st)) {
             return { ok: true, interrupted: 'optout-batch-end' };
         }
 
-        st.etapa = 'instrucoes:wait';
+        st.etapa = 'pre-acesso:wait';
         console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
         return { ok: true };
     }
@@ -157,13 +120,13 @@ async function handleInstrucoesSend(st) {
     return { ok: true, partial: true };
 }
 
-async function handleInstrucoesWait(st) {
+async function handlePreAcessoWait(st) {
     if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
     if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
     if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
 
     const total = st.mensagensDesdeSolicitacao.length;
-    const startIdx = Math.max(0, st.lastClassifiedIdx?.acesso || 0);
+    const startIdx = Math.max(0, st.lastClassifiedIdx?.preAcesso || 0);
     if (startIdx >= total) {
         st.mensagensPendentes = [];
         return { ok: true, noop: 'no-new-messages' };
@@ -172,7 +135,7 @@ async function handleInstrucoesWait(st) {
     const novasMsgs = st.mensagensDesdeSolicitacao.slice(startIdx);
     const apiKey = process.env.OPENAI_API_KEY;
     let classes = [];
-    const bot = require('../bot.js'); // Require dentro da função para evitar ciclo
+    const bot = require('../bot.js');
     const { extractTextForLog, pickLabelFromResponseData } = bot;
 
     for (const raw of novasMsgs) {
@@ -213,7 +176,6 @@ async function handleInstrucoesWait(st) {
 
                 const data = r.data;
                 let rawText = '';
-
                 if (Array.isArray(data?.output)) {
                     data.output.forEach((item) => {
                         if (
@@ -225,7 +187,6 @@ async function handleInstrucoesWait(st) {
                         }
                     });
                 }
-
                 if (!rawText) rawText = extractTextForLog(data);
                 rawText = String(rawText || '').trim();
 
@@ -257,39 +218,34 @@ async function handleInstrucoesWait(st) {
             } catch { }
         }
 
-        console.log(`[${st.contato}] Análise: ${msgClass} ("${truncate(msg, 140)}")`);
+        console.log(
+            `[${st.contato}] Análise: ${msgClass} ("${truncate(msg, 140)}")`
+        );
         classes.push(msgClass);
     }
 
-    st.lastClassifiedIdx.acesso = total;
+    st.lastClassifiedIdx.preAcesso = total;
 
     let classe = 'duvida';
     const nonDuvida = classes.filter((c) => c !== 'duvida');
     classe = nonDuvida.length > 0 ? nonDuvida[nonDuvida.length - 1] : 'duvida';
 
     st.classificacaoAceite = classe;
+    st.mensagensPendentes = [];
 
     if (classe === 'aceite') {
-        st.mensagensPendentes = [];
         st.mensagensDesdeSolicitacao = [];
-        st.lastClassifiedIdx.interesse = 0;
-        st.lastClassifiedIdx.acesso = 0;
-        st.lastClassifiedIdx.confirmacao = 0;
-        st.lastClassifiedIdx.saque = 0;
-
+        st.lastClassifiedIdx.preAcesso = 0;
         const _prev = st.etapa;
-        st.etapa = 'pre-acesso:send';
+        st.etapa = 'acesso:send'; // próxima etapa após o pre-acesso
         console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
-
         st.mensagensPendentes = [];
         st.mensagensDesdeSolicitacao = [];
         process.nextTick(() => bot.processarMensagensPendentes(st.contato));
-
         return { ok: true, transitioned: true };
     } else {
-        st.mensagensPendentes = [];
         return { ok: true, classe };
     }
 }
 
-module.exports = { handleInstrucoesSend, handleInstrucoesWait };
+module.exports = { handlePreAcessoSend, handlePreAcessoWait };

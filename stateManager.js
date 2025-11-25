@@ -10,6 +10,8 @@ const KNOWN_ETAPAS = new Set([
     'interesse:wait',
     'instrucoes:send',
     'instrucoes:wait',
+    'pre-acesso:send',
+    'pre-acesso:wait',
     'acesso:send',
     'acesso:wait',
     'confirmacao:send',
