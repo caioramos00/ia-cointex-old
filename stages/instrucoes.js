@@ -32,7 +32,7 @@ async function handleInstrucoesSend(st) {
         const g2 = pick(c?.msg1?.grupo2);
         const g3 = pick(c?.msg2?.grupo1); // frase que puxa pros pontos
         return [
-            g1 && `${g1}?`,
+            g1 && `${g1}`,
             g2 && `${g2}…`,
             g3 && `${g3}:`
         ].filter(Boolean).join(' ');
