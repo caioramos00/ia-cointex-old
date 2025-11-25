@@ -1,100 +1,38 @@
 {
-  "msg": {
+  "msg1": {
     "g1": [
-      "to bem corrido aqui",
-      "tô na correria aqui",
-      "tô na correria agora",
-      "tô bem corrido agora",
-      "to sem muito tempo aqui",
-      "tô sem muito tempo aqui",
-      "tô sem muito tempo agora",
-      "to sem tempo aqui",
-      "tô sem tempo aqui",
-      "tô sem tempo agora",
-      "to na maior correria aqui",
-      "tô na maior correria aqui",
-      "tô na maior correria agora",
-      "to na maior correria agora",
-      "to meio sem tempo aqui",
-      "tô meio sem tempo aqui",
-      "tô meio sem tempo agora",
-      "to meio corrido aqui"
+      "Boaaa",
+      "Boraa",
+      "Fechou então"
     ],
     "g2": [
-      "fazendo vários ao mesmo tempo",
-      "fazendo vários trampos ao mesmo tempo",
-      "fazendo vários trampo ao mesmo tempo",
-      "fazendo vários trampos juntos",
-      "fazendo vários trampo juntos",
-      "fazendo vários trampos",
-      "fazendo vários trampo",
-      "fazendo muitos trampos ao mesmo tempo",
-      "fazendo muitos trampo ao mesmo tempo",
-      "fazendo muitos trampos juntos",
-      "fazendo muitos trampo juntos",
-      "fazendo muitos trampos",
-      "fazendo muitos trampo",
-      "fazendo muito trampo",
-      "fazendo muito trampo ao mesmo tempo",
-      "fazendo muito trampo juntos",
-      "fazendo muito trampo agora"
+      "esse é o numero que uso aqui pros trampo",
+      "esse meu número é o que uso aqui nos trampos",
+      "to usando esse número aqui pros trampo"
     ],
     "g3": [
-      "vou te mandando tudo o que você tem que fazer",
-      "vou te mandando tudo que você tem que fazer",
-      "vou te mandando tudo o que precisa fazer",
-      "vou te mandando tudo que precisa fazer",
-      "vou te mandando o que você tem que fazer",
-      "vou te mandando o que precisa fazer",
-      "vou te mandando o que você precisa fazer",
-      "vou te mandando o que você tem que fazer",
-      "vou ir te mandando tudo o que você tem que fazer",
-      "vou ir te mandando tudo que você tem que fazer",
-      "vou ir te mandando tudo o que precisa fazer",
-      "vou ir te mandando tudo que precisa fazer",
-      "vou ir te mandando o que você tem que fazer",
-      "vou ir te mandando o que precisa fazer",
-      "vou ir te mandando o que você precisa fazer",
-      "vou ir te mandando o que você tem que fazer",
-      "vou te falar tudo o que você tem que fazer",
-      "vou te falar tudo que você tem que fazer",
-      "vou te falar tudo o que precisa fazer",
-      "vou te falar tudo que precisa fazer",
-      "vou te falar o que você tem que fazer"
+      "pode salvar como \"Ryan\"",
+      "deixa salvo aí como \"Ryan\"",
+      "salva como \"Ryan\""
+    ]
+  },
+  "msg2": {
+    "g1": [
+      "Vou fazer esse trampo com vc e mais outros 2 que me chamaram agora",
+      "Vou fazer esse trampo com você e mais 2 que me chamaram agora",
+      "Vou fazer esse trampo com vc e mais dois que me chamaram agora"
+    ]
+  },
+  "msg3": {
+    "g1": [
+      "Então pra me ajudar vai respondendo só o que eu perguntar e vai fazendo só o que eu pedir,",
+      "Então pra me ajudar responde só o que eu perguntar e faz só o que eu pedir,",
+      "Então pra me ajudar responde só o que eu perguntar e vai fazendo só o que eu pedir,"
     ],
-    "g4": [
-      "e você só responde o que eu te perguntar",
-      "e você só responde o que eu perguntar",
-      "e você só responde o que eu te pedir",
-      "e você só responde o que eu pedir",
-      "e você só responde o que eu for perguntar",
-      "e você só responde o que eu for pedir",
-      "e você só responde o que eu te perguntar",
-      "e você responde só o que eu te perguntar",
-      "e você responde só o que eu perguntar",
-      "e você responde só o que eu te pedir",
-      "e você responde só o que eu pedir",
-      "e você responde só o que eu for perguntar",
-      "e você responde só o que eu for pedir",
-      "e você só fala o que eu te perguntar",
-      "e você só me fala o que eu perguntar",
-      "e você só fala o que eu te pedir",
-      "e você só me fala o que eu pedir",
-      "e você só fala o que eu for perguntar",
-      "e você só me fala o que eu for perguntar",
-      "e você só fala o que eu for pedir",
-      "e você só me fala o que eu for pedir"
-    ],
-    "g5": [
+    "g2": [
       "beleza?",
-      "blz?",
-      "tranquilo?",
-      "demoro?",
-      "dmr?",
-      "certo?",
       "pode ser?",
-      "entendeu?",
-      "tlgd?"
+      "certo?"
     ]
   }
 }
