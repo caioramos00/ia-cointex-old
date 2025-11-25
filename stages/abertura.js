@@ -1,13 +1,27 @@
 const path = require('path');
 const fs = require('fs');
-const { delay, delayRange, tsNow, chooseUnique, FIRST_REPLY_DELAY_MS, BETWEEN_MIN_MS, BETWEEN_MAX_MS } = require('../utils.js');
-const { preflightOptOut, enterStageOptOutResetIfNeeded, finalizeOptOutBatchAtEnd } = require('../optout.js');
+const {
+    delay,
+    delayRange,
+    tsNow,
+    chooseUnique,
+    FIRST_REPLY_DELAY_MS,
+    BETWEEN_MIN_MS,
+    BETWEEN_MAX_MS
+} = require('../utils.js');
+const {
+    preflightOptOut,
+    enterStageOptOutResetIfNeeded,
+    finalizeOptOutBatchAtEnd
+} = require('../optout.js');
 const { sendMessage } = require('../senders.js');
 
 async function handleAberturaSend(st) {
     enterStageOptOutResetIfNeeded(st);
+
     const aberturaPath = path.join(__dirname, '../content', 'abertura.json');
     let aberturaData = null;
+
     const loadAbertura = () => {
         if (aberturaData) return aberturaData;
         let raw = fs.readFileSync(aberturaPath, 'utf8');
@@ -15,25 +29,51 @@ async function handleAberturaSend(st) {
         aberturaData = JSON.parse(raw);
         return aberturaData;
     };
-    const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
+
+    const pick = (arr) =>
+        Array.isArray(arr) && arr.length
+            ? arr[Math.floor(Math.random() * arr.length)]
+            : '';
+
+    // msg1: usa msg1.grupo1 / msg1.grupo2
     const composeAberturaMsg1 = () => {
         const c = loadAbertura();
         const g1 = pick(c?.msg1?.grupo1);
         const g2 = pick(c?.msg1?.grupo2);
-        const g3 = pick(c?.msg1?.grupo3);
-        return [g1, g2, g3].filter(Boolean).join(', ');
+        return [g1, g2].filter(Boolean).join(' ');
     };
+
+    // msg2: usa msg2.grupo1 / msg2.grupo2
     const composeAberturaMsg2 = () => {
         const c = loadAbertura();
         const g1 = pick(c?.msg2?.grupo1);
         const g2 = pick(c?.msg2?.grupo2);
-        const g3 = pick(c?.msg2?.grupo3);
-        const head = [g1, g2].filter(Boolean).join(' ');
-        return [head, g3].filter(Boolean).join(', ');
+        return [g1, g2].filter(Boolean).join(' ');
     };
+
+    // msg3: usa msg3.grupo1 / msg3.grupo2 (se existir)
+    const composeAberturaMsg3 = () => {
+        const c = loadAbertura();
+        const g1 = pick(c?.msg3?.grupo1);
+        const g2 = pick(c?.msg3?.grupo2);
+        return [g1, g2].filter(Boolean).join(' ');
+    };
+
+    // msg4: usa msg4.grupo1 / msg4.grupo2
+    const composeAberturaMsg4 = () => {
+        const c = loadAbertura();
+        const g1 = pick(c?.msg4?.grupo1);
+        const g2 = pick(c?.msg4?.grupo2);
+        return [g1, g2].filter(Boolean).join(' ');
+    };
+
     const m1 = chooseUnique(composeAberturaMsg1, st) || composeAberturaMsg1();
     const m2 = chooseUnique(composeAberturaMsg2, st) || composeAberturaMsg2();
-    const msgs = [m1, m2];
+    const m3 = chooseUnique(composeAberturaMsg3, st) || composeAberturaMsg3();
+    const m4 = chooseUnique(composeAberturaMsg4, st) || composeAberturaMsg4();
+
+    const msgs = [m1, m2, m3, m4];
+
     let cur = Number(st.stageCursor?.[st.etapa] || 0);
     for (let i = cur; i < msgs.length; i++) {
         if (await preflightOptOut(st)) {
@@ -57,18 +97,24 @@ async function handleAberturaSend(st) {
             return { ok: true, interrupted: 'optout-mid-batch' };
         }
     }
+
     if ((st.stageCursor[st.etapa] || 0) >= msgs.length) {
-        if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-post-batch' };
+        if (await preflightOptOut(st)) {
+            return { ok: true, interrupted: 'optout-post-batch' };
+        }
         st.stageCursor[st.etapa] = 0;
         st.mensagensPendentes = [];
         st.mensagensDesdeSolicitacao = [];
         st.lastClassifiedIdx.interesse = 0;
         const _prev = st.etapa;
-        if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-batch-end' };
+        if (await finalizeOptOutBatchAtEnd(st)) {
+            return { ok: true, interrupted: 'optout-batch-end' };
+        }
         st.etapa = 'abertura:wait';
         console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
         return { ok: true };
     }
+
     return { ok: true, partial: true };
 }
 
@@ -76,13 +122,17 @@ async function handleAberturaWait(st) {
     if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
     if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
     if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
+
     const _prev = st.etapa;
     st.etapa = 'interesse:send';
     console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
+
     st.mensagensPendentes = [];
     st.mensagensDesdeSolicitacao = [];
+
     const bot = require('../bot.js');
     process.nextTick(() => bot.processarMensagensPendentes(st.contato));
+
     return { ok: true, transitioned: true };
 }
 
