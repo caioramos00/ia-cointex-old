@@ -6,39 +6,31 @@
       "N esquece de salvar meu contato aí,"
     ],
     "grupo2": [
-      "salva ai que se aparecer outro trampo mais tarde eu te chamo tambem",
-      "salva aí que se aparecer outro trampo amanhã eu te chamo também",
+      "salva pq se aparecer outro trampo mais tarde eu te chamo tambem",
+      "salva pq se aparecer outro trampo amanhã eu te chamo também",
       "salva porque se aparecer outro trampo depois eu te chamo tambem"
-    ],
-    "grupo3": [
-      "vou te mandar o passo a passo do que precisa pra fazer certinho",
-      "vou te mandar o passo a passo do que precisa pra fazer direitinho",
-      "vou te mandar o passo a passo do que precisa fazer certinho"
+    ]
+  },
+  "msg2": {
+    "grupo1": [
+      "O trampo é bem simples",
+      "O trampo é simples",
+      "O trampo é bem tranquilo"
     ]
   },
   "pontos": {
     "p1": {
       "g1": [
-        "você precisa de uma conta com pix ativo pra receber",
-        "você precisa ter uma conta com pix ativo pra receber",
-        "vc precisa de uma conta com pix ativo pra receber",
-        "vc precisa ter uma conta com pix ativo pra receber",
-        "você vai precisar de uma conta com pix ativo pra receber",
-        "você precisa de uma conta com pix pra receber",
-        "você precisa ter uma conta com pix pra receber",
-        "vc precisa de uma conta com pix pra receber",
-        "vc precisa ter uma conta com pix pra receber",
-        "você vai precisar de uma conta com pix pra receber",
-        "você precisa de uma conta bancária com pix ativo pra receber",
-        "você precisa ter uma conta bancária com pix ativo pra receber",
-        "vc precisa de uma conta bancária com pix ativo pra receber",
-        "vc precisa ter uma conta bancária com pix ativo pra receber",
-        "você vai precisar de uma conta bancária com pix ativo pra receber",
-        "você precisa de uma conta bancária com pix pra receber",
-        "você precisa ter uma conta bancária com pix pra receber",
-        "vc precisa de uma conta bancária com pix pra receber",
-        "vc precisa ter uma conta bancária com pix pra receber",
-        "você vai precisar de uma conta bancária com pix pra receber"
+        "você precisa de uma conta pra receber o dinheiro",
+        "você precisa ter uma conta pra receber o dinheiro",
+        "vc precisa de uma conta pra receber o dinheiro",
+        "vc precisa ter uma conta pra receber o dinheiro",
+        "você vai precisar de uma conta pra receber o dinheiro",
+        "você precisa de uma conta bancária pra receber o dinheiro",
+        "você precisa ter uma conta bancária pra receber o dinheiro",
+        "vc precisa de uma conta bancária pra receber o dinheiro",
+        "vc precisa ter uma conta bancária pra receber o dinheiro",
+        "você vai precisar de uma conta bancária pra receber o dinheiro"
       ],
       "g2": [
         "pode ser qualquer banco",
@@ -130,22 +122,27 @@
     },
     "p3": {
       "g1": [
-        "vou passar o email e a senha de uma conta pra você acessar",
-        "vou passar o e-mail e a senha de uma conta pra você acessar",
-        "vou passar o email e a senha de uma conta pra vc acessar",
-        "vou passar o e-mail e a senha de uma conta pra vc acessar",
-        "vou te passar o email e a senha de uma conta pra você acessar",
-        "vou te passar o e-mail e a senha de uma conta pra você acessar",
-        "vou te passar o email e a senha de uma conta pra vc acessar",
-        "vou te passar o e-mail e a senha de uma conta pra vc acessar",
-        "vou passar o email e a senha de uma conta pra você entrar",
-        "vou passar o e-mail e a senha de uma conta pra você entrar",
-        "vou passar o email e a senha de uma conta pra vc entrar",
-        "vou passar o e-mail e a senha de uma conta pra vc entrar",
-        "vou te passar o email e a senha de uma conta pra você entrar",
-        "vou te passar o e-mail e a senha de uma conta pra você entrar"
+        "Esse nosso esquema tá rolando numas conta gringa q a gente tá conseguindo acessar",
+        "Nosso esquema tá rolando em umas conta gringa q a gente tá conseguindo acessar",
+        "Esse esquema tá rolando numas conta internacional q a gente tá conseguindo acessar"
       ],
       "g2": [
+        "vou passar o email e a senha de uma conta dessas pra você acessar",
+        "vou passar o e-mail e a senha de uma conta dessas pra você acessar",
+        "vou passar o email e a senha de uma conta dessas pra vc acessar",
+        "vou passar o e-mail e a senha de uma conta dessas pra vc acessar",
+        "vou te passar o email e a senha de uma conta dessas pra você acessar",
+        "vou te passar o e-mail e a senha de uma conta dessas pra você acessar",
+        "vou te passar o email e a senha de uma conta dessas pra vc acessar",
+        "vou te passar o e-mail e a senha de uma conta dessas pra vc acessar",
+        "vou passar o email e a senha de uma conta dessas pra você entrar",
+        "vou passar o e-mail e a senha de uma conta dessas pra você entrar",
+        "vou passar o email e a senha de uma conta dessas pra vc entrar",
+        "vou passar o e-mail e a senha de uma conta dessas pra vc entrar",
+        "vou te passar o email e a senha de uma conta dessas pra você entrar",
+        "vou te passar o e-mail e a senha de uma conta dessas pra você entrar"
+      ],
+      "g3": [
         "lá vai ter um saldo disponível",
         "lá vai ter um saldo disponivel",
         "vai ter um saldo disponível lá",
@@ -167,7 +164,7 @@
         "lá vai ter um saldo disponível pra saque",
         "lá vai ter um saldo disponivel pra saque"
       ],
-      "g3": [
+      "g4": [
         "é só você transferir pra sua conta, mais nada",
         "é só vc transferir pra sua conta, mais nada",
         "é só você transferir pra sua conta bancária, mais nada",
@@ -195,88 +192,31 @@
         "sua parte vai ser 2000",
         "você vai receber 2000",
         "sua parte é 2000",
-        "você recebe 2000",
-        "sua parte vai ser 2 mil",
         "sua parte vai ser 2000",
-        "você vai receber 2 mil",
-        "sua parte é 2 mil",
-        "você recebe 2 mil",
-        "sua parte vai ser dois mil",
-        "você vai receber dois mil",
-        "sua parte é dois mil",
-        "você recebe dois mil",
         "vc vai receber 2000 pelo trampo",
-        "vc vai receber 2 mil pelo trampo",
-        "vc vai receber dois mil pelo trampo",
-        "sua parte vai ser 2000 pelo trampo",
-        "sua parte vai ser 2 mil pelo trampo",
-        "sua parte vai ser dois mil pelo trampo",
         "você vai receber 2000 pelo trampo",
-        "você vai receber 2000 nesse trampo",
-        "você vai receber 2 mil pelo trampo",
-        "você vai receber 2 mil nesse trampo",
-        "você vai receber dois mil pelo trampo",
-        "você vai receber dois mil nesse trampo"
+        "você vai receber 2000 nesse trampo"
       ],
       "g2": [
-        "o restante manda pra minha conta logo que cair",
-        "o restante você manda pra minha conta logo que cair",
-        "o restante vc manda pra minha conta logo que cair",
-        "o restante manda pra minha conta assim que cair",
-        "o restante você manda pra minha conta assim que cair",
-        "o restante vc manda pra minha conta assim que cair",
-        "o restante manda pra minha conta quando cair",
-        "o restante você manda pra minha conta quando cair",
-        "o restante vc manda pra minha conta quando cair",
-        "o resto você manda pra minha conta logo que cair",
-        "o resto vc manda pra minha conta logo que cair",
-        "o resto você manda pra minha conta assim que cair",
-        "o resto vc manda pra minha conta assim que cair",
-        "o resto você manda pra minha conta quando cair",
-        "o resto vc manda pra minha conta quando cair",
-        "o resto manda pra minha conta logo que cair",
-        "o que sobrar você manda pra minha conta logo que cair",
-        "o que sobrar vc manda pra minha conta logo que cair",
-        "o que sobrar você manda pra minha conta assim que cair",
-        "o que sobrar vc manda pra minha conta assim que cair",
-        "o que sobrar você manda pra minha conta quando cair",
-        "o que sobrar vc manda pra minha conta quando cair"
+        "Quando cair vc tira sua parte e me manda o resto em uma outra conta que vou te passar depois",
+        "Assim que cair vc tira sua parte e me manda o resto em uma outra conta que vou te passar depois",
+        "Quando cair você tira sua parte e me manda o resto em uma outra conta que vou te passar depois"
       ],
       "g3": [
-        "eu vou te passar a chave pix depois",
-        "depois eu te passo a chave pix",
-        "a chave pix eu te passo depois",
-        "eu te passo a chave pix depois",
-        "depois eu passo a chave pix",
-        "a chave pix eu passo depois",
-        "depois eu te passo a chave pix",
-        "depois eu passo a chave pix",
-        "eu vou te passar a chave pix mais tarde",
-        "mais tarde eu te passo a chave pix",
-        "a chave pix eu te passo mais tarde",
-        "eu te passo a chave pix mais tarde",
-        "mais tarde eu passo a chave pix",
-        "a chave pix eu passo mais tarde",
-        "mais tarde eu te passo a chave pix",
-        "mais tarde eu passo a chave pix"
+        "mas se eu pegar confiança depois te passo outras contas e aumento sua parte",
+        "mas se vc for confiável depois te passo outras contas e aumento sua parte",
+        "mas se vc fizer certinho e for confiável depois te passo outras contas e aumento sua parte"
       ]
     }
   },
   "msg3": {
     "grupo1": [
-      "é tranquilinho",
-      "é tranquilo",
-      "é bem tranquilo",
-      "é muito tranquilo",
-      "é mt tranquilo",
       "não tem segredo",
       "nao tem segredo",
-      "é sem segredo",
       "não tem erro",
       "nao tem erro",
       "é sem erro",
       "é suave",
-      "é isso",
       "é só isso",
       "é só isso mesmo",
       "é só isso aí",
