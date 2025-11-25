@@ -39,6 +39,7 @@ async function handleInstrucoesSend(st) {
     };
 
     // MSG 2: pontos p1–p4, agora considerando g1..g4
+    // AGORA retorna um array de mensagens, um bullet por mensagem
     const composeMsg2 = () => {
         const c = loadInstrucoes();
 
@@ -70,22 +71,14 @@ async function handleInstrucoesSend(st) {
             pick(c?.pontos?.p4?.g4)
         ].filter(Boolean).join(', ');
 
-        let out = [
-            p1 && `• ${p1}`,
-            '',
-            p2 && `• ${p2}`,
-            '',
-            p3 && `• ${p3}`,
-            '',
-            p4 && `• ${p4}`
-        ].filter(v => v !== undefined).join('\n');
+        const bullets = [];
 
-        out = out
-            .replace(/\r\n/g, '\n')
-            .replace(/\n{3,}/g, '\n\n')
-            .trim();
+        if (p1) bullets.push(`• ${p1}`);
+        if (p2) bullets.push(`• ${p2}`);
+        if (p3) bullets.push(`• ${p3}`);
+        if (p4) bullets.push(`• ${p4}`);
 
-        return out;
+        return bullets;
     };
 
     // MSG 3: continua igual, usando msg3.grupo1 / msg3.grupo2
@@ -100,9 +93,11 @@ async function handleInstrucoesSend(st) {
     };
 
     const m1 = composeMsg1();
-    const m2 = composeMsg2();
+    const bullets = composeMsg2(); // array de strings, um bullet por mensagem
     const m3 = composeMsg3();
-    const msgs = [m1, m2, m3];
+
+    // ordem: introdução, cada bullet, fechamento
+    const msgs = [m1, ...bullets, m3];
 
     let cur = Number(st.stageCursor?.[st.etapa] || 0);
 
@@ -113,14 +108,16 @@ async function handleInstrucoesSend(st) {
 
         if (!msgs[i]) continue;
 
+        // delays entre mensagens
         if (i === 0) {
+            // antes da primeira mensagem (intro)
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-        }
-        if (i === 1) {
+        } else if (i === 1) {
+            // antes do primeiro bullet (mantém o gap maior que você já tinha)
             await delayRange(20000, 30000);
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-        }
-        if (i === 2) {
+        } else {
+            // demais mensagens (bullets seguintes + fechamento)
             await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
         }
 
@@ -131,6 +128,7 @@ async function handleInstrucoesSend(st) {
             return { ok: true, interrupted: 'optout-mid-batch' };
         }
 
+        if (!st.stageCursor) st.stageCursor = {};
         st.stageCursor[st.etapa] = i + 1;
     }
 
