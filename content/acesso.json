@@ -38,13 +38,10 @@
     "bloco2C": [
       "entra na conta mas nao mexe em nada ainda",
       "entra na conta mas nao clica em nada ainda",
-      "entra na conta mas nao aperta em nada ainda",
       "entra aí na conta mas nao mexe em nada ainda",
       "entra aí na conta mas nao clica em nada ainda",
-      "entra aí na conta mas nao aperta em nada ainda",
       "entra aí mas nao mexe em nada ainda",
       "entra aí mas nao clica em nada ainda",
-      "entra aí mas nao aperta em nada ainda",
       "entra aí na conta mas não muda nada ainda"
     ],
     "bloco3C": [
@@ -53,13 +50,11 @@
       "assim que conseguir acessar a conta me manda um \"ENTREI\"",
       "assim que acessar a conta me manda um \"ENTREI\"",
       "assim que entrar na conta me manda um \"ENTREI\"",
-      "assim que logar na conta me manda um \"ENTREI\"",
       "assim q conseguir acessar me manda um \"ENTREI\"",
       "assim q acessar me manda um \"ENTREI\"",
       "assim q conseguir acessar a conta me manda um \"ENTREI\"",
       "assim q acessar a conta me manda um \"ENTREI\"",
-      "assim q entrar na conta me manda um \"ENTREI\"",
-      "assim q logar na conta me manda um \"ENTREI\""
+      "assim q entrar na conta me manda um \"ENTREI\""
     ]
   }
 }
