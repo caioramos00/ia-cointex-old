@@ -145,6 +145,10 @@ function setupRoutes(
 
   app.use(sseRouter);
 
+  app.get('/', (req, res) =>
+    res.sendFile(pathModule.join(__dirname, 'public', 'login.html'))
+  );
+
   app.get('/login', (req, res) =>
     res.sendFile(pathModule.join(__dirname, 'public', 'login.html'))
   );
