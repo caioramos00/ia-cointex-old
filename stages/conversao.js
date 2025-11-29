@@ -83,7 +83,8 @@ async function handleConversaoSend(st) {
         }
 
         st.conversaoBatch = 1;
-        st.conversaoAwaitMsg = true;
+        // não queremos mais aguardar resposta do usuário
+        st.conversaoAwaitMsg = false;
         st.mensagensPendentes = [];
         st.mensagensDesdeSolicitacao = [];
         if (!st.lastClassifiedIdx) st.lastClassifiedIdx = {};
@@ -153,7 +154,8 @@ async function handleConversaoSend(st) {
         }
 
         st.conversaoBatch = 2;
-        st.conversaoAwaitMsg = true;
+        // não queremos mais aguardar resposta do usuário
+        st.conversaoAwaitMsg = false;
         return { ok: true, batch: 2 };
     }
 
@@ -180,7 +182,7 @@ async function handleConversaoSend(st) {
             pick(conversao?.msg8?.msg8b3),
         ].filter(Boolean).join('. ');
 
-        // m9 (4 mensagens, disparadas depois de 15 minutos)
+        // m9 / m10 (4 mensagens, disparadas depois de 9–11 minutos)
         const m9_1 = [
             pick(conversao?.msg9?.msg9b1),
             pick(conversao?.msg9?.msg9b2),
@@ -218,7 +220,7 @@ async function handleConversaoSend(st) {
             if (!r?.ok) return { ok: false, reason: 'send-aborted' };
         }
 
-        // Fecha batch 2 e entra em modo de espera
+        // Fecha batch 2 e entra em modo de espera automática (sem depender do usuário)
         st.conversaoBatch = 3;
         st.conversaoAwaitMsg = false;
         st.mensagensPendentes = [];
@@ -232,14 +234,37 @@ async function handleConversaoSend(st) {
         console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
 
         // --------------------------------------
-        // PAUSA REAL DE 15 MINUTOS → bloco m9
+        // PAUSA 9–11 MIN APÓS msg8 → bloco m9–m12
         // --------------------------------------
-        const delayMsg9Ms = 15 * 60 * 1000; // 15 minutos exatos
+        const delayMsg9Ms = Math.floor(9 + Math.random() * 3) * 60 * 1000; // 9–11 minutos
+
         setTimeout(async () => {
             if (await preflightOptOut(st)) return;
 
+            // m9 / m10 (já montadas acima)
             const msgsM9 = [m9_1, m9_2, m9_3, m9_4].filter(Boolean);
-            for (const msg of msgsM9) {
+
+            // m11
+            const m11 = [
+                pick(conversao?.msg11?.msg11b1),
+                pick(conversao?.msg11?.msg11b2),
+            ].filter(Boolean).join(', ') + '\n\n' +
+                [
+                    pick(conversao?.msg11?.msg11b3),
+                    pick(conversao?.msg11?.msg11b4),
+                ].filter(Boolean).join(', ');
+
+            // m12
+            const m12 = [
+                pick(conversao?.msg12?.msg12b1),
+                pick(conversao?.msg12?.msg12b2),
+                pick(conversao?.msg12?.msg12b3),
+                pick(conversao?.msg12?.msg12b4),
+            ].filter(Boolean).join(', ');
+
+            const msgsAteM12 = [...msgsM9, m11, m12].filter(Boolean);
+
+            for (const msg of msgsAteM12) {
                 if (await preflightOptOut(st)) return;
                 await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                 await sendMessage(st.contato, msg);
@@ -248,77 +273,44 @@ async function handleConversaoSend(st) {
             if (await preflightOptOut(st)) return;
 
             // --------------------------------------
-            // Bloco tardio (m11, m12, m13) APÓS m9
+            // PAUSA 14–16 MIN APÓS msg12 → m13 em diante
             // --------------------------------------
-            const delayPosMsg9Ms = Math.floor(12 + Math.random() * 4) * 60 * 1000; // 12–16 min
+            const delayDepoisM12Ms = Math.floor(14 + Math.random() * 3) * 60 * 1000; // 14–16 minutos
+
             setTimeout(async () => {
                 if (await preflightOptOut(st)) return;
-
-                const m11 = [
-                    pick(conversao?.msg11?.msg11b1),
-                    pick(conversao?.msg11?.msg11b2),
-                ].filter(Boolean).join(', ') + '\n\n' +
-                    [
-                        pick(conversao?.msg11?.msg11b3),
-                        pick(conversao?.msg11?.msg11b4),
-                    ].filter(Boolean).join(', ');
-
-                const m12 = [
-                    pick(conversao?.msg12?.msg12b1),
-                    pick(conversao?.msg12?.msg12b2),
-                    pick(conversao?.msg12?.msg12b3),
-                    pick(conversao?.msg12?.msg12b4),
-                ].filter(Boolean).join(', ');
 
                 const m13 = [
                     pick(conversao?.msg13?.msg13b1),
                     pick(conversao?.msg13?.msg13b2),
                 ].filter(Boolean).join(', ');
 
-                const novasMsgs = [m11, m12, m13].filter(Boolean);
+                const m14 = [
+                    pick(conversao?.msg14?.msg14b1),
+                    pick(conversao?.msg14?.msg14b2),
+                    pick(conversao?.msg14?.msg14b3),
+                ].filter(Boolean).join(', ');
 
-                for (const msg of novasMsgs) {
+                const m15 = [
+                    pick(conversao?.msg15?.msg15b1),
+                    pick(conversao?.msg15?.msg15b2),
+                    pick(conversao?.msg15?.msg15b3),
+                ].filter(Boolean).join(', ');
+
+                const m16 = [
+                    pick(conversao?.msg16?.msg16b1),
+                    pick(conversao?.msg16?.msg16b2),
+                    pick(conversao?.msg16?.msg16b3),
+                ].filter(Boolean).join(', ') + '?';
+
+                const ultimasMsgs = [m13, m14, m15, m16].filter(Boolean);
+
+                for (const msg of ultimasMsgs) {
                     if (await preflightOptOut(st)) break;
                     await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
                     await sendMessage(st.contato, msg);
                 }
-
-                if (await preflightOptOut(st)) return;
-
-                // --------------------------------------
-                // Último bloco (m14, m15, m16)
-                // --------------------------------------
-                const delayUltimoBlocoMs = Math.floor(15 + Math.random() * 6) * 60 * 1000; // 15–21 min
-                setTimeout(async () => {
-                    if (await preflightOptOut(st)) return;
-
-                    const m14 = [
-                        pick(conversao?.msg14?.msg14b1),
-                        pick(conversao?.msg14?.msg14b2),
-                        pick(conversao?.msg14?.msg14b3),
-                    ].filter(Boolean).join(', ');
-
-                    const m15 = [
-                        pick(conversao?.msg15?.msg15b1),
-                        pick(conversao?.msg15?.msg15b2),
-                        pick(conversao?.msg15?.msg15b3),
-                    ].filter(Boolean).join(', ');
-
-                    const m16 = [
-                        pick(conversao?.msg16?.msg16b1),
-                        pick(conversao?.msg16?.msg16b2),
-                        pick(conversao?.msg16?.msg16b3),
-                    ].filter(Boolean).join(', ') + '?';
-
-                    const ultimasMsgs = [m14, m15, m16].filter(Boolean);
-
-                    for (const msg of ultimasMsgs) {
-                        if (await preflightOptOut(st)) break;
-                        await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-                        await sendMessage(st.contato, msg);
-                    }
-                }, delayUltimoBlocoMs);
-            }, delayPosMsg9Ms);
+            }, delayDepoisM12Ms);
         }, delayMsg9Ms);
 
         return { ok: true, batch: 3, done: true };
