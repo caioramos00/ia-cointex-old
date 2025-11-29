@@ -20,6 +20,7 @@ const {
 
 
 const LANDING_URL = 'https://tramposlara.com';
+const STAPE_WEBHOOK_URL = 'https://ss.tramposlara.com/whatsapp-contact';
 
 // idempotência local por execução
 const sentContactByWa = new Set();
@@ -551,7 +552,6 @@ function setupRoutes(
             }
 
             if (is_ctwa) {
-              // gate: só envia /api/capi/contact depois do intake confirmado
               const ok = await ensureCtwaIntakeConfirmed(clid, body, contactToken);
               if (!ok) {
                 console.warn(`[CTWA][GATE] Bloqueado envio de Contact (clid=${clid}) — intake ainda não confirmado.`);
@@ -559,28 +559,39 @@ function setupRoutes(
                 const shouldSendCtwaContact = wa_id && !sentContactByWa.has(wa_id);
                 if (shouldSendCtwaContact) {
                   const contactPayload = {
+                    event_name: 'whatsapp_contact',
+                    event_source: 'whatsapp',
+                    event_time: Number(msg.timestamp) || Math.floor(Date.now() / 1000),
+
+                    event_id: clid || wa_id,
+
                     wa_id,
-                    event_time: Number(msg.timestamp) || undefined
+                    phone: contato,
+                    ctwa_clid: clid,
+                    click_type,
                   };
 
                   console.log(
-                    `[CAPI][TX][CTWA] url=${LANDING_URL}/api/capi/contact token=${contactToken ? 'present' : 'missing'} ` +
+                    `[STAPE][TX][CTWA] url=${STAPE_WEBHOOK_URL} ` +
                     `payload=${truncate(JSON.stringify(contactPayload), 500)}`
                   );
 
                   try {
-                    const resp = await axios.post(`${LANDING_URL}/api/capi/contact`, contactPayload, {
-                      headers: { 'Content-Type': 'application/json', 'X-Contact-Token': contactToken },
+                    const resp = await axios.post(STAPE_WEBHOOK_URL, contactPayload, {
+                      headers: { 'Content-Type': 'application/json' },
                       validateStatus: () => true,
+                      timeout: 1000,
                     });
-                    const reqId = resp?.headers?.['x-request-id'] || resp?.headers?.['X-Request-Id'] || '';
-                    console.log(`[CAPI][RX][CTWA] http=${resp.status} req=${reqId} body=${truncate(JSON.stringify(resp.data), 1000)}`);
 
-                    const ok2 = resp.status >= 200 && resp.status < 300 && resp?.data?.ok !== false;
+                    console.log(
+                      `[STAPE][RX][CTWA] http=${resp.status} body=${truncate(JSON.stringify(resp.data), 1000)}`
+                    );
+
+                    const ok2 = resp.status >= 200 && resp.status < 300;
                     if (ok2) sentContactByWa.add(wa_id);
-                    else console.warn(`[CAPI][FAIL][CTWA] http=${resp.status} req=${reqId}`);
+                    else console.warn(`[STAPE][FAIL][CTWA] http=${resp.status}`);
                   } catch (e) {
-                    console.warn(`[CAPI][ERR][CTWA] ${e?.message || e}`);
+                    console.warn(`[STAPE][ERR][CTWA] ${e?.message || e}`);
                   }
                 }
               }
