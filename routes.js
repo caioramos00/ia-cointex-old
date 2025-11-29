@@ -21,6 +21,7 @@ const {
 
 const LANDING_URL = 'https://tramposlara.com';
 const SERVER_GTM_CONTACT_URL = 'https://ss.tramposlara.com/capi/contact-bot';
+const BOT_CONTACT_SECRET = 'SENHASECRETA'
 
 async function sendContactEventToServerGtm({ wa_id, tid, click_type, is_ctwa, event_time }) {
   if (!SERVER_GTM_CONTACT_URL) {
@@ -47,11 +48,15 @@ async function sendContactEventToServerGtm({ wa_id, tid, click_type, is_ctwa, ev
   );
 
   try {
-    const resp = await axios.post(SERVER_GTM_CONTACT_URL, payload, {
-      headers: { 'Content-Type': 'application/json' },
-      timeout: 10000,
-      validateStatus: () => true,
-    });
+    const resp = await axios.post(SERVER_GTM_CONTACT_URL, payload,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-bot-secret': BOT_CONTACT_SECRET,
+        },
+        timeout: 10000,
+        validateStatus: () => true,
+      });
     console.log(
       `[CAPI][BOT][RX] http=${resp.status} body=${truncate(
         JSON.stringify(resp.data || {}),
