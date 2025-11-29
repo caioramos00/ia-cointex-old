@@ -20,7 +20,48 @@ const {
 
 
 const LANDING_URL = 'https://tramposlara.com';
-const STAPE_WEBHOOK_URL = 'https://ss.tramposlara.com/whatsapp-contact';
+const SERVER_GTM_CONTACT_URL = 'https://ss.tramposlara.com/capi/contact-bot';
+
+async function sendContactEventToServerGtm({ wa_id, tid, click_type, is_ctwa, event_time }) {
+  if (!SERVER_GTM_CONTACT_URL) {
+    console.warn('[CAPI][BOT][SKIP] SERVER_GTM_CONTACT_URL não configurada');
+    return;
+  }
+  if (!wa_id) return;
+
+  const payload = {
+    event_name: 'contact_bot',
+    event_time: event_time || Math.floor(Date.now() / 1000),
+    wa_id,
+    tid: tid || '',
+    click_type: click_type || (is_ctwa ? 'CTWA' : 'Orgânico'),
+    is_ctwa: !!is_ctwa,
+    source: 'whatsapp_bot',
+  };
+
+  console.log(
+    `[CAPI][BOT][TX] url=${SERVER_GTM_CONTACT_URL} payload=${truncate(
+      JSON.stringify(payload),
+      500
+    )}`
+  );
+
+  try {
+    const resp = await axios.post(SERVER_GTM_CONTACT_URL, payload, {
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 10000,
+      validateStatus: () => true,
+    });
+    console.log(
+      `[CAPI][BOT][RX] http=${resp.status} body=${truncate(
+        JSON.stringify(resp.data || {}),
+        800
+      )}`
+    );
+  } catch (e) {
+    console.warn(`[CAPI][BOT][ERR] ${e?.message || e}`);
+  }
+}
 
 // idempotência local por execução
 const sentContactByWa = new Set();
@@ -547,77 +588,49 @@ function setupRoutes(
             const wa_id = (value?.contacts && value.contacts[0]?.wa_id) || msg.from || '';
             const clid = is_ctwa ? (referral.ctwa_clid || '') : '';
 
-            if (is_ctwa && !clid) {
-              console.warn(`[CTWA][RX][WARN] referral.source_type=ad mas SEM ctwa_clid (from=${contato})`);
-            }
+            // ===== CONTACT VIA SERVER GTM (primeira mensagem por wa_id) =====
+            const isFirstContactForWa = wa_id && !sentContactByWa.has(wa_id);
 
-            if (is_ctwa) {
-              const ok = await ensureCtwaIntakeConfirmed(clid, body, contactToken);
-              if (!ok) {
-                console.warn(`[CTWA][GATE] Bloqueado envio de Contact (clid=${clid}) — intake ainda não confirmado.`);
-              } else {
-                const shouldSendCtwaContact = wa_id && !sentContactByWa.has(wa_id);
-                if (shouldSendCtwaContact) {
-                  const contactPayload = {
-                    event_name: 'whatsapp_contact',
-                    event_source: 'whatsapp',
-                    event_time: Number(msg.timestamp) || Math.floor(Date.now() / 1000),
+            if (isFirstContactForWa) {
+              const baseEventTime = Number(msg.timestamp) || Math.floor(Date.now() / 1000);
 
-                    event_id: clid || wa_id,
+              // Decide qual TID e click_type vamos mandar
+              let finalTid = tid || adminTid || '';
+              let finalClickType = click_type;
 
-                    wa_id,
-                    phone: contato,
-                    ctwa_clid: clid,
-                    click_type,
-                  };
-
-                  console.log(
-                    `[STAPE][TX][CTWA] url=${STAPE_WEBHOOK_URL} ` +
-                    `payload=${truncate(JSON.stringify(contactPayload), 500)}`
-                  );
-
-                  try {
-                    const resp = await axios.post(STAPE_WEBHOOK_URL, contactPayload, {
-                      headers: { 'Content-Type': 'application/json' },
-                      validateStatus: () => true,
-                      timeout: 1000,
-                    });
-
-                    console.log(
-                      `[STAPE][RX][CTWA] http=${resp.status} body=${truncate(JSON.stringify(resp.data), 1000)}`
-                    );
-
-                    const ok2 = resp.status >= 200 && resp.status < 300;
-                    if (ok2) sentContactByWa.add(wa_id);
-                    else console.warn(`[STAPE][FAIL][CTWA] http=${resp.status}`);
-                  } catch (e) {
-                    console.warn(`[STAPE][ERR][CTWA] ${e?.message || e}`);
-                  }
-                }
+              if (!finalTid && adminTid) {
+                // caso não seja CTWA mas o texto tenha TID vindo da LP
+                finalTid = adminTid;
+                finalClickType = 'Landing Page';
+              } else if (!finalTid) {
+                finalClickType = click_type || 'Orgânico';
               }
-            } else {
-              if (adminTid) {
-                const lpPayload = {
-                  tid: adminTid,
-                  event_time: Number(msg.timestamp) || undefined,
-                };
 
-                console.log(
-                  `[CAPI][TX][LP] url=${LANDING_URL}/api/capi/contact-lp token=${contactToken ? 'present' : 'missing'} ` +
-                  `payload=${truncate(JSON.stringify(lpPayload), 300)}`
-                );
-
-                try {
-                  const resp = await axios.post(`${LANDING_URL}/api/capi/contact-lp`, lpPayload, {
-                    headers: { 'Content-Type': 'application/json', 'X-Contact-Token': contactToken },
-                    validateStatus: () => true,
-                    timeout: 10000
+              if (is_ctwa) {
+                // mantém o gate de intake antes de considerar contato "válido"
+                const ok = await ensureCtwaIntakeConfirmed(clid, body, contactToken);
+                if (!ok) {
+                  console.warn(`[CTWA][GATE] Bloqueado envio de Contact (clid=${clid}) — intake ainda não confirmado.`);
+                } else {
+                  await sendContactEventToServerGtm({
+                    wa_id,
+                    tid: finalTid,
+                    click_type: finalClickType,
+                    is_ctwa: true,
+                    event_time: baseEventTime,
                   });
-                  const reqId = resp?.headers?.['x-request-id'] || resp?.headers?.['X-Request-Id'] || '';
-                  console.log(`[CAPI][RX][LP] http=${resp.status} req=${reqId} body=${truncate(JSON.stringify(resp.data), 800)}`);
-                } catch (e) {
-                  console.warn(`[CAPI][ERR][LP] ${e?.message || e}`);
+                  sentContactByWa.add(wa_id);
                 }
+              } else {
+                // Orgânico / LP / qualquer entrada sem CTWA
+                await sendContactEventToServerGtm({
+                  wa_id,
+                  tid: finalTid,
+                  click_type: finalClickType,
+                  is_ctwa: false,
+                  event_time: baseEventTime,
+                });
+                sentContactByWa.add(wa_id);
               }
             }
 
