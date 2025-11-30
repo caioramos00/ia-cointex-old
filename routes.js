@@ -39,7 +39,7 @@ async function sendContactEventToServerGtm({ wa_id, phone, tid, click_type, is_c
     click_type: click_type || (is_ctwa ? 'CTWA' : 'Orgânico'),
     is_ctwa: !!is_ctwa,
     source: 'whatsapp_bot',
-  };,
+  };
 
   console.log(
     `[CAPI][BOT][TX] url=${SERVER_GTM_CONTACT_URL} payload=${truncate(
