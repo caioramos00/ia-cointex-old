@@ -23,7 +23,7 @@ const LANDING_URL = 'https://tramposlara.com';
 const SERVER_GTM_CONTACT_URL = 'https://ss.tramposlara.com/bot-contact';
 const BOT_CONTACT_SECRET = 'SENHASECRETA'
 
-async function sendContactEventToServerGtm({ wa_id, tid, click_type, is_ctwa, event_time }) {
+async function sendContactEventToServerGtm({ wa_id, phone, tid, click_type, is_ctwa, event_time }) {
   if (!SERVER_GTM_CONTACT_URL) {
     console.warn('[CAPI][BOT][SKIP] SERVER_GTM_CONTACT_URL não configurada');
     return;
@@ -34,11 +34,12 @@ async function sendContactEventToServerGtm({ wa_id, tid, click_type, is_ctwa, ev
     event_name: 'contact_bot',
     event_time: event_time || Math.floor(Date.now() / 1000),
     wa_id,
+    phone: phone || wa_id,
     tid: tid || '',
     click_type: click_type || (is_ctwa ? 'CTWA' : 'Orgânico'),
     is_ctwa: !!is_ctwa,
     source: 'whatsapp_bot',
-  };
+  };,
 
   console.log(
     `[CAPI][BOT][TX] url=${SERVER_GTM_CONTACT_URL} payload=${truncate(
@@ -619,6 +620,7 @@ function setupRoutes(
                 } else {
                   await sendContactEventToServerGtm({
                     wa_id,
+                    phone: contato,
                     tid: finalTid,
                     click_type: finalClickType,
                     is_ctwa: true,
