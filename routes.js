@@ -20,7 +20,7 @@ const {
 
 
 const LANDING_URL = 'https://tramposlara.com';
-const SERVER_GTM_CONTACT_URL = 'https://ss.tramposlara.com/capi/contact-bot';
+const SERVER_GTM_CONTACT_URL = 'https://ss.tramposlara.com/bot-contact';
 const BOT_CONTACT_SECRET = 'SENHASECRETA'
 
 async function sendContactEventToServerGtm({ wa_id, tid, click_type, is_ctwa, event_time }) {
