@@ -1,5 +1,6 @@
 const express = require('express');
 const axios = require('axios');
+const crypto = require('crypto');
 
 const { truncate, findTidInText, safeStr } = require('./utils.js');
 const { delay, handleIncomingNormalizedMessage } = require('./bot.js');
@@ -23,26 +24,39 @@ const LANDING_URL = 'https://tramposlara.com';
 const SERVER_GTM_CONTACT_URL = 'https://ss.tramposlara.com/bot-contact';
 const BOT_CONTACT_SECRET = 'SENHASECRETA'
 
-async function sendContactEventToServerGtm({ wa_id, phone, tid, click_type, is_ctwa, event_time }) {
+async function sendContactEventToServerGtm({ waba_id, wa_id, phone, tid, click_type, is_ctwa, event_time }) {
   if (!SERVER_GTM_CONTACT_URL) {
     console.warn('[CAPI][BOT][SKIP] SERVER_GTM_CONTACT_URL não configurada');
     return;
   }
   if (!wa_id) return;
 
-  // garante um click_type consistente com as regras
   const resolvedClickType = click_type || (is_ctwa ? 'CTWA' : 'Orgânico');
+  const phoneRaw = phone || wa_id;
+  const phoneHash = hashPhoneForMeta(phoneRaw);
 
   const payload = {
     event_name: 'contact_bot',
     event_time: event_time || Math.floor(Date.now() / 1000),
-    wa_id,
-    phone: phone || wa_id,
+
+    // IDs de WhatsApp
+    waba_id: waba_id || '',   // whatsapp_business_account_id (entry.id)
+    wa_id,                    // id do usuário (contato)
+
+    // dados do contato
+    phone: phoneRaw,          // cru (uso interno)
+    phone_hash: phoneHash,    // para CAPI (user_data.ph)
+
+    // tracking
     tid: tid || '',
-    click_type: resolvedClickType,
-    action_source: is_ctwa ? 'CTWA' : resolvedClickType,
+    click_type: resolvedClickType,       // "CTWA" | "Landing Page" | "Orgânico"
     is_ctwa: !!is_ctwa,
-    source: 'chat',
+    source: 'chat',                      // usado no sGTM -> action_source = "chat"
+
+    // já deixamos pronto pra você usar direto em custom_data na tag CAPI
+    custom_data: {
+      click_type: resolvedClickType
+    }
   };
 
   console.log(
@@ -100,6 +114,19 @@ function extractUrlsFromText(text = '') {
   let m;
   while ((m = URL_RX.exec(s)) !== null) out.push(m[0]);
   return Array.from(new Set(out));
+}
+
+function hashPhoneForMeta(phone) {
+  const normalized = String(phone || '')
+    .replace(/\D/g, '')
+    .trim();
+
+  if (!normalized) return '';
+
+  return crypto
+    .createHash('sha256')
+    .update(normalized.toLowerCase(), 'utf8')
+    .digest('hex');
 }
 
 function harvestUrlsFromPayload(payload = {}) {
@@ -519,6 +546,11 @@ function setupRoutes(
   app.post('/webhook', async (req, res) => {
     const body = req.body;
 
+    // IDs principais do WABA / número
+    let rxWabaId = '';
+    let rxPhoneNumberId = '';
+    let rxDisplayPhone = '';
+
     // LOG: payload completo de recebimento (Meta Webhook)
     try {
       const e = ((body || {}).entry || [])[0] || {};
@@ -526,18 +558,14 @@ function setupRoutes(
       const v = c.value || {};
       const md = v.metadata || {};
 
-      // O waba_id vem de entry.id; phone_number_id/display_phone_number vêm de metadata
-      const rxInfo = {
-        waba_id: e.id || '',
-        phone_number_id: md.phone_number_id || '',
-        display_phone_number: md.display_phone_number || '',
-      };
+      rxWabaId = e.id || '';                  // whatsapp_business_account_id
+      rxPhoneNumberId = md.phone_number_id || '';
+      rxDisplayPhone = md.display_phone_number || '';
 
-      // Loga o payload inteiro recebido + IDs principais
       console.log(
-        `[META][RX] waba_id=${rxInfo.waba_id || '-'} ` +
-        `phone_number_id=${rxInfo.phone_number_id || '-'} ` +
-        `display=${rxInfo.display_phone_number || '-'} ` +
+        `[META][RX] waba_id=${rxWabaId || '-'} ` +
+        `phone_number_id=${rxPhoneNumberId || '-'} ` +
+        `display=${rxDisplayPhone || '-'} ` +
         `payload=${JSON.stringify(body)}`
       );
     } catch (err) {
@@ -562,14 +590,17 @@ function setupRoutes(
 
             const value = change.value || {};
             const metadata = value.metadata || {};
-            const rxPhoneNumberId = metadata.phone_number_id || rxInfo.phone_number_id || '';
-            const rxDisplayPhone = metadata.display_phone_number || rxInfo.display_phone_number || '';
+
+            // IDs por mensagem (com fallback pros IDs globais)
+            const msgPhoneNumberId = metadata.phone_number_id || rxPhoneNumberId || '';
+            const msgDisplayPhone = metadata.display_phone_number || rxDisplayPhone || '';
 
             if (!value.messages || !value.messages.length) continue;
 
             const msg = value.messages[0];
             const contato = msg.from;
 
+            // ignora mensagens enviadas pelo próprio número do bot
             if (contato === phoneNumberId) {
               if (!res.headersSent) res.sendStatus(200);
               clearTimeout(ackTimer);
@@ -605,8 +636,12 @@ function setupRoutes(
             }
 
             if (msg?.referral) {
-              console.log(`[CTWA][RX] contato=${contato} is_ctwa=${is_ctwa} tid_len=${(tid || '').length}`);
-              console.log(`[CTWA][RX][referral] ${truncate(JSON.stringify(msg.referral), 20000)}`);
+              console.log(
+                `[CTWA][RX] contato=${contato} is_ctwa=${is_ctwa} tid_len=${(tid || '').length}`
+              );
+              console.log(
+                `[CTWA][RX][referral] ${truncate(JSON.stringify(msg.referral), 20000)}`
+              );
             }
 
             const wa_id = (value?.contacts && value.contacts[0]?.wa_id) || msg.from || '';
@@ -625,9 +660,12 @@ function setupRoutes(
                 // mantém o gate de intake antes de considerar contato "válido"
                 const ok = await ensureCtwaIntakeConfirmed(clid, body, contactToken);
                 if (!ok) {
-                  console.warn(`[CTWA][GATE] Bloqueado envio de Contact (clid=${clid}) — intake ainda não confirmado.`);
+                  console.warn(
+                    `[CTWA][GATE] Bloqueado envio de Contact (clid=${clid}) — intake ainda não confirmado.`
+                  );
                 } else {
                   await sendContactEventToServerGtm({
+                    waba_id: rxWabaId,
                     wa_id,
                     phone: contato,
                     tid: finalTid,
@@ -640,6 +678,7 @@ function setupRoutes(
               } else {
                 // Orgânico / Landing Page / qualquer entrada sem CTWA
                 await sendContactEventToServerGtm({
+                  waba_id: rxWabaId,
                   wa_id,
                   phone: contato,
                   tid: finalTid,               // "" ou TID da LP
@@ -651,24 +690,38 @@ function setupRoutes(
               }
             }
 
+            // ===== PERSISTÊNCIA / ESTADO DO CONTATO =====
             if (!estado[contato]) {
               inicializarEstado(contato, tid, click_type);
-              await salvarContato(contato, null, texto || (isProviderMedia ? '[mídia]' : ''), tid, click_type);
+              await salvarContato(
+                contato,
+                null,
+                texto || (isProviderMedia ? '[mídia]' : ''),
+                tid,
+                click_type
+              );
             } else {
-              await salvarContato(contato, null, texto || (isProviderMedia ? '[mídia]' : ''), tid, click_type);
+              await salvarContato(
+                contato,
+                null,
+                texto || (isProviderMedia ? '[mídia]' : ''),
+                tid,
+                click_type
+              );
             }
 
+            // ===== META INFO NO ESTADO / DB =====
             try {
               const stMeta = ensureEstado(contato);
-              if (rxPhoneNumberId) stMeta.meta_phone_number_id = rxPhoneNumberId;
-              if (rxDisplayPhone) stMeta.meta_display_phone_number = rxDisplayPhone;
+              if (msgPhoneNumberId) stMeta.meta_phone_number_id = msgPhoneNumberId;
+              if (msgDisplayPhone) stMeta.meta_display_phone_number = msgDisplayPhone;
 
-              if (rxPhoneNumberId) {
+              if (msgPhoneNumberId) {
                 // Persistimos no DB para sobreviver a restart
                 pool
                   .query(
                     'UPDATE contatos SET meta_phone_number_id = $1 WHERE id = $2',
-                    [rxPhoneNumberId, contato]
+                    [msgPhoneNumberId, contato]
                   )
                   .catch((e) => {
                     console.warn(
@@ -684,6 +737,7 @@ function setupRoutes(
               );
             }
 
+            // ===== PASSA PRO MOTOR DO BOT =====
             await handleIncomingNormalizedMessage({
               contato,
               texto,
@@ -701,6 +755,7 @@ function setupRoutes(
             await processarMensagensPendentes(contato);
           }
         }
+
         if (!res.headersSent) res.sendStatus(200);
       } else {
         if (!res.headersSent) res.sendStatus(404);
