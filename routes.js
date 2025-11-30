@@ -30,15 +30,19 @@ async function sendContactEventToServerGtm({ wa_id, phone, tid, click_type, is_c
   }
   if (!wa_id) return;
 
+  // garante um click_type consistente com as regras
+  const resolvedClickType = click_type || (is_ctwa ? 'CTWA' : 'Orgânico');
+
   const payload = {
     event_name: 'contact_bot',
     event_time: event_time || Math.floor(Date.now() / 1000),
     wa_id,
     phone: phone || wa_id,
     tid: tid || '',
-    click_type: click_type || (is_ctwa ? 'CTWA' : 'Orgânico'),
+    click_type: resolvedClickType,
+    action_source: is_ctwa ? 'CTWA' : resolvedClickType,
     is_ctwa: !!is_ctwa,
-    source: 'whatsapp_bot',
+    source: 'chat',
   };
 
   console.log(
@@ -49,7 +53,9 @@ async function sendContactEventToServerGtm({ wa_id, phone, tid, click_type, is_c
   );
 
   try {
-    const resp = await axios.post(SERVER_GTM_CONTACT_URL, payload,
+    const resp = await axios.post(
+      SERVER_GTM_CONTACT_URL,
+      payload,
       {
         headers: {
           'Content-Type': 'application/json',
@@ -57,7 +63,8 @@ async function sendContactEventToServerGtm({ wa_id, phone, tid, click_type, is_c
         },
         timeout: 10000,
         validateStatus: () => true,
-      });
+      }
+    );
     console.log(
       `[CAPI][BOT][RX] http=${resp.status} body=${truncate(
         JSON.stringify(resp.data || {}),
@@ -571,19 +578,30 @@ function setupRoutes(
 
             const isProviderMedia = msg.type !== 'text';
             const texto = msg.type === 'text' ? (msg.text.body || '').trim() : '';
-            const adminTid = findTidInText(safeStr(texto));
+            const adminTid = findTidInText(safeStr(texto)); // TID vindo do texto (LP)
 
             console.log(`[${contato}] ${texto || '[mídia]'}`);
+
+            // ===== DEFINIÇÃO DE TID / CLICK_TYPE / CTWA =====
+            const referral = msg.referral || {};
+            const tidFromCtwa = (referral.source_type === 'ad') ? (referral.ctwa_clid || '') : '';
+            const tidFromText = adminTid || '';
 
             let tid = '';
             let click_type = 'Orgânico';
             let is_ctwa = false;
 
-            const referral = msg.referral || {};
-            if (referral.source_type === 'ad') {
-              tid = referral.ctwa_clid || '';
-              click_type = 'CTWA';
+            // prioridade: CTWA > Landing Page > Orgânico
+            if (tidFromCtwa) {
+              tid = tidFromCtwa;
+              click_type = 'CTWA';          // clique em anúncio CTWA
               is_ctwa = true;
+            } else if (tidFromText) {
+              tid = tidFromText;
+              click_type = 'Landing Page';  // TID digitado / vindo da LP
+            } else {
+              tid = '';
+              click_type = 'Orgânico';      // nenhum TID
             }
 
             if (msg?.referral) {
@@ -592,7 +610,7 @@ function setupRoutes(
             }
 
             const wa_id = (value?.contacts && value.contacts[0]?.wa_id) || msg.from || '';
-            const clid = is_ctwa ? (referral.ctwa_clid || '') : '';
+            const clid = tidFromCtwa ? (referral.ctwa_clid || '') : '';
 
             // ===== CONTACT VIA SERVER GTM (primeira mensagem por wa_id) =====
             const isFirstContactForWa = wa_id && !sentContactByWa.has(wa_id);
@@ -600,17 +618,8 @@ function setupRoutes(
             if (isFirstContactForWa) {
               const baseEventTime = Number(msg.timestamp) || Math.floor(Date.now() / 1000);
 
-              // Decide qual TID e click_type vamos mandar
-              let finalTid = tid || adminTid || '';
-              let finalClickType = click_type;
-
-              if (!finalTid && adminTid) {
-                // caso não seja CTWA mas o texto tenha TID vindo da LP
-                finalTid = adminTid;
-                finalClickType = 'Landing Page';
-              } else if (!finalTid) {
-                finalClickType = click_type || 'Orgânico';
-              }
+              const finalTid = tid;             // já decidido acima
+              const finalClickType = click_type;
 
               if (is_ctwa) {
                 // mantém o gate de intake antes de considerar contato "válido"
@@ -622,18 +631,19 @@ function setupRoutes(
                     wa_id,
                     phone: contato,
                     tid: finalTid,
-                    click_type: finalClickType,
+                    click_type: finalClickType, // "CTWA"
                     is_ctwa: true,
                     event_time: baseEventTime,
                   });
                   sentContactByWa.add(wa_id);
                 }
               } else {
-                // Orgânico / LP / qualquer entrada sem CTWA
+                // Orgânico / Landing Page / qualquer entrada sem CTWA
                 await sendContactEventToServerGtm({
                   wa_id,
-                  tid: finalTid,
-                  click_type: finalClickType,
+                  phone: contato,
+                  tid: finalTid,               // "" ou TID da LP
+                  click_type: finalClickType,  // "Orgânico" ou "Landing Page"
                   is_ctwa: false,
                   event_time: baseEventTime,
                 });
