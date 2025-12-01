@@ -95,23 +95,17 @@
                         placeholder="MANYCHAT_WEBHOOK_SECRET" />
                 </div>
 
-                <!-- Fallback Meta geral -->
+                <!-- Token global para Graph API -->
                 <div class="mt-3">
-                    <h3 class="mt-3">Configurações Meta (fallback)</h3>
+                    <h3 class="mt-3">Configurações Globais</h3>
 
                     <div class="mb-3">
-                        <label class="form-label">Access Token padrão (fallback)</label>
-                        <input type="text" class="form-control" name="meta_access_token"
-                            value="<%= settings.meta_access_token || '' %>">
+                        <label class="form-label">Graph API Access Token (para page_id)</label>
+                        <input type="text" class="form-control" name="graph_api_access_token"
+                            value="<%= settings.graph_api_access_token || '' %>">
                         <div class="form-text">
-                            Usado apenas como fallback se nenhum número abaixo for compatível.
+                            Token dedicado para consultas Graph API (ex.: obter page_id de reels).
                         </div>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label">Phone Number ID padrão (fallback)</label>
-                        <input type="text" class="form-control" name="meta_phone_number_id"
-                            value="<%= settings.meta_phone_number_id || '' %>">
                     </div>
 
                     <div class="mb-3">

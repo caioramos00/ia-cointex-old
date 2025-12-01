@@ -32,13 +32,17 @@ async function sendContactEventToServerGtm({ waba_id, wa_id, phone, tid, click_t
     return;
   }
   if (!wa_id) return;
+  if (!tid) {
+    console.warn('[CAPI][BOT][SKIP] Nenhum TID válido para envio de contact');
+    return;
+  }
 
   const resolvedClickType = click_type || (is_ctwa ? 'CTWA' : 'Orgânico');
   const phoneRaw = phone || wa_id;
   const phoneHash = hashPhoneForMeta(phoneRaw);
 
   const payload = {
-    event_name: 'contact_bot',
+    event_name: 'contact',
     event_time: event_time || Math.floor(Date.now() / 1000),
 
     // IDs de WhatsApp
@@ -50,7 +54,7 @@ async function sendContactEventToServerGtm({ waba_id, wa_id, phone, tid, click_t
     phone_hash: phoneHash,    // para CAPI (user_data.ph)
 
     // tracking
-    tid: tid || '',
+    tid: tid,
     click_type: resolvedClickType,       // "CTWA" | "Landing Page" | "Orgânico"
     is_ctwa: !!is_ctwa,
     source: 'chat',                      // usado no sGTM -> action_source = "chat"
@@ -89,6 +93,87 @@ async function sendContactEventToServerGtm({ waba_id, wa_id, phone, tid, click_t
     );
   } catch (e) {
     console.warn(`[CAPI][BOT][ERR] ${e?.message || e}`);
+  }
+}
+
+function extractVideoIdFromUrl(videoUrl) {
+  if (!videoUrl || typeof videoUrl !== 'string') return '';
+  const parts = videoUrl.split('/reel/');
+  if (parts.length < 2) return '';
+  const afterReel = parts[1];
+  const idPart = afterReel.split('/')[0];
+  return idPart || '';
+}
+
+async function sendLeadSubmittedEventToServerGtm({ waba_id, wa_id, phone, tid, click_type, is_ctwa, event_time, page_id = '' }) {
+  if (!SERVER_GTM_LEAD_URL) {
+    console.warn('[CAPI][BOT][SKIP] SERVER_GTM_LEAD_URL não configurada para LeadSubmitted');
+    return;
+  }
+  if (!wa_id) return;
+  if (!tid) {
+    console.warn('[CAPI][BOT][SKIP] Nenhum TID válido para envio de LeadSubmitted');
+    return;
+  }
+
+  const resolvedClickType = click_type || (is_ctwa ? 'CTWA' : 'Orgânico');
+  const phoneRaw = phone || wa_id;
+  const phoneHash = hashPhoneForMeta(phoneRaw);
+
+  const payload = {
+    event_name: 'LeadSubmitted',
+    event_time: event_time || Math.floor(Date.now() / 1000),
+
+    // IDs de WhatsApp
+    waba_id: waba_id || '',   // whatsapp_business_account_id (entry.id)
+    wa_id,                    // id do usuário (contato)
+
+    // dados do contato
+    phone: phoneRaw,          // cru (uso interno)
+    phone_hash: phoneHash,    // para CAPI (user_data.ph)
+
+    // tracking
+    tid: tid,
+    click_type: resolvedClickType,       // "CTWA" | "Landing Page" | "Orgânico"
+    is_ctwa: !!is_ctwa,
+    source: 'chat',                      // usado no sGTM -> action_source = "chat"
+    page_id: page_id || '',              // ID da página (adicionado para CTWA)
+
+    // já deixamos pronto pra você usar direto em custom_data na tag CAPI
+    custom_data: {
+      click_type: resolvedClickType,
+      page_id: page_id || ''
+    }
+  };
+
+  console.log(
+    `[CAPI][BOT][TX][LEAD_SUBMITTED] url=${SERVER_GTM_LEAD_URL} page_id=${page_id || '-'} payload=${truncate(
+      JSON.stringify(payload),
+      500
+    )}`
+  );
+
+  try {
+    const resp = await axios.post(
+      SERVER_GTM_LEAD_URL,
+      payload,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-bot-secret': BOT_LEAD_SECRET,
+        },
+        timeout: 10000,
+        validateStatus: () => true,
+      }
+    );
+    console.log(
+      `[CAPI][BOT][RX][LEAD_SUBMITTED] http=${resp.status} body=${truncate(
+        JSON.stringify(resp.data || {}),
+        800
+      )}`
+    );
+  } catch (e) {
+    console.warn(`[CAPI][BOT][ERR][LEAD_SUBMITTED] ${e?.message || e}`);
   }
 }
 
@@ -743,37 +828,74 @@ function setupRoutes(
               const finalTid = tid;             // já decidido acima
               const finalClickType = click_type;
 
-              if (is_ctwa) {
-                // mantém o gate de intake antes de considerar contato "válido"
-                const ok = await ensureCtwaIntakeConfirmed(clid, body, contactToken);
-                if (!ok) {
-                  console.warn(
-                    `[CTWA][GATE] Bloqueado envio de Contact (clid=${clid}) — intake ainda não confirmado.`
-                  );
-                } else {
+              if (finalTid) {  // Só prosseguir se houver TID
+                if (finalClickType === 'CTWA') {
+                  // mantém o gate de intake antes de considerar contato "válido"
+                  const ok = await ensureCtwaIntakeConfirmed(clid, body, contactToken);
+                  if (!ok) {
+                    console.warn(
+                      `[CTWA][GATE] Bloqueado envio de LeadSubmitted (clid=${clid}) — intake ainda não confirmado.`
+                    );
+                  } else {
+                    let resolvedPageId = '';
+
+                    // Tentar obter page_id via Graph API se houver video_url
+                    try {
+                      const videoUrl = referral.video_url || '';
+                      if (videoUrl) {
+                        const videoId = extractVideoIdFromUrl(videoUrl);
+                        if (videoId) {
+                          const graphUrl = `https://graph.facebook.com/v20.0/${videoId}?fields=id,from&access_token=${settings.graph_api_access_token || ''}`;
+                          console.log(`[CTWA][GRAPH][TX] Chamando Graph API para video_id=${videoId}`);
+                          const graphResp = await axios.get(graphUrl, {
+                            timeout: 10000,
+                            validateStatus: () => true,
+                          });
+                          if (graphResp.status === 200 && graphResp.data?.from?.id) {
+                            resolvedPageId = graphResp.data.from.id;
+                            console.log(`[CTWA][GRAPH][RX] page_id=${resolvedPageId} obtido com sucesso`);
+                          } else {
+                            console.warn(`[CTWA][GRAPH][FAIL] http=${graphResp.status} body=${truncate(JSON.stringify(graphResp.data || {}), 800)}`);
+                          }
+                        } else {
+                          console.warn(`[CTWA][GRAPH][SKIP] video_id não extraído de video_url=${videoUrl}`);
+                        }
+                      } else {
+                        console.warn(`[CTWA][GRAPH][SKIP] Nenhum video_url no referral`);
+                      }
+                    } catch (graphErr) {
+                      console.warn(`[CTWA][GRAPH][ERR] Falha ao obter page_id: ${graphErr?.message || graphErr}`);
+                    }
+
+                    await sendLeadSubmittedEventToServerGtm({
+                      waba_id: rxWabaId,
+                      wa_id,
+                      phone: contato,
+                      tid: finalTid,
+                      click_type: finalClickType, // "CTWA"
+                      is_ctwa: true,
+                      event_time: baseEventTime,
+                      page_id: resolvedPageId,
+                    });
+                    sentContactByWa.add(wa_id);
+                  }
+                } else if (finalClickType === 'Landing Page') {
+                  // Landing Page: envia contact
                   await sendContactEventToServerGtm({
                     waba_id: rxWabaId,
                     wa_id,
                     phone: contato,
                     tid: finalTid,
-                    click_type: finalClickType, // "CTWA"
-                    is_ctwa: true,
+                    click_type: finalClickType,  // "Landing Page"
+                    is_ctwa: false,
                     event_time: baseEventTime,
                   });
                   sentContactByWa.add(wa_id);
+                } else {
+                  console.warn(`[CAPI][BOT][SKIP] Click type '${finalClickType}' sem suporte para envio de evento`);
                 }
               } else {
-                // Orgânico / Landing Page / qualquer entrada sem CTWA
-                await sendContactEventToServerGtm({
-                  waba_id: rxWabaId,
-                  wa_id,
-                  phone: contato,
-                  tid: finalTid,               // "" ou TID da LP
-                  click_type: finalClickType,  // "Orgânico" ou "Landing Page"
-                  is_ctwa: false,
-                  event_time: baseEventTime,
-                });
-                sentContactByWa.add(wa_id);
+                console.warn(`[CAPI][BOT][SKIP] Nenhum TID para envio de evento (click_type: ${finalClickType})`);
               }
             }
 

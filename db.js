@@ -95,9 +95,8 @@ async function initDatabase() {
         manychat_api_token TEXT,
         manychat_fallback_flow_id TEXT,
         manychat_webhook_secret TEXT,
-        meta_access_token TEXT,
-        meta_phone_number_id VARCHAR(50),
         contact_token TEXT,
+        graph_api_access_token TEXT,  // Token global para Graph API (page_id)
         identity_enabled BOOLEAN DEFAULT FALSE,
         identity_label TEXT,
         support_email TEXT,
@@ -138,7 +137,8 @@ async function getBotSettings({ bypassCache = false } = {}) {
       id, message_provider,
       twilio_account_sid, twilio_auth_token, twilio_messaging_service_sid, twilio_from,
       manychat_api_token, manychat_fallback_flow_id, manychat_webhook_secret,
-      meta_access_token, meta_phone_number_id, contact_token,
+      contact_token,
+      graph_api_access_token,  // Token global para Graph API
       identity_enabled, identity_label, support_email, support_phone, support_url,
       optout_hint_enabled, optout_suffix,
       updated_at
@@ -175,7 +175,8 @@ async function updateBotSettings(payload) {
       message_provider,
       twilio_account_sid, twilio_auth_token, twilio_messaging_service_sid, twilio_from,
       manychat_api_token, manychat_fallback_flow_id, manychat_webhook_secret,
-      meta_access_token, meta_phone_number_id, contact_token
+      contact_token,
+      graph_api_access_token  // Novo campo
     } = payload;
 
     await client.query(`
@@ -195,9 +196,8 @@ async function updateBotSettings(payload) {
              manychat_api_token = COALESCE($13, manychat_api_token),
              manychat_fallback_flow_id = COALESCE($14, manychat_fallback_flow_id),
              manychat_webhook_secret = COALESCE($15, manychat_webhook_secret),
-             meta_access_token = COALESCE($16, meta_access_token),
-             meta_phone_number_id = COALESCE($17, meta_phone_number_id),
-             contact_token = COALESCE($18, contact_token)
+             contact_token = COALESCE($16, contact_token),
+             graph_api_access_token = COALESCE($17, graph_api_access_token)
        WHERE id = 1
     `, [
       (typeof identity_enabled === 'boolean') ? identity_enabled : null,
@@ -215,9 +215,8 @@ async function updateBotSettings(payload) {
       manychat_api_token || null,
       manychat_fallback_flow_id || null,
       manychat_webhook_secret || null,
-      meta_access_token || null,
-      meta_phone_number_id || null,
-      contact_token || null
+      contact_token || null,
+      graph_api_access_token || null
     ]);
 
     _settingsCache = null;
