@@ -20,7 +20,6 @@ const {
   deleteContatosByIds,
 } = require('./db.js');
 
-
 const LANDING_URL = 'https://tramposlara.com';
 const SERVER_GTM_CONTACT_URL = 'https://ss.tramposlara.com/bot';
 const BOT_CONTACT_SECRET = 'SENHASECRETA'
