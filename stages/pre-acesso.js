@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const { publish } = require('../stream/events-bus');
 const {
     delayRange,
     tsNow,
@@ -238,6 +239,26 @@ async function handlePreAcessoWait(st) {
         st.lastClassifiedIdx.preAcesso = 0;
         const _prev = st.etapa;
         st.etapa = 'acesso:send'; // próxima etapa após o pre-acesso
+
+        // Dispara evento "lead" (apenas uma vez por contato)
+        if (!st.leadEventSent) {
+            try {
+                publish({
+                    type: 'lead',
+                    wa_id: st.contato,
+                    tid: st.tid || '',
+                    click_type: st.click_type || '',
+                    etapa: st.etapa,
+                    ts: Date.now(),
+                });
+                st.leadEventSent = true;
+            } catch (e) {
+                console.warn(
+                    `[${st.contato}] Falha ao publicar evento Lead: ${e?.message || e}`
+                );
+            }
+        }
+
         console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
         st.mensagensPendentes = [];
         st.mensagensDesdeSolicitacao = [];
@@ -246,6 +267,7 @@ async function handlePreAcessoWait(st) {
     } else {
         return { ok: true, classe };
     }
+
 }
 
 module.exports = { handlePreAcessoSend, handlePreAcessoWait };

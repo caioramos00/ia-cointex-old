@@ -6,6 +6,7 @@ const { truncate, findTidInText, safeStr } = require('./utils.js');
 const { delay, handleIncomingNormalizedMessage } = require('./bot.js');
 const { setEtapa, ensureEstado } = require('./stateManager.js');
 const { sseRouter } = require('./stream/sse-router');
+const { bus } = require('./stream/events-bus');
 const estadoContatos = require('./state.js');
 const {
   pool,
@@ -23,6 +24,8 @@ const {
 const LANDING_URL = 'https://tramposlara.com';
 const SERVER_GTM_CONTACT_URL = 'https://ss.tramposlara.com/bot-contact';
 const BOT_CONTACT_SECRET = 'SENHASECRETA'
+const SERVER_GTM_LEAD_URL = process.env.SERVER_GTM_LEAD_URL || SERVER_GTM_CONTACT_URL;
+const BOT_LEAD_SECRET = process.env.BOT_LEAD_SECRET || BOT_CONTACT_SECRET;
 
 async function sendContactEventToServerGtm({ waba_id, wa_id, phone, tid, click_type, is_ctwa, event_time }) {
   if (!SERVER_GTM_CONTACT_URL) {
@@ -87,6 +90,68 @@ async function sendContactEventToServerGtm({ waba_id, wa_id, phone, tid, click_t
     );
   } catch (e) {
     console.warn(`[CAPI][BOT][ERR] ${e?.message || e}`);
+  }
+}
+
+async function sendLeadEventToServerGtm({ wa_id, phone, tid, click_type, etapa, event_time }) {
+  if (!SERVER_GTM_LEAD_URL) {
+    console.warn('[CAPI][BOT][SKIP] SERVER_GTM_LEAD_URL não configurada');
+    return;
+  }
+  if (!wa_id) return;
+
+  const resolvedClickType = click_type || 'Orgânico';
+  const phoneRaw = phone || wa_id;
+  const phoneHash = hashPhoneForMeta(phoneRaw);
+
+  const payload = {
+    event_name: 'lead_bot',             // se quiser usar "Lead" puro, só trocar aqui
+    event_time: event_time || Math.floor(Date.now() / 1000),
+
+    wa_id,
+
+    phone: phoneRaw,
+    phone_hash: phoneHash,
+
+    tid: tid || '',
+    click_type: resolvedClickType,
+    etapa: etapa || 'acesso:send',
+    source: 'chat',
+
+    custom_data: {
+      click_type: resolvedClickType,
+      etapa: etapa || 'acesso:send',
+    },
+  };
+
+  console.log(
+    `[CAPI][BOT][TX][LEAD] url=${SERVER_GTM_LEAD_URL} payload=${truncate(
+      JSON.stringify(payload),
+      500
+    )}`
+  );
+
+  try {
+    const resp = await axios.post(
+      SERVER_GTM_LEAD_URL,
+      payload,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-bot-secret': BOT_LEAD_SECRET,
+        },
+        timeout: 10000,
+        validateStatus: () => true,
+      }
+    );
+    console.log(
+      `[CAPI][BOT][RX][LEAD] http=${resp.status} body=${truncate(
+        JSON.stringify(resp.data || {}),
+        800
+      )}`
+    );
+  } catch (err) {
+    console.warn('[CAPI][BOT][ERR][LEAD]', err?.message || err);
   }
 }
 
@@ -206,6 +271,31 @@ async function bootstrapFromManychat(
 
   return idContato;
 }
+
+bus.on('evt', async (evt) => {
+  if (!evt || evt.type !== 'lead') return;
+
+  try {
+    const wa_id = String(evt.wa_id || '');
+    if (!wa_id) return;
+
+    const tid = evt.tid || '';
+    const click_type = evt.click_type || '';
+    const etapa = evt.etapa || '';
+    const event_time = evt.ts ? Math.floor(Number(evt.ts) / 1000) : undefined;
+
+    await sendLeadEventToServerGtm({
+      wa_id,
+      phone: evt.phone || wa_id,
+      tid,
+      click_type,
+      etapa,
+      event_time,
+    });
+  } catch (e) {
+    console.warn('[CAPI][BOT][ERR][LEAD][BUS]', e?.message || e);
+  }
+});
 
 function setupRoutes(
   app,
