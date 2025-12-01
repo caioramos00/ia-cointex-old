@@ -98,11 +98,26 @@ async function sendContactEventToServerGtm({ waba_id, wa_id, phone, tid, click_t
 
 function extractVideoIdFromUrl(videoUrl) {
   if (!videoUrl || typeof videoUrl !== 'string') return '';
-  const parts = videoUrl.split('/reel/');
-  if (parts.length < 2) return '';
-  const afterReel = parts[1];
-  const idPart = afterReel.split('/')[0];
-  return idPart || '';
+
+  let cleanedUrl = videoUrl.trim().replace(/\/$/, '');
+
+  if (cleanedUrl.includes('/reel/')) {
+    const parts = cleanedUrl.split('/reel/');
+    if (parts.length < 2) return '';
+    const afterReel = parts[1];
+    const idPart = afterReel.split('/')[0];
+    return idPart || '';
+  }
+
+  if (cleanedUrl.includes('/videos/')) {
+    const parts = cleanedUrl.split('/videos/');
+    if (parts.length < 2) return '';
+    const afterVideos = parts[1];
+    const idPart = afterVideos.split('/')[0];
+    return idPart || '';
+  }
+
+  return '';
 }
 
 async function sendLeadSubmittedEventToServerGtm({ waba_id, wa_id, phone, tid, click_type, is_ctwa, event_time, page_id = '' }) {
