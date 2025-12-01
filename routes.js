@@ -690,7 +690,6 @@ function setupRoutes(
             const msg = value.messages[0];
             const contato = msg.from;
 
-            // ignora mensagens enviadas pelo próprio número do bot
             if (contato === phoneNumberId) {
               if (!res.headersSent) res.sendStatus(200);
               clearTimeout(ackTimer);
