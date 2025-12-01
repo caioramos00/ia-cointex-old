@@ -110,6 +110,12 @@ async function initDatabase() {
     console.log('[DB] Tabela bot_settings criada ou já existe.');
 
     await client.query(`
+      ALTER TABLE bot_settings
+      ADD COLUMN IF NOT EXISTS graph_api_access_token TEXT;
+    `);
+    console.log('[DB] Coluna graph_api_access_token adicionada ou já existe.');
+
+    await client.query(`
       ALTER TABLE bot_settings ADD CONSTRAINT bot_settings_singleton CHECK (id = 1) NOT VALID;
     `).catch(() => { });
 
