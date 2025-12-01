@@ -154,7 +154,6 @@ async function sendLeadEventToServerGtm({ wa_id, phone, tid, click_type, etapa, 
   }
 }
 
-// idempotência local por execução
 const sentContactByWa = new Set();
 const sentIntakeByClid = new Set();
 
