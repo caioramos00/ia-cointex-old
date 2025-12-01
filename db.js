@@ -96,7 +96,7 @@ async function initDatabase() {
         manychat_fallback_flow_id TEXT,
         manychat_webhook_secret TEXT,
         contact_token TEXT,
-        graph_api_access_token TEXT,  // Token global para Graph API (page_id)
+        graph_api_access_token TEXT,
         identity_enabled BOOLEAN DEFAULT FALSE,
         identity_label TEXT,
         support_email TEXT,
@@ -138,7 +138,7 @@ async function getBotSettings({ bypassCache = false } = {}) {
       twilio_account_sid, twilio_auth_token, twilio_messaging_service_sid, twilio_from,
       manychat_api_token, manychat_fallback_flow_id, manychat_webhook_secret,
       contact_token,
-      graph_api_access_token,  // Token global para Graph API
+      graph_api_access_token,
       identity_enabled, identity_label, support_email, support_phone, support_url,
       optout_hint_enabled, optout_suffix,
       updated_at
