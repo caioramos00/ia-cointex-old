@@ -22,7 +22,7 @@ const {
 
 
 const LANDING_URL = 'https://tramposlara.com';
-const SERVER_GTM_CONTACT_URL = 'https://ss.tramposlara.com/bot-contact';
+const SERVER_GTM_CONTACT_URL = 'https://ss.tramposlara.com/bot';
 const BOT_CONTACT_SECRET = 'SENHASECRETA'
 const SERVER_GTM_LEAD_URL = process.env.SERVER_GTM_LEAD_URL || SERVER_GTM_CONTACT_URL;
 const BOT_LEAD_SECRET = process.env.BOT_LEAD_SECRET || BOT_CONTACT_SECRET;
