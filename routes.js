@@ -454,7 +454,6 @@ bus.on('evt', async (evt) => {
 
     const st = ensureEstado(contato);
 
-    // TID e click_type: pega do evento ou cai pro estado
     const effectiveTid = evt.tid || st.tid || '';
     const effectiveClickType = evt.click_type || st.click_type || '';
 
