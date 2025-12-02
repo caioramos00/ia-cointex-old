@@ -204,7 +204,7 @@ async function sendLeadEventToServerGtm({ wa_id, phone, tid, click_type, etapa, 
   const phoneHash = hashPhoneForMeta(phoneRaw);
 
   const payload = {
-    event_name: 'lead_bot',
+    event_name: 'lead',
     event_time: event_time || Math.floor(Date.now() / 1000),
 
     wa_id,
