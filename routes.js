@@ -446,12 +446,13 @@ bus.on('evt', async (evt) => {
   if (!evt || evt.type !== 'lead') return;
 
   try {
+    const phone = evt.phone || wa_id;
     const wa_id = String(evt.wa_id || '');
     if (!wa_id) return;
 
     const tid = evt.tid || '';
     if (!tid) {
-      console.warn('[CAPI][BOT][SKIP][LEAD][BUS] Nenhum TID no evento lead');
+      console.warn(`[CAPI][BOT][SKIP][LEAD][BUS][${phone}] Nenhum TID no evento lead`);
       return;
     }
 
@@ -459,7 +460,6 @@ bus.on('evt', async (evt) => {
     const etapa = evt.etapa || '';
     const event_time = evt.ts ? Math.floor(Number(evt.ts) / 1000) : undefined;
     const waba_id = evt.waba_id || '';
-    const phone = evt.phone || wa_id;
 
     // ===== RECUPERA ESTADO E PAGE_ID DA MEMÓRIA =====
     const contato = normalizeContato(phone);        // usa a função declarada no arquivo
