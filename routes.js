@@ -745,7 +745,7 @@ function setupRoutes(
       const v = c.value || {};
       const md = v.metadata || {};
 
-      rxWabaId = e.id || '';                  // whatsapp_business_account_id
+      rxWabaId = e.id || '';
       rxPhoneNumberId = md.phone_number_id || '';
       rxDisplayPhone = md.display_phone_number || '';
 
