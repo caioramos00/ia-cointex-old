@@ -65,7 +65,7 @@
 
                 <label>Provedor de Mensagens</label>
                 <select name="message_provider">
-                    <option value="meta" <%=settings.message_provider==='meta' ? 'selected' : '' %>>Meta (direto)
+                    <option value="meta" <%=settings.message_provider==='meta' ? 'selected' : '' %>>Meta
                     </option>
                     <option value="twilio" <%=settings.message_provider==='twilio' ? 'selected' : '' %>>Twilio</option>
                     <option value="manychat" <%=settings.message_provider==='manychat' ? 'selected' : '' %>>Manychat
@@ -100,16 +100,15 @@
                     <h3 class="mt-3">Configurações Globais</h3>
 
                     <div class="mb-3">
-                        <label class="form-label">Graph API Access Token (para page_id)</label>
+                        <label class="form-label">Graph API Access Token</label>
                         <input type="text" class="form-control" name="graph_api_access_token"
                             value="<%= settings.graph_api_access_token || '' %>">
                         <div class="form-text">
-                            Token dedicado para consultas Graph API (ex.: obter page_id de reels).
                         </div>
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Contact Token (CAPI / Landing)</label>
+                        <label class="form-label">Contact Token</label>
                         <input type="text" class="form-control" name="contact_token"
                             value="<%= settings.contact_token || '' %>">
                     </div>
