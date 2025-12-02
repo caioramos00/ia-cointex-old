@@ -450,12 +450,28 @@ bus.on('evt', async (evt) => {
     if (!wa_id) return;
 
     const tid = evt.tid || '';
+    if (!tid) {
+      console.warn('[CAPI][BOT][SKIP][LEAD][BUS] Nenhum TID no evento lead');
+      return;
+    }
+
     const click_type = evt.click_type || '';
     const etapa = evt.etapa || '';
     const event_time = evt.ts ? Math.floor(Number(evt.ts) / 1000) : undefined;
     const waba_id = evt.waba_id || '';
-    const page_id = evt.page_id || '';
     const phone = evt.phone || wa_id;
+
+    // ===== RECUPERA ESTADO E PAGE_ID DA MEMÓRIA =====
+    const contato = normalizeContato(phone);        // usa a função declarada no arquivo
+    const st = ensureEstado(contato);               // garante que o estado existe
+
+    const page_id_from_state = st.page_id || '';
+    const page_id_from_evt = evt.page_id || '';
+    const finalPageId = page_id_from_state || page_id_from_evt || '';
+
+    console.log(
+      `[BUS][LEAD] contato=${contato} click_type=${click_type || '-'} page_id=${finalPageId || '-'}`
+    );
 
     if (click_type === 'CTWA') {
       await sendQualifiedLeadToServerGtm({
@@ -466,7 +482,7 @@ bus.on('evt', async (evt) => {
         click_type,
         is_ctwa: true,
         event_time,
-        page_id
+        page_id: finalPageId
       });
     } else if (click_type === 'Landing Page') {
       await sendLeadEventToServerGtm({
@@ -477,6 +493,10 @@ bus.on('evt', async (evt) => {
         etapa,
         event_time,
       });
+    } else {
+      console.log(
+        `[CAPI][BOT][BUS] Evento lead ignorado (click_type=${click_type || 'Orgânico/indefinido'})`
+      );
     }
   } catch (e) {
     console.warn('[CAPI][BOT][ERR][LEAD][BUS]', e?.message || e);
@@ -973,12 +993,6 @@ function setupRoutes(
                       const stMeta = ensureEstado(contato);
                       stMeta.page_id = resolvedPageId;   // só memória (estado do processo)
                     }
-
-                    const st = estado[contato];
-
-                    console.log(
-                      `[PAGE_ID] ${st.page_id}`
-                    );
 
                     await sendLeadSubmittedEventToServerGtm({
                       waba_id: rxWabaId,
