@@ -270,7 +270,7 @@ async function sendQualifiedLeadToServerGtm({ waba_id, wa_id, phone, tid, click_
   const phoneHash = hashPhoneForMeta(phoneRaw);
 
   const payload = {
-    event_name: 'QualifiedLead',
+    event_name: 'qualified_',
     event_time: event_time || Math.floor(Date.now() / 1000),
 
     // IDs de WhatsApp
@@ -453,20 +453,9 @@ bus.on('evt', async (evt) => {
     const click_type = evt.click_type || '';
     const etapa = evt.etapa || '';
     const event_time = evt.ts ? Math.floor(Number(evt.ts) / 1000) : undefined;
+    const waba_id = evt.waba_id || '';
+    const page_id = evt.page_id || '';
     const phone = evt.phone || wa_id;
-
-    // --- NOVO: recuperar waba_id/page_id do evento OU do estado ---
-    let waba_id = evt.waba_id || '';
-    let page_id = evt.page_id || '';
-
-    try {
-      const st = ensureEstado(wa_id); // normalmente == contato/phone
-      if (!waba_id && st?.waba_id) waba_id = st.waba_id;
-      if (!page_id && st?.page_id) page_id = st.page_id;
-    } catch (e) {
-      console.warn('[CAPI][BOT][LEAD][BUS] erro ao ler estado para waba_id/page_id', e?.message || e);
-    }
-    // --- FIM NOVO BLOCO ---
 
     if (click_type === 'CTWA') {
       await sendQualifiedLeadToServerGtm({
@@ -980,19 +969,6 @@ function setupRoutes(
                       console.warn(`[CTWA][GRAPH][ERR] Falha ao obter page_id: ${graphErr?.message || graphErr}`);
                     }
 
-                    try {
-                      const st = ensureEstado(contato); // garante objeto de estado para esse contato
-
-                      if (rxWabaId) {
-                        st.waba_id = rxWabaId;
-                      }
-                      if (resolvedPageId) {
-                        st.page_id = resolvedPageId;
-                      }
-                    } catch (e) {
-                      console.warn('[CTWA][STATE] erro ao salvar waba_id/page_id no estado', e?.message || e);
-                    }
-
                     await sendLeadSubmittedEventToServerGtm({
                       waba_id: rxWabaId,
                       wa_id,
@@ -1050,24 +1026,34 @@ function setupRoutes(
               const stMeta = ensureEstado(contato);
               if (msgPhoneNumberId) stMeta.meta_phone_number_id = msgPhoneNumberId;
               if (msgDisplayPhone) stMeta.meta_display_phone_number = msgDisplayPhone;
+              if (rxWabaId) stMeta.waba_id = rxWabaId;  // Novo: salva waba_id no estado
 
-              if (msgPhoneNumberId) {
-                // Persistimos no DB para sobreviver a restart
+              // page_id só pra CTWA, e se resolvido
+              let resolvedPageIdToSave = '';  // Default vazio
+              if (finalClickType === 'CTWA' && isFirstContactForWa) {
+                if (resolvedPageId) {
+                  resolvedPageIdToSave = resolvedPageId;
+                  stMeta.page_id = resolvedPageId;  // Novo: salva page_id no estado
+                }
+              }
+
+              // Persiste no DB (waba_id sempre, page_id se aplicável)
+              if (msgPhoneNumberId || rxWabaId || resolvedPageIdToSave) {
                 pool
                   .query(
-                    'UPDATE contatos SET meta_phone_number_id = $1 WHERE id = $2',
-                    [msgPhoneNumberId, contato]
+                    'UPDATE contatos SET meta_phone_number_id = $1, waba_id = $2, page_id = $3 WHERE id = $4',
+                    [msgPhoneNumberId || stMeta.meta_phone_number_id, rxWabaId, resolvedPageIdToSave || stMeta.page_id || '', contato]
                   )
                   .catch((e) => {
                     console.warn(
-                      '[META][RX] erro ao atualizar meta_phone_number_id no contato',
+                      '[META][RX] erro ao atualizar meta infos no contato',
                       e?.message || e
                     );
                   });
               }
             } catch (e) {
               console.warn(
-                '[META][RX] erro ao propagar meta_phone_number_id para o estado',
+                '[META][RX] erro ao propagar meta infos para o estado',
                 e?.message || e
               );
             }
