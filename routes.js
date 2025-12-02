@@ -254,6 +254,78 @@ async function sendLeadEventToServerGtm({ wa_id, phone, tid, click_type, etapa, 
   }
 }
 
+async function sendQualifiedLeadToServerGtm({ waba_id, wa_id, phone, tid, click_type, is_ctwa, event_time, page_id = '' }) {
+  if (!SERVER_GTM_LEAD_URL) {
+    console.warn('[CAPI][BOT][SKIP] SERVER_GTM_LEAD_URL não configurada para QualifiedLead');
+    return;
+  }
+  if (!wa_id) return;
+  if (!tid) {
+    console.warn('[CAPI][BOT][SKIP] Nenhum TID válido para envio de QualifiedLead');
+    return;
+  }
+
+  const resolvedClickType = click_type || (is_ctwa ? 'CTWA' : 'Orgânico');
+  const phoneRaw = phone || wa_id;
+  const phoneHash = hashPhoneForMeta(phoneRaw);
+
+  const payload = {
+    event_name: 'QualifiedLead',
+    event_time: event_time || Math.floor(Date.now() / 1000),
+
+    // IDs de WhatsApp
+    waba_id: waba_id || '',   // whatsapp_business_account_id (entry.id)
+    wa_id,                    // id do usuário (contato)
+
+    // dados do contato
+    phone: phoneRaw,          // cru (uso interno)
+    phone_hash: phoneHash,    // para CAPI (user_data.ph)
+
+    // tracking
+    tid: tid,
+    click_type: resolvedClickType,       // "CTWA" | "Landing Page" | "Orgânico"
+    is_ctwa: !!is_ctwa,
+    source: 'chat',                      // usado no sGTM -> action_source = "chat"
+    page_id: page_id || '',              // ID da página (adicionado para CTWA)
+
+    // já deixamos pronto pra você usar direto em custom_data na tag CAPI
+    custom_data: {
+      click_type: resolvedClickType,
+      page_id: page_id || ''
+    }
+  };
+
+  console.log(
+    `[CAPI][BOT][TX][QUALIFIED_LEAD] url=${SERVER_GTM_LEAD_URL} page_id=${page_id || '-'} payload=${truncate(
+      JSON.stringify(payload),
+      500
+    )}`
+  );
+
+  try {
+    const resp = await axios.post(
+      SERVER_GTM_LEAD_URL,
+      payload,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-bot-secret': BOT_LEAD_SECRET,
+        },
+        timeout: 10000,
+        validateStatus: () => true,
+      }
+    );
+    console.log(
+      `[CAPI][BOT][RX][QUALIFIED_LEAD] http=${resp.status} body=${truncate(
+        JSON.stringify(resp.data || {}),
+        800
+      )}`
+    );
+  } catch (e) {
+    console.warn(`[CAPI][BOT][ERR][QUALIFIED_LEAD] ${e?.message || e}`);
+  }
+}
+
 const sentContactByWa = new Set();
 const sentIntakeByClid = new Set();
 
@@ -382,14 +454,27 @@ bus.on('evt', async (evt) => {
     const etapa = evt.etapa || '';
     const event_time = evt.ts ? Math.floor(Number(evt.ts) / 1000) : undefined;
 
-    await sendLeadEventToServerGtm({
-      wa_id,
-      phone: evt.phone || wa_id,
-      tid,
-      click_type,
-      etapa,
-      event_time,
-    });
+    if (click_type === 'CTWA') {
+      await sendQualifiedLeadToServerGtm({
+        waba_id: '',
+        wa_id,
+        phone: evt.phone || wa_id,
+        tid,
+        click_type,
+        is_ctwa: true,
+        event_time,
+        page_id: ''
+      });
+    } else if (click_type === 'Landing Page') {
+      await sendLeadEventToServerGtm({
+        wa_id,
+        phone: evt.phone || wa_id,
+        tid,
+        click_type,
+        etapa,
+        event_time,
+      });
+    }
   } catch (e) {
     console.warn('[CAPI][BOT][ERR][LEAD][BUS]', e?.message || e);
   }
