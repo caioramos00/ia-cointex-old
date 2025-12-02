@@ -1026,28 +1026,38 @@ function setupRoutes(
               const stMeta = ensureEstado(contato);
               if (msgPhoneNumberId) stMeta.meta_phone_number_id = msgPhoneNumberId;
               if (msgDisplayPhone) stMeta.meta_display_phone_number = msgDisplayPhone;
+              if (rxWabaId) stMeta.waba_id = rxWabaId;  // Novo: salva waba_id no estado
 
-              if (msgPhoneNumberId) {
-                // Persistimos no DB para sobreviver a restart
+              // page_id só pra CTWA, e se resolvido
+              let resolvedPageIdToSave = '';  // Default vazio
+              if (finalClickType === 'CTWA' && isFirstContactForWa) {
+                if (resolvedPageId) {
+                  resolvedPageIdToSave = resolvedPageId;
+                  stMeta.page_id = resolvedPageId;  // Novo: salva page_id no estado
+                }
+              }
+
+              // Persiste no DB (waba_id sempre, page_id se aplicável)
+              if (msgPhoneNumberId || rxWabaId || resolvedPageIdToSave) {
                 pool
                   .query(
-                    'UPDATE contatos SET meta_phone_number_id = $1 WHERE id = $2',
-                    [msgPhoneNumberId, contato]
+                    'UPDATE contatos SET meta_phone_number_id = $1, waba_id = $2, page_id = $3 WHERE id = $4',
+                    [msgPhoneNumberId || stMeta.meta_phone_number_id, rxWabaId, resolvedPageIdToSave || stMeta.page_id || '', contato]
                   )
                   .catch((e) => {
                     console.warn(
-                      '[META][RX] erro ao atualizar meta_phone_number_id no contato',
+                      '[META][RX] erro ao atualizar meta infos no contato',
                       e?.message || e
                     );
                   });
               }
             } catch (e) {
               console.warn(
-                '[META][RX] erro ao propagar meta_phone_number_id para o estado',
+                '[META][RX] erro ao propagar meta infos para o estado',
                 e?.message || e
               );
             }
-
+            
             // ===== PASSA PRO MOTOR DO BOT =====
             await handleIncomingNormalizedMessage({
               contato,
