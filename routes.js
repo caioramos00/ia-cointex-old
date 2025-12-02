@@ -470,9 +470,8 @@ function setupRoutes(
         manychat_api_token: (req.body.manychat_api_token || '').trim(),
         manychat_fallback_flow_id: (req.body.manychat_fallback_flow_id || '').trim(),
         manychat_webhook_secret: (req.body.manychat_webhook_secret || '').trim(),
-        meta_access_token: (req.body.meta_access_token || '').trim(),
-        meta_phone_number_id: (req.body.meta_phone_number_id || '').trim(),
         contact_token: (req.body.contact_token || '').trim(),
+        graph_api_access_token: (req.body.graph_api_access_token || '').trim(),
       };
       await updateBotSettings(payload);
       res.redirect('/admin/settings?ok=1');
