@@ -254,16 +254,7 @@ async function sendLeadEventToServerGtm({ wa_id, phone, tid, click_type, etapa, 
   }
 }
 
-async function sendQualifiedLeadToServerGtm({
-  waba_id,
-  wa_id,
-  phone,
-  tid,
-  click_type,
-  is_ctwa,
-  event_time,
-  page_id = ''
-}) {
+async function sendQualifiedLeadToServerGtm({ waba_id, wa_id, phone, tid, click_type, is_ctwa, event_time, page_id = '' }) {
   if (!SERVER_GTM_LEAD_URL) {
     console.warn('[CAPI][BOT][SKIP] SERVER_GTM_LEAD_URL não configurada para QualifiedLead');
     return;
@@ -276,32 +267,6 @@ async function sendQualifiedLeadToServerGtm({
 
   const resolvedClickType = click_type || (is_ctwa ? 'CTWA' : 'Orgânico');
   const phoneRaw = phone || wa_id;
-
-  let finalPageId = page_id || '';
-
-  if (!finalPageId && resolvedClickType === 'CTWA') {
-    try {
-      const contatoId = onlyDigits(phoneRaw || '');
-      const stMeta = contatoId ? estadoContatos[contatoId] : null;
-
-      if (stMeta && stMeta.page_id) {
-        finalPageId = stMeta.page_id;
-        console.log(
-          `[CAPI][BOT][QUALIFIED_LEAD] page_id recuperado da memória para contato=${contatoId}: ${finalPageId}`
-        );
-      } else {
-        console.log(
-          `[CAPI][BOT][QUALIFIED_LEAD] Nenhum page_id em memória para contato=${contatoId || '-'}`
-        );
-      }
-    } catch (e) {
-      console.warn(
-        '[CAPI][BOT][WARN][QUALIFIED_LEAD] Falha ao recuperar page_id da memória:',
-        e?.message || e
-      );
-    }
-  }
-
   const phoneHash = hashPhoneForMeta(phoneRaw);
 
   const payload = {
@@ -321,17 +286,17 @@ async function sendQualifiedLeadToServerGtm({
     click_type: resolvedClickType,       // "CTWA" | "Landing Page" | "Orgânico"
     is_ctwa: !!is_ctwa,
     source: 'chat',                      // usado no sGTM -> action_source = "chat"
-    page_id: finalPageId || '',          // ID da página (vindo do param OU memória)
+    page_id: page_id || '',              // ID da página (adicionado para CTWA)
 
     // já deixamos pronto pra você usar direto em custom_data na tag CAPI
     custom_data: {
       click_type: resolvedClickType,
-      page_id: finalPageId || ''
+      page_id: page_id || ''
     }
   };
 
   console.log(
-    `[CAPI][BOT][TX][QUALIFIED_LEAD] url=${SERVER_GTM_LEAD_URL} page_id=${finalPageId || '-'} payload=${truncate(
+    `[CAPI][BOT][TX][QUALIFIED_LEAD] url=${SERVER_GTM_LEAD_URL} page_id=${page_id || '-'} payload=${truncate(
       JSON.stringify(payload),
       500
     )}`
