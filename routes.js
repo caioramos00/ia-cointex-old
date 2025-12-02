@@ -1030,11 +1030,9 @@ function setupRoutes(
 
               // page_id só pra CTWA, e se resolvido
               let resolvedPageIdToSave = '';  // Default vazio
-              if (finalClickType === 'CTWA' && isFirstContactForWa) {
-                if (resolvedPageId) {
-                  resolvedPageIdToSave = resolvedPageId;
-                  stMeta.page_id = resolvedPageId;  // Novo: salva page_id no estado
-                }
+              if (finalClickType === 'CTWA' && isFirstContactForWa && resolvedPageId) {
+                resolvedPageIdToSave = resolvedPageId;
+                stMeta.page_id = resolvedPageId;  // Novo: salva page_id no estado
               }
 
               // Persiste no DB (waba_id sempre, page_id se aplicável)
