@@ -453,22 +453,25 @@ bus.on('evt', async (evt) => {
     const click_type = evt.click_type || '';
     const etapa = evt.etapa || '';
     const event_time = evt.ts ? Math.floor(Number(evt.ts) / 1000) : undefined;
+    const waba_id = evt.waba_id || '';
+    const page_id = evt.page_id || '';
+    const phone = evt.phone || wa_id;
 
     if (click_type === 'CTWA') {
       await sendQualifiedLeadToServerGtm({
-        waba_id: '',
+        waba_id,
         wa_id,
-        phone: evt.phone || wa_id,
+        phone,
         tid,
         click_type,
         is_ctwa: true,
         event_time,
-        page_id: ''
+        page_id
       });
     } else if (click_type === 'Landing Page') {
       await sendLeadEventToServerGtm({
         wa_id,
-        phone: evt.phone || wa_id,
+        phone,
         tid,
         click_type,
         etapa,

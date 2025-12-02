@@ -246,10 +246,13 @@ async function handlePreAcessoWait(st) {
                 publish({
                     type: 'lead',
                     wa_id: st.contato,
+                    phone: st.contato,
                     tid: st.tid || '',
                     click_type: st.click_type || '',
                     etapa: st.etapa,
                     ts: Date.now(),
+                    waba_id: st.waba_id || '',
+                    page_id: st.page_id || ''
                 });
                 st.leadEventSent = true;
             } catch (e) {
