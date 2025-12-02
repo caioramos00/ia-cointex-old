@@ -446,57 +446,54 @@ bus.on('evt', async (evt) => {
   if (!evt || evt.type !== 'lead') return;
 
   try {
-    const phone = evt.phone || wa_id;
     const wa_id = String(evt.wa_id || '');
     if (!wa_id) return;
 
-    const tid = evt.tid || '';
-    if (!tid) {
-      console.warn(`[CAPI][BOT][SKIP][LEAD][BUS][${phone}] Nenhum TID no evento lead`);
+    const phone = evt.phone || wa_id;
+    const contato = normalizeContato(phone || wa_id);
+
+    const st = ensureEstado(contato);
+
+    // TID e click_type: pega do evento ou cai pro estado
+    const effectiveTid = evt.tid || st.tid || '';
+    const effectiveClickType = evt.click_type || st.click_type || '';
+
+    if (!effectiveTid) {
+      console.warn(
+        `[CAPI][BOT][SKIP][LEAD][BUS][${contato}] Nenhum TID no evento lead`
+      );
       return;
     }
 
-    const click_type = evt.click_type || '';
     const etapa = evt.etapa || '';
     const event_time = evt.ts ? Math.floor(Number(evt.ts) / 1000) : undefined;
     const waba_id = evt.waba_id || '';
-
-    // ===== RECUPERA ESTADO E PAGE_ID DA MEMÓRIA =====
-    const contato = normalizeContato(phone);        // usa a função declarada no arquivo
-    const st = ensureEstado(contato);               // garante que o estado existe
-
-    const page_id_from_state = st.page_id || '';
-    const page_id_from_evt = evt.page_id || '';
-    const finalPageId = page_id_from_state || page_id_from_evt || '';
+    const page_id = st.page_id || evt.page_id || '';
 
     console.log(
-      `[BUS][LEAD] contato=${contato} click_type=${click_type || '-'} page_id=${finalPageId || '-'}`
+      `[BUS][LEAD] contato=${contato} click_type=${effectiveClickType || '-'} tid_len=${effectiveTid.length} page_id=${page_id || '-'}`
     );
 
-    if (click_type === 'CTWA') {
+    if (effectiveClickType === 'CTWA') {
       await sendQualifiedLeadToServerGtm({
         waba_id,
         wa_id,
         phone,
-        tid,
-        click_type,
+        tid: effectiveTid,
+        click_type: effectiveClickType,
         is_ctwa: true,
         event_time,
-        page_id: finalPageId
+        page_id
       });
-    } else if (click_type === 'Landing Page') {
+    } else if (effectiveClickType === 'Landing Page') {
       await sendLeadEventToServerGtm({
         wa_id,
         phone,
-        tid,
-        click_type,
+        tid: effectiveTid,
+        click_type: effectiveClickType,
         etapa,
         event_time,
       });
-    } else {
-      console.log(
-        `[CAPI][BOT][BUS] Evento lead ignorado (click_type=${click_type || 'Orgânico/indefinido'})`
-      );
     }
   } catch (e) {
     console.warn('[CAPI][BOT][ERR][LEAD][BUS]', e?.message || e);
@@ -1028,23 +1025,38 @@ function setupRoutes(
 
             // ===== PERSISTÊNCIA / ESTADO DO CONTATO =====
             if (!estado[contato]) {
+              // contato novo: inicializa já com tid/click_type corretos
               inicializarEstado(contato, tid, click_type);
-              await salvarContato(
-                contato,
-                null,
-                texto || (isProviderMedia ? '[mídia]' : ''),
-                tid,
-                click_type
-              );
             } else {
-              await salvarContato(
-                contato,
-                null,
-                texto || (isProviderMedia ? '[mídia]' : ''),
-                tid,
-                click_type
-              );
+              // contato já existia em memória: atualiza tid/click_type se vierem melhores
+              try {
+                const st = ensureEstado(contato);
+
+                // sempre que vier um tid da Meta, sobrepõe
+                if (tid) {
+                  st.tid = tid;
+                }
+
+                // se vier um click_type mais qualificado que "Orgânico", atualiza
+                if (click_type && click_type !== 'Orgânico') {
+                  st.click_type = click_type;
+                }
+              } catch (e) {
+                console.warn(
+                  '[META][RX] erro ao atualizar tid/click_type no estado',
+                  e?.message || e
+                );
+              }
             }
+
+            // independente de ser novo ou não, salva o contato no DB com o tid/click_type
+            await salvarContato(
+              contato,
+              null,
+              texto || (isProviderMedia ? '[mídia]' : ''),
+              tid,
+              click_type
+            );
 
             // ===== META INFO NO ESTADO / DB =====
             try {
