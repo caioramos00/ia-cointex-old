@@ -136,7 +136,7 @@ async function sendLeadSubmittedEventToServerGtm({ waba_id, wa_id, phone, tid, c
   const phoneHash = hashPhoneForMeta(phoneRaw);
 
   const payload = {
-    event_name: 'LeadSubmitted',
+    event_name: 'lead_submitted',
     event_time: event_time || Math.floor(Date.now() / 1000),
 
     // IDs de WhatsApp
