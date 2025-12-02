@@ -270,7 +270,7 @@ async function sendQualifiedLeadToServerGtm({ waba_id, wa_id, phone, tid, click_
   const phoneHash = hashPhoneForMeta(phoneRaw);
 
   const payload = {
-    event_name: 'qualified_',
+    event_name: 'qualified_lead',
     event_time: event_time || Math.floor(Date.now() / 1000),
 
     // IDs de WhatsApp
