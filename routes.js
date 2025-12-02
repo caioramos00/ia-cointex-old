@@ -974,6 +974,12 @@ function setupRoutes(
                       stMeta.page_id = resolvedPageId;   // só memória (estado do processo)
                     }
 
+                    const st = estado[contato];
+
+                    console.log(
+                      `[PAGE_ID] ${st.page_id}`
+                    );
+
                     await sendLeadSubmittedEventToServerGtm({
                       waba_id: rxWabaId,
                       wa_id,
