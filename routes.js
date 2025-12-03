@@ -281,7 +281,6 @@ async function sendQualifiedLeadToServerGtm({ waba_id, wa_id, phone, tid, click_
     phone: phoneRaw,          // cru (uso interno)
     phone_hash: phoneHash,    // para CAPI (user_data.ph)
 
-    // tracking
     tid: tid,
     click_type: resolvedClickType,       // "CTWA" | "Landing Page" | "Orgânico"
     is_ctwa: !!is_ctwa,
