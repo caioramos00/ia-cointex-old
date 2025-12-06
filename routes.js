@@ -231,51 +231,36 @@ async function sendLeadSubmittedEventToServerGtm({
     source: 'chat',
     page_id: page_id || '',
 
-    // opcional: já manda pronto pro sGTM montar user_data da CAPI
-    user_data: {
-      ph: phoneHash,
-      ctwa_clid: tid || '',
-      page_id: page_id || '',
-      external_id: tid || '',
-    },
+    // dados do anúncio CTWA (referral)
+    ctwa_source_url: referral?.source_url || '',
+    ctwa_source_id: referral?.source_id || '',
+    ctwa_source_type: referral?.source_type || '',
+    ctwa_body: referral?.body || '',
+    ctwa_headline: referral?.headline || '',
+    ctwa_media_type: referral?.media_type || '',
+    ctwa_video_url: referral?.video_url || '',
+    ctwa_thumbnail_url: referral?.thumbnail_url || '',
+    ctwa_welcome_message: referral?.welcome_message?.text || '',
 
-    // já deixamos pronto pra você usar direto em custom_data na tag CAPI
-    custom_data: {
-      // tracking / identificação básica
-      click_type: resolvedClickType,
-      source: 'chat',
-      whatsapp_business_account_id: whatsapp_business_account_id || '',
-      wa_id,
-      meta_phone_number_id: meta_phone_number_id || '',
-      meta_display_phone_number: meta_display_phone_number || '',
-      lead_profile_name: contact_profile_name || '',
+    // dados da mensagem que gerou o lead_submitted
+    message_id: message?.id || '',
+    message_timestamp: message?.timestamp
+      ? Number(message.timestamp)
+      : (event_time || Math.floor(Date.now() / 1000)),
+    message_type: message?.type || '',
+    message_text: isTextMsg ? safeStr(message?.text?.body || '') : '',
 
-      // dados do anúncio CTWA (referral)
-      ctwa_source_url: referral?.source_url || '',
-      ctwa_source_id: referral?.source_id || '',
-      ctwa_source_type: referral?.source_type || '',
-      ctwa_body: referral?.body || '',
-      ctwa_headline: referral?.headline || '',
-      ctwa_media_type: referral?.media_type || '',
-      ctwa_video_url: referral?.video_url || '',
-      ctwa_thumbnail_url: referral?.thumbnail_url || '',
-      ctwa_welcome_message: referral?.welcome_message?.text || '',
+    // se for áudio, detalhes extras (agora com '' ou false em vez de undefined para evitar omissão no JSON)
+    audio_mime_type: isAudioMsg ? (message.audio?.mime_type || '') : '',
+    audio_sha256: isAudioMsg ? (message.audio?.sha256 || '') : '',
+    audio_id: isAudioMsg ? (message.audio?.id || '') : '',
+    audio_url: isAudioMsg ? (message.audio?.url || '') : '',
+    audio_is_voice: isAudioMsg ? !!message.audio?.voice : false,
 
-      // dados da mensagem que gerou o lead_submitted
-      message_id: message?.id || '',
-      message_timestamp: message?.timestamp
-        ? Number(message.timestamp)
-        : (event_time || Math.floor(Date.now() / 1000)),
-      message_type: message?.type || '',
-      message_text: isTextMsg ? safeStr(message?.text?.body || '') : '',
-
-      // se for áudio, detalhes extras (agora com '' ou false em vez de undefined para evitar omissão no JSON)
-      audio_mime_type: isAudioMsg ? (message.audio?.mime_type || '') : '',
-      audio_sha256: isAudioMsg ? (message.audio?.sha256 || '') : '',
-      audio_id: isAudioMsg ? (message.audio?.id || '') : '',
-      audio_url: isAudioMsg ? (message.audio?.url || '') : '',
-      audio_is_voice: isAudioMsg ? !!message.audio?.voice : false,
-    },
+    // campos de user_data no nível raiz
+    ph: phoneHash,
+    ctwa_clid: tid || '',
+    external_id: tid || '',
   };
 
   console.log(
@@ -452,25 +437,10 @@ async function sendQualifiedLeadToServerGtm({
     page_id: page_id || '',
     etapa: etapa || '',
 
-    user_data: {
-      ph: phoneHash,
-      ctwa_clid: tid || '',
-      page_id: page_id || '',
-      external_id: tid || '',
-    },
-
-    custom_data: {
-      click_type: resolvedClickType,
-      source: 'chat',
-      etapa: etapa || '',
-      ctwa_clid: tid || '',
-      page_id: page_id || '',
-      whatsapp_business_account_id: whatsapp_business_account_id || '',
-      wa_id,
-      meta_phone_number_id: meta_phone_number_id || '',
-      meta_display_phone_number: meta_display_phone_number || '',
-      lead_profile_name: contact_profile_name || '',
-    },
+    // campos de user_data no nível raiz
+    ph: phoneHash,
+    ctwa_clid: tid || '',
+    external_id: tid || '',
   };
 
   console.log(
