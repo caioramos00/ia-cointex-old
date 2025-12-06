@@ -1024,7 +1024,6 @@ function setupRoutes(
     let rxPhoneNumberId = '';
     let rxDisplayPhone = '';
 
-    // LOG: payload completo de recebimento (Meta Webhook)
     try {
       const e = ((body || {}).entry || [])[0] || {};
       const c = ((e.changes || [])[0]) || {};
