@@ -26,7 +26,19 @@ const BOT_CONTACT_SECRET = 'SENHASECRETA'
 const SERVER_GTM_LEAD_URL = process.env.SERVER_GTM_LEAD_URL || SERVER_GTM_CONTACT_URL;
 const BOT_LEAD_SECRET = process.env.BOT_LEAD_SECRET || BOT_CONTACT_SECRET;
 
-async function sendContactEventToServerGtm({ whatsapp_business_account_id, wa_id, phone, tid, click_type, is_ctwa, event_time }) {
+async function sendContactEventToServerGtm({
+  whatsapp_business_account_id,
+  wa_id,
+  phone,
+  tid,
+  click_type,
+  is_ctwa,
+  event_time,
+  meta_phone_number_id = '',
+  meta_display_phone_number = '',
+  lead_profile_name = '',
+  message = {},
+}) {
   if (!SERVER_GTM_CONTACT_URL) {
     console.warn('[CAPI][BOT][SKIP] SERVER_GTM_CONTACT_URL não configurada');
     return;
@@ -41,27 +53,72 @@ async function sendContactEventToServerGtm({ whatsapp_business_account_id, wa_id
   const phoneRaw = phone || wa_id;
   const phoneHash = hashPhoneForMeta(phoneRaw);
 
+  const isTextMsg = message?.type === 'text';
+  const isAudioMsg = message?.type === 'audio';
+
   const payload = {
     event_name: 'contact',
     event_time: event_time || Math.floor(Date.now() / 1000),
 
     // IDs de WhatsApp
-    whatsapp_business_account_id: whatsapp_business_account_id || '',   // whatsapp_business_account_id (entry.id)
-    wa_id,                    // id do usuário (contato)
+    whatsapp_business_account_id: whatsapp_business_account_id || '',
+    wa_id,
+    meta_phone_number_id: meta_phone_number_id || '',
+    meta_display_phone_number: meta_display_phone_number || '',
 
     // dados do contato
-    phone: phoneRaw,          // cru (uso interno)
-    phone_hash: phoneHash,    // para CAPI (user_data.ph)
+    phone: phoneRaw,
+    phone_hash: phoneHash,
+    lead_profile_name: lead_profile_name || '',
 
     // tracking
     tid: tid,
-    click_type: resolvedClickType,       // "CTWA" | "Landing Page" | "Orgânico"
+    click_type: resolvedClickType,
     is_ctwa: !!is_ctwa,
-    source: 'chat',                      // usado no sGTM -> action_source = "chat"
+    source: 'chat',
+
+    // opcional: já manda pronto pro sGTM montar user_data da CAPI
+    user_data: {
+      ph: phoneHash,
+      external_id: tid || '',
+    },
 
     // já deixamos pronto pra você usar direto em custom_data na tag CAPI
     custom_data: {
-      click_type: resolvedClickType
+      // tracking / identificação básica
+      click_type: resolvedClickType,
+      source: 'chat',
+      whatsapp_business_account_id: whatsapp_business_account_id || '',
+      wa_id,
+      meta_phone_number_id: meta_phone_number_id || '',
+      meta_display_phone_number: meta_display_phone_number || '',
+      lead_profile_name: lead_profile_name || '',
+
+      // dados do anúncio CTWA (referral) — vazios para Landing Page
+      ctwa_source_url: '',
+      ctwa_source_id: '',
+      ctwa_source_type: '',
+      ctwa_body: '',
+      ctwa_headline: '',
+      ctwa_media_type: '',
+      ctwa_video_url: '',
+      ctwa_thumbnail_url: '',
+      ctwa_welcome_message: '',
+
+      // dados da mensagem que gerou o contact
+      message_id: message?.id || '',
+      message_timestamp: message?.timestamp
+        ? Number(message.timestamp)
+        : (event_time || Math.floor(Date.now() / 1000)),
+      message_type: message?.type || '',
+      message_text: isTextMsg ? safeStr(message?.text?.body || '') : '',
+
+      // se for áudio, detalhes extras (undefined não aparece no JSON)
+      audio_mime_type: isAudioMsg ? (message.audio?.mime_type || '') : undefined,
+      audio_sha256: isAudioMsg ? (message.audio?.sha256 || '') : undefined,
+      audio_id: isAudioMsg ? (message.audio?.id || '') : undefined,
+      audio_url: isAudioMsg ? (message.audio?.url || '') : undefined,
+      audio_is_voice: isAudioMsg ? !!message.audio?.voice : undefined,
     }
   };
 
@@ -179,6 +236,7 @@ async function sendLeadSubmittedEventToServerGtm({
       ph: phoneHash,
       ctwa_clid: tid || '',
       page_id: page_id || '',
+      external_id: tid || '',
     },
 
     // já deixamos pronto pra você usar direto em custom_data na tag CAPI
@@ -247,7 +305,18 @@ async function sendLeadSubmittedEventToServerGtm({
   }
 }
 
-async function sendLeadEventToServerGtm({ wa_id, phone, tid, click_type, etapa, event_time }) {
+async function sendLeadEventToServerGtm({
+  wa_id,
+  phone,
+  tid,
+  click_type,
+  etapa,
+  event_time,
+  whatsapp_business_account_id = '',
+  meta_phone_number_id = '',
+  meta_display_phone_number = '',
+  lead_profile_name = '',
+}) {
   if (!SERVER_GTM_LEAD_URL) {
     console.warn('[CAPI][BOT][SKIP] SERVER_GTM_LEAD_URL não configurada');
     return;
@@ -262,19 +331,42 @@ async function sendLeadEventToServerGtm({ wa_id, phone, tid, click_type, etapa, 
     event_name: 'lead',
     event_time: event_time || Math.floor(Date.now() / 1000),
 
+    // IDs de WhatsApp
+    whatsapp_business_account_id: whatsapp_business_account_id || '',
     wa_id,
+    meta_phone_number_id: meta_phone_number_id || '',
+    meta_display_phone_number: meta_display_phone_number || '',
 
+    // dados do contato
     phone: phoneRaw,
     phone_hash: phoneHash,
+    lead_profile_name: lead_profile_name || '',
 
+    // tracking
     tid: tid || '',
     click_type: resolvedClickType,
     etapa: etapa || 'acesso:send',
     source: 'chat',
 
+    // opcional: já manda pronto pro sGTM montar user_data da CAPI
+    user_data: {
+      ph: phoneHash,
+      external_id: tid || '',
+    },
+
+    // já deixamos pronto pra você usar direto em custom_data na tag CAPI
     custom_data: {
+      // tracking / identificação básica
       click_type: resolvedClickType,
+      source: 'chat',
       etapa: etapa || 'acesso:send',
+      ctwa_clid: tid || '',
+      page_id: '',
+      whatsapp_business_account_id: whatsapp_business_account_id || '',
+      wa_id,
+      meta_phone_number_id: meta_phone_number_id || '',
+      meta_display_phone_number: meta_display_phone_number || '',
+      lead_profile_name: lead_profile_name || '',
     },
   };
 
@@ -365,6 +457,7 @@ async function sendQualifiedLeadToServerGtm({
       ph: phoneHash,
       ctwa_clid: tid || '',
       page_id: page_id || '',
+      external_id: tid || '',
     },
 
     // custom_data rico pra análise / debug
