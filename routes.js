@@ -186,8 +186,6 @@ async function sendLeadSubmittedEventToServerGtm({
       // tracking / identificação básica
       click_type: resolvedClickType,
       source: 'chat',
-      ctwa_clid: tid || '',
-      page_id: page_id || '',
       whatsapp_business_account_id: whatsapp_business_account_id || '',
       wa_id,
       meta_phone_number_id: meta_phone_number_id || '',
