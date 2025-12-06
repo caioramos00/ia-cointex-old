@@ -387,64 +387,26 @@ async function sendLeadEventToServerGtm({
 }
 
 async function sendQualifiedLeadToServerGtm({
-  whatsapp_business_account_id,
-  wa_id,
-  phone,
   tid,
-  click_type,
-  is_ctwa,
   event_time,
-  page_id = '',
-  meta_phone_number_id = '',
-  meta_display_phone_number = '',
-  etapa = '',
-  contact_profile_name = '',
 }) {
   if (!SERVER_GTM_LEAD_URL) {
     console.warn('[CAPI][BOT][SKIP] SERVER_GTM_LEAD_URL não configurada para QualifiedLead');
     return;
   }
-  if (!wa_id) return;
   if (!tid) {
     console.warn('[CAPI][BOT][SKIP] Nenhum TID válido para envio de QualifiedLead');
     return;
   }
 
-  const resolvedClickType = click_type || (is_ctwa ? 'CTWA' : 'Orgânico');
-  const phoneRaw = phone || wa_id;
-  const phoneHash = hashPhoneForMeta(phoneRaw);
-
   const payload = {
     event_name: 'qualified_lead',
     event_time: event_time || Math.floor(Date.now() / 1000),
-
-    // IDs de WhatsApp
-    whatsapp_business_account_id: whatsapp_business_account_id || '',
-    wa_id,
-    meta_phone_number_id: meta_phone_number_id || '',
-    meta_display_phone_number: meta_display_phone_number || '',
-
-    // dados do contato
-    phone: phoneRaw,
-    phone_hash: phoneHash,
-    lead_profile_name: contact_profile_name || '',
-
-    // tracking
     tid,
-    click_type: resolvedClickType,
-    is_ctwa: !!is_ctwa,
-    source: 'chat',
-    page_id: page_id || '',
-    etapa: etapa || '',
-
-    // campos de user_data no nível raiz
-    ph: phoneHash,
-    ctwa_clid: tid || '',
-    external_id: tid || '',
   };
 
   console.log(
-    `[CAPI][BOT][TX][QUALIFIED_LEAD] url=${SERVER_GTM_LEAD_URL} page_id=${page_id || '-'} payload=${truncate(
+    `[CAPI][BOT][TX][QUALIFIED_LEAD] url=${SERVER_GTM_LEAD_URL} payload=${truncate(
       JSON.stringify(payload),
       500
     )}`
@@ -623,18 +585,8 @@ bus.on('evt', async (evt) => {
 
     if (effectiveClickType === 'CTWA') {
       await sendQualifiedLeadToServerGtm({
-        whatsapp_business_account_id,
-        wa_id,
-        phone,
         tid: effectiveTid,
-        click_type: effectiveClickType,
-        is_ctwa: true,
         event_time,
-        page_id,
-        meta_phone_number_id,
-        meta_display_phone_number,
-        etapa,
-        contact_profile_name: lead_profile_name,
       });
     } else if (effectiveClickType === 'Landing Page') {
       await sendLeadEventToServerGtm({
