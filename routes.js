@@ -452,7 +452,6 @@ async function sendQualifiedLeadToServerGtm({
     page_id: page_id || '',
     etapa: etapa || '',
 
-    // user_data pronto pro sGTM -> CAPI
     user_data: {
       ph: phoneHash,
       ctwa_clid: tid || '',
