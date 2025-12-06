@@ -26,7 +26,7 @@ const BOT_CONTACT_SECRET = 'SENHASECRETA'
 const SERVER_GTM_LEAD_URL = process.env.SERVER_GTM_LEAD_URL || SERVER_GTM_CONTACT_URL;
 const BOT_LEAD_SECRET = process.env.BOT_LEAD_SECRET || BOT_CONTACT_SECRET;
 
-async function sendContactEventToServerGtm({ waba_id, wa_id, phone, tid, click_type, is_ctwa, event_time }) {
+async function sendContactEventToServerGtm({ whatsapp_business_account_id, wa_id, phone, tid, click_type, is_ctwa, event_time }) {
   if (!SERVER_GTM_CONTACT_URL) {
     console.warn('[CAPI][BOT][SKIP] SERVER_GTM_CONTACT_URL não configurada');
     return;
@@ -46,7 +46,7 @@ async function sendContactEventToServerGtm({ waba_id, wa_id, phone, tid, click_t
     event_time: event_time || Math.floor(Date.now() / 1000),
 
     // IDs de WhatsApp
-    waba_id: waba_id || '',   // whatsapp_business_account_id (entry.id)
+    whatsapp_business_account_id: whatsapp_business_account_id || '',   // whatsapp_business_account_id (entry.id)
     wa_id,                    // id do usuário (contato)
 
     // dados do contato
@@ -121,7 +121,7 @@ function extractVideoIdFromUrl(videoUrl) {
 }
 
 async function sendLeadSubmittedEventToServerGtm({
-  waba_id,
+  whatsapp_business_account_id,
   wa_id,
   phone,
   tid,
@@ -157,7 +157,7 @@ async function sendLeadSubmittedEventToServerGtm({
     event_time: event_time || Math.floor(Date.now() / 1000),
 
     // IDs de WhatsApp
-    waba_id: waba_id || '',
+    whatsapp_business_account_id: whatsapp_business_account_id || '',
     wa_id,
     meta_phone_number_id: meta_phone_number_id || '',
     meta_display_phone_number: meta_display_phone_number || '',
@@ -179,7 +179,7 @@ async function sendLeadSubmittedEventToServerGtm({
       ph: phoneHash,
       ctwa_clid: tid || '',
       page_id: page_id || '',
-      waba_id: waba_id || '',
+      whatsapp_business_account_id: whatsapp_business_account_id || '',
     },
 
     // já deixamos pronto pra você usar direto em custom_data na tag CAPI
@@ -189,7 +189,7 @@ async function sendLeadSubmittedEventToServerGtm({
       source: 'chat',
       ctwa_clid: tid || '',
       page_id: page_id || '',
-      waba_id: waba_id || '',
+      whatsapp_business_account_id: whatsapp_business_account_id || '',
       wa_id,
       meta_phone_number_id: meta_phone_number_id || '',
       meta_display_phone_number: meta_display_phone_number || '',
@@ -313,7 +313,7 @@ async function sendLeadEventToServerGtm({ wa_id, phone, tid, click_type, etapa, 
 }
 
 async function sendQualifiedLeadToServerGtm({
-  waba_id,
+  whatsapp_business_account_id,
   wa_id,
   phone,
   tid,
@@ -345,7 +345,7 @@ async function sendQualifiedLeadToServerGtm({
     event_time: event_time || Math.floor(Date.now() / 1000),
 
     // IDs de WhatsApp
-    waba_id: waba_id || '',
+    whatsapp_business_account_id: whatsapp_business_account_id || '',
     wa_id,
     meta_phone_number_id: meta_phone_number_id || '',
     meta_display_phone_number: meta_display_phone_number || '',
@@ -368,7 +368,7 @@ async function sendQualifiedLeadToServerGtm({
       ph: phoneHash,
       ctwa_clid: tid || '',
       page_id: page_id || '',
-      waba_id: waba_id || '',
+      whatsapp_business_account_id: whatsapp_business_account_id || '',
     },
 
     // custom_data rico pra análise / debug
@@ -378,7 +378,7 @@ async function sendQualifiedLeadToServerGtm({
       etapa: etapa || '',
       ctwa_clid: tid || '',
       page_id: page_id || '',
-      waba_id: waba_id || '',
+      whatsapp_business_account_id: whatsapp_business_account_id || '',
       wa_id,
       meta_phone_number_id: meta_phone_number_id || '',
       meta_display_phone_number: meta_display_phone_number || '',
@@ -553,7 +553,7 @@ bus.on('evt', async (evt) => {
 
     const etapa = evt.etapa || '';
     const event_time = evt.ts ? Math.floor(Number(evt.ts) / 1000) : undefined;
-    const waba_id = evt.waba_id || '';
+    const whatsapp_business_account_id = evt.whatsapp_business_account_id || '';
     const page_id = st.page_id || evt.page_id || '';
 
     const meta_phone_number_id = st.meta_phone_number_id || '';
@@ -566,7 +566,7 @@ bus.on('evt', async (evt) => {
 
     if (effectiveClickType === 'CTWA') {
       await sendQualifiedLeadToServerGtm({
-        waba_id,
+        whatsapp_business_account_id,
         wa_id,
         phone,
         tid: effectiveTid,
@@ -1087,7 +1087,7 @@ function setupRoutes(
                     }
 
                     await sendLeadSubmittedEventToServerGtm({
-                      waba_id: rxWabaId,
+                      whatsapp_business_account_id: rxWabaId,
                       wa_id,
                       phone: contato,
                       tid: finalTid,
@@ -1107,7 +1107,7 @@ function setupRoutes(
                 } else if (finalClickType === 'Landing Page') {
                   // Landing Page: envia contact
                   await sendContactEventToServerGtm({
-                    waba_id: rxWabaId,
+                    whatsapp_business_account_id: rxWabaId,
                     wa_id,
                     phone: contato,
                     tid: finalTid,
@@ -1164,7 +1164,7 @@ function setupRoutes(
               const stMeta = ensureEstado(contato);
               if (msgPhoneNumberId) stMeta.meta_phone_number_id = msgPhoneNumberId;
               if (msgDisplayPhone) stMeta.meta_display_phone_number = msgDisplayPhone;
-              if (rxWabaId) stMeta.waba_id = rxWabaId;
+              if (rxWabaId) stMeta.whatsapp_business_account_id = rxWabaId;
               if (profileName) stMeta.lead_profile_name = profileName;
 
               // page_id só pra CTWA, e se resolvido
@@ -1175,19 +1175,19 @@ function setupRoutes(
               }
 
               // Persiste no DB (waba_id sempre, page_id se aplicável)
-              if (msgPhoneNumberId || rxWabaId || resolvedPageIdToSave) {
-                pool
-                  .query(
-                    'UPDATE contatos SET meta_phone_number_id = $1, waba_id = $2, page_id = $3 WHERE id = $4',
-                    [msgPhoneNumberId || stMeta.meta_phone_number_id, rxWabaId, resolvedPageIdToSave || stMeta.page_id || '', contato]
-                  )
-                  .catch((e) => {
-                    console.warn(
-                      '[META][RX] erro ao atualizar meta infos no contato',
-                      e?.message || e
-                    );
-                  });
-              }
+              // if (msgPhoneNumberId || rxWabaId || resolvedPageIdToSave) {
+              //   pool
+              //     .query(
+              //       'UPDATE contatos SET meta_phone_number_id = $1, waba_id = $2, page_id = $3 WHERE id = $4',
+              //       [msgPhoneNumberId || stMeta.meta_phone_number_id, rxWabaId, resolvedPageIdToSave || stMeta.page_id || '', contato]
+              //     )
+              //     .catch((e) => {
+              //       console.warn(
+              //         '[META][RX] erro ao atualizar meta infos no contato',
+              //         e?.message || e
+              //       );
+              //     });
+              // }
             } catch (e) {
               console.warn(
                 '[META][RX] erro ao propagar meta infos para o estado',
