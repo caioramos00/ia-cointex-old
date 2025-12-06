@@ -120,7 +120,21 @@ function extractVideoIdFromUrl(videoUrl) {
   return '';
 }
 
-async function sendLeadSubmittedEventToServerGtm({ waba_id, wa_id, phone, tid, click_type, is_ctwa, event_time, page_id = '' }) {
+async function sendLeadSubmittedEventToServerGtm({
+  waba_id,
+  wa_id,
+  phone,
+  tid,
+  click_type,
+  is_ctwa,
+  event_time,
+  page_id = '',
+  meta_phone_number_id = '',
+  meta_display_phone_number = '',
+  referral = {},
+  message = {},
+  contact_profile_name = '',
+}) {
   if (!SERVER_GTM_LEAD_URL) {
     console.warn('[CAPI][BOT][SKIP] SERVER_GTM_LEAD_URL não configurada para LeadSubmitted');
     return;
@@ -135,30 +149,79 @@ async function sendLeadSubmittedEventToServerGtm({ waba_id, wa_id, phone, tid, c
   const phoneRaw = phone || wa_id;
   const phoneHash = hashPhoneForMeta(phoneRaw);
 
+  const isTextMsg = message?.type === 'text';
+  const isAudioMsg = message?.type === 'audio';
+
   const payload = {
     event_name: 'lead_submitted',
     event_time: event_time || Math.floor(Date.now() / 1000),
 
     // IDs de WhatsApp
-    waba_id: waba_id || '',   // whatsapp_business_account_id (entry.id)
-    wa_id,                    // id do usuário (contato)
+    waba_id: waba_id || '',
+    wa_id,
+    meta_phone_number_id: meta_phone_number_id || '',
+    meta_display_phone_number: meta_display_phone_number || '',
 
     // dados do contato
-    phone: phoneRaw,          // cru (uso interno)
-    phone_hash: phoneHash,    // para CAPI (user_data.ph)
+    phone: phoneRaw,
+    phone_hash: phoneHash,
+    lead_profile_name: contact_profile_name || '',
 
     // tracking
-    tid: tid,
-    click_type: resolvedClickType,       // "CTWA" | "Landing Page" | "Orgânico"
+    tid,
+    click_type: resolvedClickType,
     is_ctwa: !!is_ctwa,
-    source: 'chat',                      // usado no sGTM -> action_source = "chat"
-    page_id: page_id || '',              // ID da página (adicionado para CTWA)
+    source: 'chat',
+    page_id: page_id || '',
+
+    // opcional: já manda pronto pro sGTM montar user_data da CAPI
+    user_data: {
+      ph: phoneHash,
+      ctwa_clid: tid || '',
+      page_id: page_id || '',
+      wa_id,
+      waba_id: waba_id || '',
+    },
 
     // já deixamos pronto pra você usar direto em custom_data na tag CAPI
     custom_data: {
+      // tracking / identificação básica
       click_type: resolvedClickType,
-      page_id: page_id || ''
-    }
+      source: 'chat',
+      ctwa_clid: tid || '',
+      page_id: page_id || '',
+      waba_id: waba_id || '',
+      wa_id,
+      meta_phone_number_id: meta_phone_number_id || '',
+      meta_display_phone_number: meta_display_phone_number || '',
+      lead_profile_name: contact_profile_name || '',
+
+      // dados do anúncio CTWA (referral)
+      ctwa_source_url: referral?.source_url || '',
+      ctwa_source_id: referral?.source_id || '',
+      ctwa_source_type: referral?.source_type || '',
+      ctwa_body: referral?.body || '',
+      ctwa_headline: referral?.headline || '',
+      ctwa_media_type: referral?.media_type || '',
+      ctwa_video_url: referral?.video_url || '',
+      ctwa_thumbnail_url: referral?.thumbnail_url || '',
+      ctwa_welcome_message: referral?.welcome_message?.text || '',
+
+      // dados da mensagem que gerou o lead_submitted
+      message_id: message?.id || '',
+      message_timestamp: message?.timestamp
+        ? Number(message.timestamp)
+        : (event_time || Math.floor(Date.now() / 1000)),
+      message_type: message?.type || '',
+      message_text: isTextMsg ? safeStr(message?.text?.body || '') : '',
+
+      // se for áudio, detalhes extras (undefined não aparece no JSON)
+      audio_mime_type: isAudioMsg ? (message.audio?.mime_type || '') : undefined,
+      audio_sha256: isAudioMsg ? (message.audio?.sha256 || '') : undefined,
+      audio_id: isAudioMsg ? (message.audio?.id || '') : undefined,
+      audio_url: isAudioMsg ? (message.audio?.url || '') : undefined,
+      audio_is_voice: isAudioMsg ? !!message.audio?.voice : undefined,
+    },
   };
 
   console.log(
@@ -169,18 +232,14 @@ async function sendLeadSubmittedEventToServerGtm({ waba_id, wa_id, phone, tid, c
   );
 
   try {
-    const resp = await axios.post(
-      SERVER_GTM_LEAD_URL,
-      payload,
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'x-bot-secret': BOT_LEAD_SECRET,
-        },
-        timeout: 10000,
-        validateStatus: () => true,
-      }
-    );
+    const resp = await axios.post(SERVER_GTM_LEAD_URL, payload, {
+      headers: {
+        'Content-Type': 'application/json',
+        'x-bot-secret': BOT_LEAD_SECRET,
+      },
+      timeout: 10000,
+      validateStatus: () => true,
+    });
     console.log(
       `[CAPI][BOT][RX][LEAD_SUBMITTED] http=${resp.status} body=${truncate(
         JSON.stringify(resp.data || {}),
@@ -254,7 +313,20 @@ async function sendLeadEventToServerGtm({ wa_id, phone, tid, click_type, etapa, 
   }
 }
 
-async function sendQualifiedLeadToServerGtm({ waba_id, wa_id, phone, tid, click_type, is_ctwa, event_time, page_id = '' }) {
+async function sendQualifiedLeadToServerGtm({
+  waba_id,
+  wa_id,
+  phone,
+  tid,
+  click_type,
+  is_ctwa,
+  event_time,
+  page_id = '',
+  meta_phone_number_id = '',
+  meta_display_phone_number = '',
+  etapa = '',
+  contact_profile_name = '',
+}) {
   if (!SERVER_GTM_LEAD_URL) {
     console.warn('[CAPI][BOT][SKIP] SERVER_GTM_LEAD_URL não configurada para QualifiedLead');
     return;
@@ -274,24 +346,46 @@ async function sendQualifiedLeadToServerGtm({ waba_id, wa_id, phone, tid, click_
     event_time: event_time || Math.floor(Date.now() / 1000),
 
     // IDs de WhatsApp
-    waba_id: waba_id || '',   // whatsapp_business_account_id (entry.id)
-    wa_id,                    // id do usuário (contato)
+    waba_id: waba_id || '',
+    wa_id,
+    meta_phone_number_id: meta_phone_number_id || '',
+    meta_display_phone_number: meta_display_phone_number || '',
 
     // dados do contato
-    phone: phoneRaw,          // cru (uso interno)
-    phone_hash: phoneHash,    // para CAPI (user_data.ph)
+    phone: phoneRaw,
+    phone_hash: phoneHash,
+    lead_profile_name: contact_profile_name || '',
 
-    tid: tid,
-    click_type: resolvedClickType,       // "CTWA" | "Landing Page" | "Orgânico"
+    // tracking
+    tid,
+    click_type: resolvedClickType,
     is_ctwa: !!is_ctwa,
-    source: 'chat',                      // usado no sGTM -> action_source = "chat"
-    page_id: page_id || '',              // ID da página (adicionado para CTWA)
+    source: 'chat',
+    page_id: page_id || '',
+    etapa: etapa || '',
 
-    // já deixamos pronto pra você usar direto em custom_data na tag CAPI
+    // user_data pronto pro sGTM -> CAPI
+    user_data: {
+      ph: phoneHash,
+      ctwa_clid: tid || '',
+      page_id: page_id || '',
+      wa_id,
+      waba_id: waba_id || '',
+    },
+
+    // custom_data rico pra análise / debug
     custom_data: {
       click_type: resolvedClickType,
-      page_id: page_id || ''
-    }
+      source: 'chat',
+      etapa: etapa || '',
+      ctwa_clid: tid || '',
+      page_id: page_id || '',
+      waba_id: waba_id || '',
+      wa_id,
+      meta_phone_number_id: meta_phone_number_id || '',
+      meta_display_phone_number: meta_display_phone_number || '',
+      lead_profile_name: contact_profile_name || '',
+    },
   };
 
   console.log(
@@ -302,18 +396,14 @@ async function sendQualifiedLeadToServerGtm({ waba_id, wa_id, phone, tid, click_
   );
 
   try {
-    const resp = await axios.post(
-      SERVER_GTM_LEAD_URL,
-      payload,
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'x-bot-secret': BOT_LEAD_SECRET,
-        },
-        timeout: 10000,
-        validateStatus: () => true,
-      }
-    );
+    const resp = await axios.post(SERVER_GTM_LEAD_URL, payload, {
+      headers: {
+        'Content-Type': 'application/json',
+        'x-bot-secret': BOT_LEAD_SECRET,
+      },
+      timeout: 10000,
+      validateStatus: () => true,
+    });
     console.log(
       `[CAPI][BOT][RX][QUALIFIED_LEAD] http=${resp.status} body=${truncate(
         JSON.stringify(resp.data || {}),
@@ -468,6 +558,10 @@ bus.on('evt', async (evt) => {
     const waba_id = evt.waba_id || '';
     const page_id = st.page_id || evt.page_id || '';
 
+    const meta_phone_number_id = st.meta_phone_number_id || '';
+    const meta_display_phone_number = st.meta_display_phone_number || '';
+    const lead_profile_name = st.lead_profile_name || '';
+
     console.log(
       `[BUS][LEAD] contato=${contato} click_type=${effectiveClickType || '-'} tid_len=${effectiveTid.length} page_id=${page_id || '-'}`
     );
@@ -481,7 +575,11 @@ bus.on('evt', async (evt) => {
         click_type: effectiveClickType,
         is_ctwa: true,
         event_time,
-        page_id
+        page_id,
+        meta_phone_number_id,
+        meta_display_phone_number,
+        etapa,
+        contact_profile_name: lead_profile_name,
       });
     } else if (effectiveClickType === 'Landing Page') {
       await sendLeadEventToServerGtm({
@@ -884,6 +982,7 @@ function setupRoutes(
             // IDs por mensagem (com fallback pros IDs globais)
             const msgPhoneNumberId = metadata.phone_number_id || rxPhoneNumberId || '';
             const msgDisplayPhone = metadata.display_phone_number || rxDisplayPhone || '';
+            const profileName = value?.contacts?.[0]?.profile?.name || '';
 
             if (!value.messages || !value.messages.length) continue;
 
@@ -998,7 +1097,13 @@ function setupRoutes(
                       is_ctwa: true,
                       event_time: baseEventTime,
                       page_id: resolvedPageId,
+                      meta_phone_number_id: msgPhoneNumberId,
+                      meta_display_phone_number: msgDisplayPhone,
+                      referral,
+                      message: msg,
+                      contact_profile_name: profileName,
                     });
+
                     sentContactByWa.add(wa_id);
                   }
                 } else if (finalClickType === 'Landing Page') {
@@ -1061,7 +1166,8 @@ function setupRoutes(
               const stMeta = ensureEstado(contato);
               if (msgPhoneNumberId) stMeta.meta_phone_number_id = msgPhoneNumberId;
               if (msgDisplayPhone) stMeta.meta_display_phone_number = msgDisplayPhone;
-              if (rxWabaId) stMeta.waba_id = rxWabaId;  // Novo: salva waba_id no estado
+              if (rxWabaId) stMeta.waba_id = rxWabaId;
+              if (profileName) stMeta.lead_profile_name = profileName;
 
               // page_id só pra CTWA, e se resolvido
               let resolvedPageIdToSave = '';  // Default vazio
