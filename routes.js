@@ -460,7 +460,6 @@ async function sendQualifiedLeadToServerGtm({
       external_id: tid || '',
     },
 
-    // custom_data rico pra análise / debug
     custom_data: {
       click_type: resolvedClickType,
       source: 'chat',
