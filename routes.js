@@ -179,7 +179,6 @@ async function sendLeadSubmittedEventToServerGtm({
       ph: phoneHash,
       ctwa_clid: tid || '',
       page_id: page_id || '',
-      whatsapp_business_account_id: whatsapp_business_account_id || '',
     },
 
     // já deixamos pronto pra você usar direto em custom_data na tag CAPI
@@ -368,7 +367,6 @@ async function sendQualifiedLeadToServerGtm({
       ph: phoneHash,
       ctwa_clid: tid || '',
       page_id: page_id || '',
-      whatsapp_business_account_id: whatsapp_business_account_id || '',
     },
 
     // custom_data rico pra análise / debug
