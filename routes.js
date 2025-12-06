@@ -269,12 +269,12 @@ async function sendLeadSubmittedEventToServerGtm({
       message_type: message?.type || '',
       message_text: isTextMsg ? safeStr(message?.text?.body || '') : '',
 
-      // se for áudio, detalhes extras (undefined não aparece no JSON)
-      audio_mime_type: isAudioMsg ? (message.audio?.mime_type || '') : undefined,
-      audio_sha256: isAudioMsg ? (message.audio?.sha256 || '') : undefined,
-      audio_id: isAudioMsg ? (message.audio?.id || '') : undefined,
-      audio_url: isAudioMsg ? (message.audio?.url || '') : undefined,
-      audio_is_voice: isAudioMsg ? !!message.audio?.voice : undefined,
+      // se for áudio, detalhes extras (agora com '' ou false em vez de undefined para evitar omissão no JSON)
+      audio_mime_type: isAudioMsg ? (message.audio?.mime_type || '') : '',
+      audio_sha256: isAudioMsg ? (message.audio?.sha256 || '') : '',
+      audio_id: isAudioMsg ? (message.audio?.id || '') : '',
+      audio_url: isAudioMsg ? (message.audio?.url || '') : '',
+      audio_is_voice: isAudioMsg ? !!message.audio?.voice : false,
     },
   };
 
