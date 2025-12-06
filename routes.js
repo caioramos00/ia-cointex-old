@@ -179,7 +179,6 @@ async function sendLeadSubmittedEventToServerGtm({
       ph: phoneHash,
       ctwa_clid: tid || '',
       page_id: page_id || '',
-      wa_id,
       waba_id: waba_id || '',
     },
 
@@ -369,7 +368,6 @@ async function sendQualifiedLeadToServerGtm({
       ph: phoneHash,
       ctwa_clid: tid || '',
       page_id: page_id || '',
-      wa_id,
       waba_id: waba_id || '',
     },
 
