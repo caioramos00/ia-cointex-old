@@ -341,7 +341,6 @@ async function sendLeadEventToServerGtm({
 
     // já deixamos pronto pra você usar direto em custom_data na tag CAPI
     custom_data: {
-      // tracking / identificação básica
       click_type: resolvedClickType,
       source: 'chat',
       etapa: etapa || 'acesso:send',
