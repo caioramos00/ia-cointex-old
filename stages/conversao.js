@@ -127,35 +127,31 @@ async function handleConversaoSend(st) {
             pick(conversao?.msg6?.msg6b3),
         ].filter(Boolean).join(', ');
 
-        const m6_2 = [
-            pick(conversao?.msg6?.msg6b4),
-            pick(conversao?.msg6?.msg6b5),
-        ].filter(Boolean).join(', ');
+        const m6_2 = pick(conversao?.msg6?.msg6b4);
 
-        const m6_3 = pick(conversao?.msg6?.msg6b6);
+        const m6_3 = pick(conversao?.msg6?.msg6b5);
 
-        const msgsBatch1 = [
-            m4_1,
-            m4_2,
-            m4_3,
-            m5,
-            m6_1,
-            m6_2,
-            m6_3,
-        ].filter(Boolean);
+        const msgsBatch1 = [m4_1, m4_2, m4_3, m5, m6_1, m6_2, m6_3].filter(Boolean);
 
         for (let i = 0; i < msgsBatch1.length; i++) {
-            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-            const r = await sendMessage(st.contato, msgsBatch1[i]);
             const interruptedLabel =
                 i === msgsBatch1.length - 1 ? 'optout-post-batch' : 'optout-mid-batch';
             if (await preflightOptOut(st)) return { ok: true, interrupted: interruptedLabel };
+            await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+            const r = await sendMessage(st.contato, msgsBatch1[i]);
             if (!r?.ok) return { ok: false, reason: 'send-aborted' };
         }
 
         st.conversaoBatch = 2;
-        // não queremos mais aguardar resposta do usuário
-        st.conversaoAwaitMsg = false;
+        st.mensagensPendentes = [];
+        st.mensagensDesdeSolicitacao = [];
+        if (!st.lastClassifiedIdx) st.lastClassifiedIdx = {};
+        st.lastClassifiedIdx.conversao = 0;
+
+        // Adição: Trigger automático para processar o batch 2 imediatamente
+        const bot = require('../bot.js');
+        process.nextTick(() => bot.processarMensagensPendentes(st.contato));
+
         return { ok: true, batch: 2 };
     }
 
