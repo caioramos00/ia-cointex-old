@@ -90,6 +90,10 @@ async function handleConversaoSend(st) {
         if (!st.lastClassifiedIdx) st.lastClassifiedIdx = {};
         st.lastClassifiedIdx.conversao = 0;
 
+        // Adição: Trigger automático para processar o batch 1 imediatamente
+        const bot = require('../bot.js');
+        process.nextTick(() => bot.processarMensagensPendentes(st.contato));
+
         return { ok: true, batch: 1 };
     }
 
