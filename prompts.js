@@ -38,7 +38,7 @@ Classifique a intenção nas respostas do lead após o bot expressar dúvida sob
 "${contexto}"
 
 Opções de classificação:
-- "aceite": Se o lead reafirma confiança ou indique que vai prosseguir, como "pode confiar sim", "confia", "pode ser", "vou fazer", "vamos fazer", "vamos", "bora", "confia em mim", "claro que dá certo", "relaxa, vai dar bom", "bora pra cima", "pode pa", "demorou", "cuida".
+- "aceite": Se o lead reafirma confiança, dê um aceite ou indique que vai prosseguir, como "pode confiar sim", "confia", "pode ser", "vou fazer", "vamos fazer", "vamos", "bora", "confia em mim", "claro que dá certo", "relaxa, vai dar bom", "bora pra cima", "pode pa", "demorou", "cuida".
 - "recusa": Se o lead nega confiança ou desiste, como "não confie não", "melhor não", "não rola", "tô fora", "sem chance", "não quero mais".
 - "duvida": Se o lead faz perguntas ou expressa incerteza, como "por quê?", "é seguro?", "como funciona?", "qual a garantia?", "explica melhor", "onde clico?".
 

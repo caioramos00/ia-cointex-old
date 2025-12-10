@@ -44,6 +44,9 @@ async function handleConfirmacaoSend(st) {
                 case 'msg1':
                     m = `${filteredBlocos[0]}, ${filteredBlocos[1]} ${filteredBlocos[2]}`;
                     break;
+                case 'msg3':
+                    m = filteredBlocos.join(': ');
+                    break;
                 case 'msg8':
                     m = '\n' + filteredBlocos.join('\n') + '\n';
                     break;
