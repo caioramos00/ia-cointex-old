@@ -47,10 +47,10 @@ async function handleSaqueSend(st) {
     const composeMsg5 = () => {
         const c = loadSaque();
         const m = c?.msg5 || {};
-        const left = [pick(m.m5b1), pick(m.m5b2)].filter(Boolean).join(', ');
-        const right = [pick(m.m5b3)].filter(Boolean).join('');
-        const tail = [pick(m.m5b4), pick(m.m5b5), pick(m.m5b6)].filter(Boolean).join(', ');
-        return `${[left, right && `${right}!`]}.filter(Boolean).join(' ')}${tail ? ` ${tail}` : ''}`.trim();
+        const left = [pick(m.m3b1), pick(m.m3b2)].filter(Boolean).join(', ');
+        const right = [pick(m.m3b3)].filter(Boolean).join('');
+        const tail = [pick(m.m3b4), pick(m.m3b5), pick(m.m3b6)].filter(Boolean).join(', ');
+        return `${[left, right && `${right}!`].filter(Boolean).join(' ')}${tail ? ` ${tail}` : ''}`.trim();
     };
 
     const m1 = chooseUnique(composeMsg1, st) || composeMsg1();
