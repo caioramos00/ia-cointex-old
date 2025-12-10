@@ -26,18 +26,18 @@
   },
   "msg3": {
     "bloco1": [
-      "Agora clica nesse link aqui pra alterar os dados da conta"
+      "Agora vai no menu aí em baixo na tela e clica em CONTA"
     ],
     "bloco2": [
-      "https://mpay.vc/#/account"
+      "ou clica naquelas 3 barrinhas lá em cima no lado esquerdo da tela e clica em CONTA"
     ]
   },
   "msg4": {
     "bloco1": [
-      "Vai aparecer os dados da conta"
+      "Depois clica em 'MINHA CONTA'"
     ],
     "bloco2": [
-      "e você tem duas opções:"
+      "vai aparecer os dados da contae você tem duas opções:"
     ]
   },
   "msg5": {
