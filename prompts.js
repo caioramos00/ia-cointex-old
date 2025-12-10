@@ -46,17 +46,18 @@ Responda com só UMA destas opções:
 Considere o contexto e variações coloquiais comuns em português brasileiro. Nunca explique nada. Só escreva uma dessas palavras.
   `;
 
-const promptClassificaConfirmacao = (contexto) => `
-Analise TODAS as respostas do lead após pedir o valor disponível em FINANCEIRO:
+const promptClassificaPronto = (contexto) => `
+Analise TODAS as respostas do lead após pedir para alterar os dados da conta ou conectar o Facebook e mandar "PRONTO":
+
 "${contexto}"
 
 Responda com só UMA destas opções:
-- "confirmado" (se ele enviou um valor em texto, como "R$ 5000", "5000", "5.000,00", "5K", "5,8k", "R$5.876,41", "$5876,41", "5876,41", "5.876,41", "4385 R$", "4385 reais", "cinquenta mil", "vinte mil e poucos", "uns vinte mil reais" ou qualquer formato numérico que represente um valor monetário maior ou igual a 4000)
-- "nao_confirmado" (se ele não enviou um valor em texto ou disse que não conseguiu, como "não achei", "não tem valor", etc)
-- "duvida" (se ele perguntou algo tipo "onde tá FINANCEIRO", "qual valor mando", "como vejo o valor", etc)
-- "neutro" (se ele falou algo afirmativo como "beleza", "tá bom", "certo", "fechou", "ok", "entendi", "vou fazer", "slk", ou algo irrelevante como "Próximo passo?" que não confirma, nega ou questiona)
+- "pronto" (se ele indicou que concluiu a alteração ou conexão, como "pronto", "feito", "alterei", "mudei", "conectei", "entrei", "foi", "conectei o fb", "tudo certo", "já mudei os dados", "conectado", "alterado", "ok pronto", ou qualquer variação que confirme a ação)
+- "nao_pronto" (se ele disse que não conseguiu alterar ou conectar, como "não consegui", "não tenho facebook", "não alterou", "deu erro", "não tem opção", etc)
+- "duvida" (se ele perguntou algo tipo "como altera o nome?", "onde clica em conta?", "o que é ID?", "preciso mudar tudo?", "como conecta o fb?", etc)
+- "neutro" (se ele falou algo afirmativo como "beleza", "tá bom", "certo", "ok", "entendi", "vou fazer", "slk", ou algo irrelevante como "Próximo?" que não confirma, nega ou questiona)
 
-Considere variações de formato monetário em português brasileiro, com ou sem "R$" ou "$", com ponto ou vírgula como separador, e com "k" para milhares (ex.: "5.8k" = 5800). Nunca explique nada. Só escreva uma dessas palavras.
+Considere variações em português brasileiro, incluindo abreviações, gírias e erros de digitação comuns (ex.: "prontoo", "feitu", "conectey"). Nunca explique nada. Só escreva uma dessas palavras.
   `;
 
 const promptClassificaRelevancia = (mensagensTexto, temMidia) => `
@@ -147,4 +148,4 @@ ${texto}
 Saída apenas em JSON:`;
 }
 
-module.exports = { promptClassificaAceite, promptClassificaAcesso, promptClassificaConfirmacao, promptClassificaRelevancia, promptClassificaOptOut, promptClassificaReoptin };
+module.exports = { promptClassificaAceite, promptClassificaAcesso, promptClassificaPronto, promptClassificaRelevancia, promptClassificaOptOut, promptClassificaReoptin };

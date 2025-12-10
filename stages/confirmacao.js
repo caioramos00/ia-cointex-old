@@ -4,9 +4,8 @@ const { delayRange, tsNow, chooseUnique, BETWEEN_MIN_MS, BETWEEN_MAX_MS, safeStr
 const { preflightOptOut, enterStageOptOutResetIfNeeded, finalizeOptOutBatchAtEnd } = require('../optout.js');
 const { sendMessage } = require('../senders.js');
 const axios = require('axios');
-const { promptClassificaConfirmacao } = require('../prompts');
+const { promptClassificaPronto } = require('../prompts');
 
-// Helpers exportadas cedo por bot.js (quebra de ciclo já tratada naquele arquivo)
 const { extractTextForLog, pickLabelFromResponseData } = require('../bot.js');
 
 async function handleConfirmacaoSend(st) {
@@ -21,28 +20,55 @@ async function handleConfirmacaoSend(st) {
         return confirmacaoData;
     };
     const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
-    const composeConfirmacaoMsg = () => {
-        const c = loadConfirmacao();
-        const b1 = pick(c?.msg1?.bloco1);
-        const b2 = pick(c?.msg1?.bloco2);
-        const b3 = pick(c?.msg1?.bloco3);
-        return [b1, b2, b3].filter(Boolean).join(', ');
-    };
 
-    const m = chooseUnique(composeConfirmacaoMsg, st) || composeConfirmacaoMsg();
+    const c = loadConfirmacao();
 
-    await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+    for (let i = 1; i <= 11; i++) {
+        const key = `msg${i}`;
+        const msgObj = c[key];
+        if (!msgObj) continue;
 
-    if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-pre-single' };
+        const blocos = [];
+        let j = 1;
+        while (true) {
+            const bkey = `bloco${j}`;
+            if (!msgObj[bkey]) break;
+            blocos.push(pick(msgObj[bkey]));
+            j++;
+        }
 
-    let r = { ok: true };
-    if (m) r = await sendMessage(st.contato, m);
+        let m = '';
+        const filteredBlocos = blocos.filter(Boolean);
+        if (filteredBlocos.length > 0) {
+            switch (key) {
+                case 'msg1':
+                    m = `${filteredBlocos[0]}, ${filteredBlocos[1]} ${filteredBlocos[2]}`;
+                    break;
+                case 'msg8':
+                    m = '\n' + filteredBlocos.join('\n') + '\n';
+                    break;
+                case 'msg10':
+                    m = filteredBlocos.join(': ');
+                    break;
+                default:
+                    m = filteredBlocos.join(', ');
+                    break;
+            }
+        }
 
-    if (!r?.ok) {
-        return { ok: true, paused: r?.reason || 'send-skipped' };
+        await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
+
+        if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-pre-multi' };
+
+        let r = { ok: true };
+        if (m) r = await sendMessage(st.contato, m);
+
+        if (!r?.ok) {
+            return { ok: true, paused: r?.reason || 'send-skipped' };
+        }
+
+        if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-post-multi' };
     }
-
-    if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-post-single' };
 
     st.mensagensPendentes = [];
     st.mensagensDesdeSolicitacao = [];
@@ -63,48 +89,40 @@ async function handleConfirmacaoWait(st) {
 
     const totalPend = st.mensagensPendentes.length;
 
-    // ==== FIX #1: guard contra "pular a primeira" quando o buffer foi recriado ====
     st.lastClassifiedIdx = st.lastClassifiedIdx || {};
     let startIdx = Math.max(0, Number(st.lastClassifiedIdx.confirmacao || 0));
     if (startIdx >= totalPend) {
-        // Se o array foi reconstruído/encurtado, começamos do zero para não perder a 1ª mensagem
         startIdx = 0;
     }
-    // ==============================================================================
 
     const novasMsgs = st.mensagensPendentes.slice(startIdx);
     if (novasMsgs.length === 0) {
         st.mensagensPendentes = [];
-        st.lastClassifiedIdx.confirmacao = 0; // manter coerência: array vazio => índice zerado
+        st.lastClassifiedIdx.confirmacao = 0;
         return { ok: true, noop: 'no-new-messages' };
     }
 
     const apiKey = process.env.OPENAI_API_KEY;
-    const looksLikeMediaUrl = (s) => {
-        const n = String(s || '');
-        return /(manybot-files\.s3|mmg\.whatsapp\.net|cdn\.whatsapp\.net|amazonaws\.com).*\/(original|file)_/i.test(n)
-            || /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?$/i.test(n);
-    };
 
-    let confirmado = false;
+    let pronto = false;
 
-    // Heurística atual para mídia (se quiser 100% LLM, remover este bloco)
+    // Heurística para "PRONTO"
     for (const m of novasMsgs) {
         const msg = safeStr(m?.texto || '').trim();
-        if (m?.temMidia || m?.hasMedia || looksLikeMediaUrl(msg) || /^\[m[ií]dia\]$/i.test(msg)) {
-            console.log(`[${st.contato}] Análise: confirmado ("${truncate(msg, 140)}")`);
-            confirmado = true;
+        if (/pronto/i.test(msg)) {
+            console.log(`[${st.contato}] Análise: pronto ("${truncate(msg, 140)}")`);
+            pronto = true;
             break;
         }
     }
 
-    if (!confirmado && apiKey) {
-        const allowed = ['confirmado', 'nao_confirmado', 'duvida', 'neutro'];
+    if (!pronto && apiKey) {
+        const allowed = ['pronto', 'nao_pronto', 'duvida', 'neutro'];
         const contexto = novasMsgs.map(m => safeStr(m?.texto || '')).join(' | ');
         const structuredPrompt =
-            `${promptClassificaConfirmacao(contexto)}\n\n` +
+            `${promptClassificaPronto(contexto)}\n\n` +
             `Output only this valid JSON format with double quotes around keys and values, nothing else: ` +
-            `{"label": "confirmado"} or {"label": "nao_confirmado"} or {"label": "duvida"} or {"label": "neutro"}`;
+            `{"label": "pronto"} or {"label": "nao_pronto"} or {"label": "duvida"} or {"label": "neutro"}`;
         const callOnce = async (maxTok) => {
             let r;
             try {
@@ -127,7 +145,6 @@ async function handleConfirmacaoWait(st) {
             }
             const data = r.data;
 
-            // Tenta extrair texto (compatível com os formatos comuns do endpoint /responses)
             let rawText = '';
             if (Array.isArray(data?.output)) {
                 data.output.forEach(item => {
@@ -157,17 +174,15 @@ async function handleConfirmacaoWait(st) {
             if (!(resp.status >= 200 && resp.status < 300 && resp.picked)) {
                 resp = await callOnce(256);
             }
-            confirmado = (resp.status >= 200 && resp.status < 300 && resp.picked === 'confirmado');
+            pronto = (resp.status >= 200 && resp.status < 300 && resp.picked === 'pronto');
             console.log(`[${st.contato}] Análise: ${resp.picked || 'neutro'} ("${truncate(contexto, 140)}")`);
         } catch { }
     }
 
-    // ==== FIX #2: ao esvaziar o buffer, o índice precisa ser ZERADO ====
     st.mensagensPendentes = [];
     st.lastClassifiedIdx.confirmacao = 0;
-    // ===================================================================
 
-    if (confirmado) {
+    if (pronto) {
         st.mensagensDesdeSolicitacao = [];
         st.lastClassifiedIdx.saque = 0;
         const _prev = st.etapa;
@@ -175,7 +190,6 @@ async function handleConfirmacaoWait(st) {
         console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
         st.mensagensPendentes = [];
         st.mensagensDesdeSolicitacao = [];
-        // garantir índice zerado ao sair confirmado
         st.lastClassifiedIdx.confirmacao = 0;
 
         const bot = require('../bot.js');

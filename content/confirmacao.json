@@ -1,26 +1,114 @@
 {
   "msg1": {
     "bloco1": [
-      "boa",
-      "boaa",
-      "boaaa",
-      "beleza",
-      "belezaa",
-      "belezaaa",
-      "tranquilo",
-      "isso aí"
+      "Boa",
+      "Boaa",
+      "Boaaa",
+      "Beleza",
+      "Belezaa",
+      "Belezaaa",
+      "Isso aí"
     ],
     "bloco2": [
-      "agora manda um PRINT mostrando o saldo disponível",
-      "agora manda um PRINT mostrando o saldo disponível aí",
-      "agora me manda um PRINT mostrando o saldo disponível nessa conta",
-      "agora me manda um PRINT mostrando o saldo"
+      "não saca ainda beleza?"
     ],
     "bloco3": [
-      "ou escreve aqui quanto que tem disponível",
-      "ou me escreve o valor",
-      "ou manda o valor em escrito",
-      "ou me fala o valor disponível"
+      "agora precisa trocar os dados da conta pra você poder receber"
+    ]
+  },
+  "msg2": {
+    "bloco1": [
+      "E não entra na conta em nenhum outro aparelho"
+    ],
+    "bloco2": [
+      "só por esse que vc acessou agora"
+    ]
+  },
+  "msg3": {
+    "bloco1": [
+      "Agora vai no menu aí em baixo na tela e clica em CONTA"
+    ],
+    "bloco2": [
+      "ou clica naquelas 3 barrinhas lá em cima no lado esquerdo da tela e clica em CONTA"
+    ]
+  },
+  "msg4": {
+    "bloco1": [
+      "Vai aparecer os dados da conta"
+    ],
+    "bloco2": [
+      "e você tem duas opções:"
+    ]
+  },
+  "msg5": {
+    "bloco1": [
+      "Ou você altera os dados da conta"
+    ],
+    "bloco2": [
+      "ou conecta o seu Facebook se você tiver"
+    ],
+    "bloco3": [
+      "e a plataforma já altera os dados automaticamente"
+    ]
+  },
+  "msg6": {
+    "bloco1": [
+      "Dos dois jeitos dá certo"
+    ],
+    "bloco2": [
+      "você que escolhe qual prefere"
+    ],
+    "bloco3": [
+      "mas com o Facebook é melhor pq não pede esse ID"
+    ],
+    "bloco4": [
+      "que é um documento gringo"
+    ]
+  },
+  "msg7": {
+    "bloco1": [
+      "Se não for conectar o Facebook ou não tiver um"
+    ],
+    "bloco2": [
+      "você só precisa alterar esses dados:"
+    ]
+  },
+  "msg8": {
+    "bloco1": [
+      "Nome"
+    ],
+    "bloco2": [
+      "Sobrenome"
+    ],
+    "bloco3": [
+      "E-mail"
+    ],
+    "bloco4": [
+      "Data de nascimento"
+    ]
+  },
+  "msg9": {
+    "bloco1": [
+      "Só altera esses 4 dados aí"
+    ],
+    "bloco2": [
+      "não precisa alterar o ID porque é um documento gringo"
+    ]
+  },
+  "msg10": {
+    "bloco1": [
+      "Resumindo"
+    ],
+    "bloco2": [
+      "conecta o Facebook OU altera os dados que te passei"
+    ]
+  },
+  "msg11": {
+    "bloco1": [
+      "Assim que fizer isso me manda um \"PRONTO\" pra me ajudar"
+    ],
+    "bloco2": [
+      "pq to fazendo mais dois outros trampos agora também"
     ]
   }
 }
