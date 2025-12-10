@@ -22,31 +22,43 @@ async function handleSaqueSend(st) {
     const composeMsg1 = () => {
         const c = loadSaque();
         const m = c?.msg1 || {};
-        return `${[pick(m.m1b1), pick(m.m1b2)].filter(Boolean).join(' ')}: ${[pick(m.m1b3), pick(m.m1b4)].filter(Boolean).join(', ')}${pick(m.m1b5) ? '… ' + pick(m.m1b5) : ''}${pick(m.m1b6) ? ', ' + pick(m.m1b6) : ''}`.trim();
+        return [pick(m.m1b1), pick(m.m1b2)].filter(Boolean).join(', ');
     };
     const composeMsg2 = () => {
         const c = loadSaque();
         const m = c?.msg2 || {};
-        const s1 = gerarSenhaAleatoria();
-        const s2 = '8293';
-        const s3 = gerarSenhaAleatoria();
-        const header = [pick(m.m2b1), pick(m.m2b2)].filter(Boolean).join(', ');
-        const headLine = header ? `${header}:` : '';
-        return `${headLine}\n\n${s1}\n${s2}\n${s3}`.trim();
+        return [pick(m.m2b1), pick(m.m2b2)].filter(Boolean).join(': ');
     };
     const composeMsg3 = () => {
         const c = loadSaque();
         const m = c?.msg3 || {};
-        const left = [pick(m.m3b1), pick(m.m3b2)].filter(Boolean).join(', ');
-        const right = [pick(m.m3b3)].filter(Boolean).join('');
-        const tail = [pick(m.m3b4), pick(m.m3b5), pick(m.m3b6)].filter(Boolean).join(', ');
-        return `${[left, right && `${right}!`].filter(Boolean).join(' ')}${tail ? ` ${tail}` : ''}`.trim();
+        return `${[pick(m.m3b1), pick(m.m3b2)].filter(Boolean).join(' ')}: ${[pick(m.m3b3), pick(m.m3b4)].filter(Boolean).join(', ')}${pick(m.m3b5) ? '… ' + pick(m.m3b5) : ''}${pick(m.m3b6) ? ', ' + pick(m.m3b6) : ''}`.trim();
+    };
+    const composeMsg4 = () => {
+        const c = loadSaque();
+        const m = c?.msg4 || {};
+        const s1 = gerarSenhaAleatoria();
+        const s2 = '8293';
+        const s3 = gerarSenhaAleatoria();
+        const header = [pick(m.m4b1), pick(m.m4b2)].filter(Boolean).join(', ');
+        const headLine = header ? `${header}:` : '';
+        return `${headLine}\n\n${s1}\n${s2}\n${s3}`.trim();
+    };
+    const composeMsg5 = () => {
+        const c = loadSaque();
+        const m = c?.msg5 || {};
+        const left = [pick(m.m5b1), pick(m.m5b2)].filter(Boolean).join(', ');
+        const right = [pick(m.m5b3)].filter(Boolean).join('');
+        const tail = [pick(m.m5b4), pick(m.m5b5), pick(m.m5b6)].filter(Boolean).join(', ');
+        return `${[left, right && `${right}!`]}.filter(Boolean).join(' ')}${tail ? ` ${tail}` : ''}`.trim();
     };
 
     const m1 = chooseUnique(composeMsg1, st) || composeMsg1();
     const m2 = chooseUnique(composeMsg2, st) || composeMsg2();
     const m3 = chooseUnique(composeMsg3, st) || composeMsg3();
-    const msgs = [m1, m2, m3];
+    const m4 = chooseUnique(composeMsg4, st) || composeMsg4();
+    const m5 = chooseUnique(composeMsg5, st) || composeMsg5();
+    const msgs = [m1, m2, m3, m4, m5];
 
     let cur = Number(st.stageCursor?.[st.etapa] || 0);
     for (let i = cur; i < msgs.length; i++) {

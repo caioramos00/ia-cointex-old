@@ -1,6 +1,25 @@
 {
     "msg1": {
         "m1b1": [
+            "Boa",
+            "Boaa",
+            "Certo",
+            "Isso aí"
+        ],
+        "m1b2": [
+            "agora vamos fazer o saque do dinheiro pra sua conta"
+        ]
+    },
+    "msg2": {
+        "m2b1": [
+            "Clica nesse link agora"
+        ],
+        "m2b2": [
+            "https://mpay.vc/withdraw"
+        ]
+    },
+    "msg3": {
+        "m1b1": [
             "Essa conta tá com o saldo bem alto",
             "Essa conta tá com um saldo muito alto",
             "Essa conta aí tá com um saldo muito bom"
@@ -35,7 +54,7 @@
             "mas relaxa q não tem problema"
         ]
     },
-    "msg2": {
+    "msg4": {
         "m2b1": [
             "Quando você for sacar vai pedir um código",
             "Quando você for sacar vai pedir uma senha",
@@ -53,7 +72,7 @@
             "é um desses 3"
         ]
     },
-    "msg3": {
+    "msg5": {
         "m3b1": [
             "Saca aí e me avisa certo?",
             "Saca aí e me avisa beleza?",
