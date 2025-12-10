@@ -33,6 +33,22 @@ Responda com só UMA palavra, exatamente uma destas:
 - "duvida"
 `;
 
+const promptClassificaPreAcesso = (contexto) => `
+Classifique a intenção nas respostas do lead após o bot expressar dúvida sobre confiança:
+"${contexto}"
+
+Opções de classificação:
+- "aceite": Se o lead reafirma confiança ou indique que vai prosseguir, como "pode confiar sim", "confia", "pode ser", "vou fazer", "vamos fazer", "vamos", "bora", "confia em mim", "claro que dá certo", "relaxa, vai dar bom", "bora pra cima", "pode pa", "demorou", "cuida".
+- "recusa": Se o lead nega confiança ou desiste, como "não confie não", "melhor não", "não rola", "tô fora", "sem chance", "não quero mais".
+- "duvida": Se o lead faz perguntas ou expressa incerteza, como "por quê?", "é seguro?", "como funciona?", "qual a garantia?", "explica melhor", "onde clico?".
+
+Regras:
+- Ignore maiúsculas/minúsculas, erros de digitação, emojis e pontuação.
+- Priorize "aceite" se houver mistura de aceite e dúvida.
+- Use gírias comuns do português brasileiro.
+- Responda apenas com uma das opções: "aceite", "recusa" ou "duvida". Sem explicações.
+`;
+
 const promptClassificaAcesso = (contexto) => `
 Analise TODAS as respostas do lead após pedir para ele entrar na conta e responder com "ENTREI":
 "${contexto}"
@@ -148,4 +164,4 @@ ${texto}
 Saída apenas em JSON:`;
 }
 
-module.exports = { promptClassificaAceite, promptClassificaAcesso, promptClassificaPronto, promptClassificaRelevancia, promptClassificaOptOut, promptClassificaReoptin };
+module.exports = { promptClassificaAceite, promptClassificaPreAcesso, promptClassificaAcesso, promptClassificaPronto, promptClassificaRelevancia, promptClassificaOptOut, promptClassificaReoptin };

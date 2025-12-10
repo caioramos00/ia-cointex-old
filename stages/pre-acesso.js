@@ -17,7 +17,7 @@ const {
 } = require('../optout.js');
 const { sendMessage } = require('../senders.js');
 const axios = require('axios');
-const { promptClassificaAceite } = require('../prompts');
+const { promptClassificaPreAcesso } = require('../prompts');
 
 async function handlePreAcessoSend(st) {
     enterStageOptOutResetIfNeeded(st);
@@ -141,7 +141,7 @@ async function handlePreAcessoWait(st) {
 
     for (const raw of novasMsgs) {
         const msg = safeStr(raw).trim();
-        const prompt = promptClassificaAceite(msg);
+        const prompt = promptClassificaPreAcesso(msg);
         let msgClass = 'duvida';
 
         if (apiKey) {
