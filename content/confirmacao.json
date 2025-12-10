@@ -45,7 +45,7 @@
       "Ou você altera os dados da conta"
     ],
     "bloco2": [
-      "ou conecta o seu Facebook se você tiver"
+      "ou conecta o seu Facebook SE APARECER A OPÇÃO DE CONECTAR PRA VOCÊ e você tiver um Facebook"
     ],
     "bloco3": [
       "e a plataforma já altera os dados automaticamente"
@@ -59,7 +59,7 @@
       "você que escolhe qual prefere"
     ],
     "bloco3": [
-      "mas com o Facebook é melhor pq é mais rápido e não pede esse ID"
+      "mas se aparecer a opção de conectar o Facebook aí e você tiver facebook, com o Facebook é melhor pq é mais rápido e não pede esse ID"
     ],
     "bloco4": [
       "que é um documento gringo"
@@ -67,7 +67,7 @@
   },
   "msg7": {
     "bloco1": [
-      "Se não for conectar o Facebook ou não tiver um"
+      "Se não aparecer a opção de conectar o Facebook aí na tela ou você não tiver um"
     ],
     "bloco2": [
       "você só precisa alterar esses dados:"
@@ -100,7 +100,7 @@
       "Resumindo"
     ],
     "bloco2": [
-      "conecta o Facebook OU altera os dados que te passei"
+      "conecta o Facebook se tiver como OU SE NÃO DER altera os dados que te passei"
     ]
   },
   "msg11": {
