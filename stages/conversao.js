@@ -16,6 +16,41 @@ async function handleConversaoSend(st) {
     const pick = (arr) =>
         Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
 
+    const composeAndSend = async (key) => {
+        const msgObj = conversao[key];
+        if (!msgObj) return { ok: true, skipped: true };
+
+        if (msgObj.type === 'image') {
+            const imgUrl = pick(msgObj.images);
+            const caption = pick(msgObj.caption || []);
+            if (!imgUrl) return { ok: false, reason: 'no-image-url' };
+
+            const { mod } = await getActiveTransport();
+            const provider = mod?.name || 'unknown';
+            let r;
+            if (provider === 'manychat') {
+                r = await sendImage(st.contato, '', { flowNs: 'content20251005164000_207206', caption });
+            } else if (provider === 'meta') {
+                r = await sendImage(st.contato, imgUrl, { caption });
+            } else {
+                console.warn(`[${st.contato}] Provider não suportado para imagem: ${provider}`);
+                r = { ok: false, reason: 'unsupported-provider' };
+            }
+            return r;
+        } else {
+            // Texto: coleta blocos msgNbX e une com ', '
+            const blocos = [];
+            for (const k in msgObj) {
+                if (k.startsWith(key.replace('msg', 'msg') + 'b')) {  // ex: msg1b1, msg1b2
+                    blocos.push(pick(msgObj[k]));
+                }
+            }
+            const m = blocos.filter(Boolean).join(', ');
+            if (!m) return { ok: true, skipped: true };
+            return await sendMessage(st.contato, m);
+        }
+    };
+
     // -----------------------
     // BATCH 0 (abre conversa)
     // -----------------------
@@ -43,26 +78,7 @@ async function handleConversaoSend(st) {
 
         await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
 
-        const { mod } = await getActiveTransport();
-        const provider = mod?.name || 'unknown';
-        let r2;
-
-        if (provider === 'manychat') {
-            const FLOW_NS_IMAGEM = 'content20251005164000_207206';
-            r2 = await sendImage(st.contato, '', {
-                flowNs: FLOW_NS_IMAGEM,
-                caption: 'Comprovante de transferência',
-            });
-        } else if (provider === 'meta') {
-            const imgUrl = 'https://images2.imgbox.com/b7/6a/tgmALzh8_o.jpg';
-            r2 = await sendImage(st.contato, imgUrl, {
-                caption: 'Comprovante de transferência',
-            });
-        } else {
-            console.warn(`[${st.contato}] Provider não suportado para imagem: ${provider}`);
-            r2 = { ok: false, reason: 'unsupported-provider' };
-        }
-
+        const r2 = await composeAndSend('msg2');
         if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-mid-batch' };
         if (!r2?.ok) return { ok: false, reason: r2?.reason || 'image-send-failed' };
 
