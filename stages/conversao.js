@@ -60,9 +60,6 @@ async function handleConversaoSend(st) {
             pick(conversao?.msg1?.msg1b2),
         ].filter(Boolean).join(', ');
 
-        // m3 dividido em duas mensagens:
-        // 1) só msg3b1
-        // 2) msg3b2 + msg3b3
         const m3_1 = pick(conversao?.msg3?.msg3b1);
         const m3_2 = [
             pick(conversao?.msg3?.msg3b2),

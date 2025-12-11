@@ -29,10 +29,36 @@
       "Vai no menuzinho aí em baixo na tela e clica no botão escrito 'CONTA'"
     ],
     "bloco2": [
-      "ou clica naquelas 3 barrinhas lá em cima no lado esquerdo da tela e clica em 'CONTA'"
+      "olha esse print aqui pra ver melhor"
     ]
   },
   "msg4": {
+    "type": "image",
+    "images": [
+      "https://images2.imgbox.com/b7/6a/tgmALzh8_o.jpg"
+    ],
+    "caption": [
+      "Print mostrando como acessar a 'Conta'"
+    ]
+  },
+  "msg5": {
+    "bloco1": [
+      "Depois que entrar nessa parte da 'Conta'"
+    ],
+    "bloco2": [
+      "você clica em 'MINHA CONTA'"
+    ]
+  },
+  "msg6": {
+    "type": "image",
+    "images": [
+      "https://images2.imgbox.com/05/dc/D4PI90IC_o.jpg"
+    ],
+    "caption": [
+      "Print mostrando como acessar a 'Minha Conta'"
+    ]
+  },
+  "msg7": {
     "bloco1": [
       "Vai aparecer os dados da conta"
     ],
@@ -40,7 +66,7 @@
       "e aí você só precisa alterar esses dados:"
     ]
   },
-  "msg5": {
+  "msg8": {
     "bloco1": [
       "Nome"
     ],
@@ -57,7 +83,7 @@
       "E-mail"
     ]
   },
-  "msg6": {
+  "msg9": {
     "bloco1": [
       "Só altera esses 5 dados aí"
     ],
@@ -65,7 +91,7 @@
       "não precisa alterar o ID nem o número de telefone"
     ]
   },
-  "msg7": {
+  "msg10": {
     "bloco1": [
       "E presta muita atenção nessa parte"
     ],
@@ -73,7 +99,7 @@
       "porque esses dados precisam ser os mesmos de quem vai receber o dinheiro que vamos sacar"
     ]
   },
-  "msg8": {
+  "msg11": {
     "bloco1": [
       "Assim que fizer isso me manda um \"PRONTO\" pra me ajudar"
     ],

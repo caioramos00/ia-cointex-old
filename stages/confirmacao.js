@@ -2,7 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const { delayRange, tsNow, chooseUnique, BETWEEN_MIN_MS, BETWEEN_MAX_MS, safeStr, truncate } = require('../utils.js');
 const { preflightOptOut, enterStageOptOutResetIfNeeded, finalizeOptOutBatchAtEnd } = require('../optout.js');
-const { sendMessage } = require('../senders.js');
+const { sendMessage, sendImage } = require('../senders.js');
 const axios = require('axios');
 const { promptClassificaPronto } = require('../prompts');
 
@@ -21,44 +21,60 @@ async function handleConfirmacaoSend(st) {
     };
     const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
 
+    const composeAndSend = async (key) => {
+        const msgObj = c[key];
+        if (!msgObj) return { ok: true, skipped: true };
+
+        if (msgObj.type === 'image') {
+            const imgUrl = pick(msgObj.images);
+            const caption = pick(msgObj.caption || []);
+            if (!imgUrl) return { ok: false, reason: 'no-image-url' };
+
+            const r = await sendImage(st.contato, imgUrl, { caption });
+            return r;
+        } else {
+            const blocos = [];
+            let j = 1;
+            while (true) {
+                const bkey = `bloco${j}`;
+                if (!msgObj[bkey]) break;
+                blocos.push(pick(msgObj[bkey]));
+                j++;
+            }
+
+            let m = '';
+            const filteredBlocos = blocos.filter(Boolean);
+            if (filteredBlocos.length > 0) {
+                switch (key) {
+                    case 'msg1':
+                        m = `${filteredBlocos[0]}, ${filteredBlocos[1]} ${filteredBlocos[2]}`;
+                        break;
+                    case 'msg8':
+                        m = '\n' + filteredBlocos.join('\n') + '\n';
+                        break;
+                    case 'msg11':
+                        m = filteredBlocos.join(', ');
+                        break;
+                    default:
+                        m = filteredBlocos.join(', ');
+                        break;
+                }
+            }
+            if (!m) return { ok: true, skipped: true };
+            return await sendMessage(st.contato, m);
+        }
+    };
+
     const c = loadConfirmacao();
 
-    for (let i = 1; i <= 8; i++) {
+    for (let i = 1; i <= 11; i++) {
         const key = `msg${i}`;
-        const msgObj = c[key];
-        if (!msgObj) continue;
-
-        const blocos = [];
-        let j = 1;
-        while (true) {
-            const bkey = `bloco${j}`;
-            if (!msgObj[bkey]) break;
-            blocos.push(pick(msgObj[bkey]));
-            j++;
-        }
-
-        let m = '';
-        const filteredBlocos = blocos.filter(Boolean);
-        if (filteredBlocos.length > 0) {
-            switch (key) {
-                case 'msg1':
-                    m = `${filteredBlocos[0]}, ${filteredBlocos[1]} ${filteredBlocos[2]}`;
-                    break;
-                case 'msg5':
-                    m = '\n' + filteredBlocos.join('\n') + '\n';
-                    break;
-                default:
-                    m = filteredBlocos.join(', ');
-                    break;
-            }
-        }
 
         await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
 
         if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-pre-multi' };
 
-        let r = { ok: true };
-        if (m) r = await sendMessage(st.contato, m);
+        const r = await composeAndSend(key);
 
         if (!r?.ok) {
             return { ok: true, paused: r?.reason || 'send-skipped' };
