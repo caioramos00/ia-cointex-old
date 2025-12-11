@@ -52,27 +52,10 @@ async function handleValidacaoSend(st) {
         st.mensagensPendentes = [];
         st.mensagensDesdeSolicitacao = [];
         st.lastClassifiedIdx.validacao = 0;
-        st.validacaoAwaitFirstMsg = true;
-        st.validacaoTimeoutUntil = 0;
-        const _prev = st.etapa;
-        if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-batch-end' };
-        st.etapa = 'validacao:wait';
-        console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
-        return { ok: true };
-    }
-    return { ok: true, partial: true };
-}
-
-async function handleValidacaoWait(st) {
-    if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
-    if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
-    if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
-    if (st.validacaoAwaitFirstMsg && st.validacaoTimeoutUntil === 0) {
         const FOUR = 4 * 60 * 1000;
         const SIX = 6 * 60 * 1000;
         const rnd = randomInt(FOUR, SIX + 1);
         st.validacaoTimeoutUntil = Date.now() + rnd;
-        st.validacaoAwaitFirstMsg = false;
         st.mensagensPendentes = [];
         st.mensagensDesdeSolicitacao = [];
         if (st.validacaoTimer) { try { clearTimeout(st.validacaoTimer); } catch { } }
@@ -85,10 +68,19 @@ async function handleValidacaoWait(st) {
             }
         }, rnd + 100);
         const _prev = st.etapa;
+        if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-batch-end' };
         st.etapa = 'validacao:cooldown';
         console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
-        return { ok: true, started: rnd };
+        return { ok: true };
     }
+    return { ok: true, partial: true };
+}
+
+async function handleValidacaoWait(st) {
+    if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-hard-wait' };
+    if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-ia-wait' };
+    if (st.mensagensPendentes.length === 0) return { ok: true, noop: 'waiting-user' };
+
     st.mensagensPendentes = [];
     return { ok: true, noop: 'await-first-message' };
 }
