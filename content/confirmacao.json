@@ -10,23 +10,23 @@
       "Isso aí"
     ],
     "bloco2": [
-      "não saca ainda beleza?"
+      "e não entra na conta em nenhum outro aparelho entendeu?"
     ],
     "bloco3": [
-      "agora precisa trocar os dados da conta pra você poder receber"
+      "só por esse que vc acessou agora"
     ]
   },
   "msg2": {
     "bloco1": [
-      "E não entra na conta em nenhum outro aparelho"
+      "E não saca ainda"
     ],
     "bloco2": [
-      "só por esse que vc acessou agora"
+      "porque agora vamos trocar os dados da conta pra você poder sacar o dinheiro"
     ]
   },
   "msg3": {
     "bloco1": [
-      "Agora vai no menu aí em baixo na tela e clica em CONTA"
+      "Vai no menuzinho aí em baixo na tela e clica no botão escrito 'CONTA'"
     ],
     "bloco2": [
       "ou clica naquelas 3 barrinhas lá em cima no lado esquerdo da tela e clica em CONTA"
@@ -34,46 +34,13 @@
   },
   "msg4": {
     "bloco1": [
-      "Depois clica em 'MINHA CONTA'"
+      "Vai aparecer os dados da conta"
     ],
     "bloco2": [
-      "vai aparecer os dados da contae você tem duas opções:"
+      "e aí você só precisa alterar esses dados:"
     ]
   },
   "msg5": {
-    "bloco1": [
-      "Ou você altera os dados da conta"
-    ],
-    "bloco2": [
-      "ou conecta o seu Facebook SE APARECER A OPÇÃO DE CONECTAR PRA VOCÊ e você tiver um Facebook"
-    ],
-    "bloco3": [
-      "e a plataforma já altera os dados automaticamente"
-    ]
-  },
-  "msg6": {
-    "bloco1": [
-      "Dos dois jeitos dá certo"
-    ],
-    "bloco2": [
-      "você que escolhe qual prefere"
-    ],
-    "bloco3": [
-      "mas se aparecer a opção de conectar o Facebook aí e você tiver facebook, com o Facebook é melhor pq é mais rápido e não pede esse ID"
-    ],
-    "bloco4": [
-      "que é um documento gringo"
-    ]
-  },
-  "msg7": {
-    "bloco1": [
-      "Se não aparecer a opção de conectar o Facebook aí na tela ou você não tiver um"
-    ],
-    "bloco2": [
-      "você só precisa alterar esses dados:"
-    ]
-  },
-  "msg8": {
     "bloco1": [
       "Nome"
     ],
@@ -81,29 +48,32 @@
       "Sobrenome"
     ],
     "bloco3": [
-      "E-mail"
+      "Gênero"
     ],
     "bloco4": [
       "Data de nascimento"
+    ],
+    "bloco5": [
+      "E-mail"
     ]
   },
-  "msg9": {
+  "msg6": {
     "bloco1": [
-      "Só altera esses 4 dados aí"
+      "Só altera esses 5 dados aí"
     ],
     "bloco2": [
-      "não precisa alterar o ID porque é um documento gringo"
+      "não precisa alterar o ID nem o número de telefone"
     ]
   },
-  "msg10": {
+  "msg7": {
     "bloco1": [
-      "Resumindo"
+      "E muita atenção"
     ],
     "bloco2": [
-      "conecta o Facebook se tiver como OU SE NÃO DER altera os dados que te passei"
+      "esses dados precisam ser os mesmos de quem vai receber o dinheiro que vamos sacar"
     ]
   },
-  "msg11": {
+  "msg8": {
     "bloco1": [
       "Assim que fizer isso me manda um \"PRONTO\" pra me ajudar"
     ],

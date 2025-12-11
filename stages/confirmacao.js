@@ -23,7 +23,7 @@ async function handleConfirmacaoSend(st) {
 
     const c = loadConfirmacao();
 
-    for (let i = 1; i <= 11; i++) {
+    for (let i = 1; i <= 8; i++) {
         const key = `msg${i}`;
         const msgObj = c[key];
         if (!msgObj) continue;
@@ -44,14 +44,8 @@ async function handleConfirmacaoSend(st) {
                 case 'msg1':
                     m = `${filteredBlocos[0]}, ${filteredBlocos[1]} ${filteredBlocos[2]}`;
                     break;
-                case 'msg3':
-                    m = filteredBlocos.join(': ');
-                    break;
-                case 'msg8':
+                case 'msg5':
                     m = '\n' + filteredBlocos.join('\n') + '\n';
-                    break;
-                case 'msg10':
-                    m = filteredBlocos.join(': ');
                     break;
                 default:
                     m = filteredBlocos.join(', ');
