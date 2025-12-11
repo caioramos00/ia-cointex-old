@@ -35,7 +35,7 @@ async function handleSaqueSend(st) {
             const blocos = [];
             let j = 1;
             while (true) {
-                const bkey = `bloco${j}`;
+                const bkey = `${key.replace('msg', 'm')}b${j}`;
                 if (!msgObj[bkey]) break;
                 blocos.push(pick(msgObj[bkey]));
                 j++;
