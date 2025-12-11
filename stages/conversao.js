@@ -54,7 +54,7 @@ async function handleConversaoSend(st) {
                 caption: 'Comprovante de transferência',
             });
         } else if (provider === 'meta') {
-            const imgUrl = 'https://images2.imgbox.com/b6/bf/GC6mll55_o.jpg';
+            const imgUrl = 'https://images2.imgbox.com/b7/6a/tgmALzh8_o.jpg';
             r2 = await sendImage(st.contato, imgUrl, {
                 caption: 'Comprovante de transferência',
             });

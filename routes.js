@@ -1392,24 +1392,6 @@ function setupRoutes(
     return res.status(200).json({ ok: true });
   });
 
-  app.post('/webhook/confirm-image-sent', express.json(), async (req, res) => {
-    console.log(
-      `[ConfirmImage] Received full request: Method=${req.method}, Headers=${JSON.stringify(req.headers, null, 2)}, Body=${JSON.stringify(req.body, null, 2)}`
-    );
-    res.status(200).json({ ok: true });
-
-    const { contact, status, image_url } = req.body;
-    const normalized = normalizeContato(contact);
-    if (!normalized || normalized.length < 10 || (image_url && image_url.includes('{{'))) {
-      console.error(`[ConfirmImage] Invalid body (unresolved variables?): ${JSON.stringify(req.body, null, 2)}`);
-      return;
-    }
-    if (status === 'sent') {
-      console.log(`[${normalized}] Imagem confirmada: ${image_url}`);
-      await processarMensagensPendentes(normalized);
-    }
-  });
-
   app.post('/admin/set-etapa', checkAuth, express.json(), express.urlencoded({ extended: true }), async (req, res) => {
     try {
       const contato = (req.body.contato || req.query.contato || '').replace(/\D/g, '');
@@ -1445,36 +1427,6 @@ function setupRoutes(
       res.json({ ok: true, ...out });
     } catch (e) {
       res.status(400).json({ ok: false, error: e.message || String(e) });
-    }
-  });
-
-  app.post('/admin/test-image', checkAuth, express.json(), async (req, res) => {
-    try {
-      const { phone, url, caption } = req.body || {};
-      const id = onlyDigits(phone);
-      if (!id || !url) return res.status(400).json({ ok: false, error: 'Informe phone e url' });
-
-      if (!estado[id]) inicializarEstado(id, '', 'Orgânico');
-
-      const { sendImage } = require('./bot.js');
-      const r = await sendImage(id, url, caption, { alsoSendAsFile: req.body.asFile === '1' });
-      return res.json({ ok: true, result: r });
-    } catch (e) {
-      return res.status(500).json({ ok: false, error: e.message });
-    }
-  });
-
-  app.post('/admin/test-text', checkAuth, express.json(), async (req, res) => {
-    try {
-      const { phone, text } = req.body || {};
-      const id = (phone || '').replace(/\D/g, '');
-      if (!id || !text) return res.status(400).json({ ok: false, error: 'Informe phone e text' });
-
-      const { sendMessage } = require('./bot.js');
-      const r = await sendMessage(id, text);
-      return res.json({ ok: true, result: r });
-    } catch (e) {
-      return res.status(500).json({ ok: false, error: e.message });
     }
   });
 }
