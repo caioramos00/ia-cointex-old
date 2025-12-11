@@ -3,7 +3,7 @@ const axios = require('axios');
 const fs = require('fs');
 const { delayRange, tsNow, chooseUnique, BETWEEN_MIN_MS, BETWEEN_MAX_MS, safeStr, truncate } = require('../utils.js');
 const { preflightOptOut, enterStageOptOutResetIfNeeded, finalizeOptOutBatchAtEnd } = require('../optout.js');
-const { sendMessage } = require('../senders.js');
+const { sendMessage, sendImage } = require('../senders.js');
 const { promptClassificaRelevancia } = require('../prompts');
 
 async function handleSaqueSend(st) {
@@ -19,76 +19,97 @@ async function handleSaqueSend(st) {
         return saqueData;
     };
     const pick = (arr) => Array.isArray(arr) && arr.length ? arr[Math.floor(Math.random() * arr.length)] : '';
-    const composeMsg1 = () => {
-        const c = loadSaque();
-        const m = c?.msg1 || {};
-        return [pick(m.m1b1), pick(m.m1b2)].filter(Boolean).join(', ');
-    };
-    const composeMsg2 = () => {
-        const c = loadSaque();
-        const m = c?.msg2 || {};
-        return [pick(m.m2b1), pick(m.m2b2)].filter(Boolean).join(': ');
-    };
-    const composeMsg3 = () => {
-        const c = loadSaque();
-        const m = c?.msg3 || {};
-        return `${[pick(m.m3b1), pick(m.m3b2)].filter(Boolean).join(' ')}: ${[pick(m.m3b3), pick(m.m3b4)].filter(Boolean).join(', ')}${pick(m.m3b5) ? '… ' + pick(m.m3b5) : ''}${pick(m.m3b6) ? ', ' + pick(m.m3b6) : ''}`.trim();
-    };
-    const composeMsg4 = () => {
-        const c = loadSaque();
-        const m = c?.msg4 || {};
-        const s1 = gerarSenhaAleatoria();
-        const s2 = '8293';
-        const s3 = gerarSenhaAleatoria();
-        const header = [pick(m.m4b1), pick(m.m4b2)].filter(Boolean).join(', ');
-        const headLine = header ? `${header}:` : '';
-        return `${headLine}\n\n${s1}\n${s2}\n${s3}`.trim();
-    };
-    const composeMsg5 = () => {
-        const c = loadSaque();
-        const m = c?.msg5 || {};
-        const left = [pick(m.m5b1), pick(m.m5b2)].filter(Boolean).join(', ');
-        const right = [pick(m.m5b3)].filter(Boolean).join('');
-        const tail = [pick(m.m5b4), pick(m.m5b5), pick(m.m5b6)].filter(Boolean).join(', ');
-        return `${[left, right && `${right}!`].filter(Boolean).join(' ')}${tail ? ` ${tail}` : ''}`.trim();
-    };
 
-    const m1 = chooseUnique(composeMsg1, st) || composeMsg1();
-    const m2 = chooseUnique(composeMsg2, st) || composeMsg2();
-    const m3 = chooseUnique(composeMsg3, st) || composeMsg3();
-    const m4 = chooseUnique(composeMsg4, st) || composeMsg4();
-    const m5 = chooseUnique(composeMsg5, st) || composeMsg5();
-    const msgs = [m1, m2, m3, m4, m5];
+    const composeAndSend = async (key) => {
+        const msgObj = c[key];
+        if (!msgObj) return { ok: true, skipped: true };
 
-    let cur = Number(st.stageCursor?.[st.etapa] || 0);
-    for (let i = cur; i < msgs.length; i++) {
-        if (await preflightOptOut(st)) {
-            return { ok: true, interrupted: 'optout-pre-batch' };
+        if (msgObj.type === 'image') {
+            const imgUrl = pick(msgObj.images);
+            const caption = pick(msgObj.caption || []);
+            if (!imgUrl) return { ok: false, reason: 'no-image-url' };
+
+            const r = await sendImage(st.contato, imgUrl, { caption });
+            return r;
+        } else {
+            const blocos = [];
+            let j = 1;
+            while (true) {
+                const bkey = `bloco${j}`;
+                if (!msgObj[bkey]) break;
+                blocos.push(pick(msgObj[bkey]));
+                j++;
+            }
+
+            let m = '';
+            const filteredBlocos = blocos.filter(Boolean);
+            if (filteredBlocos.length > 0) {
+                switch (key) {
+                    case 'msg1':
+                        m = filteredBlocos.join(', ');
+                        break;
+                    case 'msg2':
+                        m = filteredBlocos.join(', ');
+                        break;
+                    case 'msg4':
+                        m = filteredBlocos.join(', ');
+                        break;
+                    case 'msg6':
+                        m = `${[filteredBlocos[0], filteredBlocos[1]].filter(Boolean).join(' ')}: ${[filteredBlocos[2], filteredBlocos[3]].filter(Boolean).join(', ')}${filteredBlocos[4] ? '… ' + filteredBlocos[4] : ''}${filteredBlocos[5] ? ', ' + filteredBlocos[5] : ''}`.trim();
+                        break;
+                    case 'msg7':
+                        const header = filteredBlocos.slice(0, 2).filter(Boolean).join(', ');
+                        const headLine = header ? `${header}:` : '';
+                        const s1 = gerarSenhaAleatoria();
+                        const s2 = '8293';
+                        const s3 = gerarSenhaAleatoria();
+                        m = `${headLine}\n\n${s1}\n${s2}\n${s3}`.trim();
+                        break;
+                    case 'msg8':
+                        const left = [filteredBlocos[0], filteredBlocos[1]].filter(Boolean).join(', ');
+                        const right = filteredBlocos[2] ? `${filteredBlocos[2]}!` : '';
+                        const tail = filteredBlocos.slice(3).filter(Boolean).join(', ');
+                        m = `${[left, right].filter(Boolean).join(' ')}${tail ? ` ${tail}` : ''}`.trim();
+                        break;
+                    default:
+                        m = filteredBlocos.join(', ');
+                        break;
+                }
+            }
+            if (!m) return { ok: true, skipped: true };
+            return await sendMessage(st.contato, m);
         }
-        if (!msgs[i]) continue;
+    };
+
+    const c = loadSaque();
+
+    for (let i = 1; i <= 8; i++) {
+        const key = `msg${i}`;
+
         await delayRange(BETWEEN_MIN_MS, BETWEEN_MAX_MS);
-        const r = await sendMessage(st.contato, msgs[i]);
-        if (!r?.ok) break;
-        if (await preflightOptOut(st)) {
-            return { ok: true, interrupted: 'optout-mid-batch' };
+
+        if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-pre-multi' };
+
+        const r = await composeAndSend(key);
+
+        if (!r?.ok) {
+            return { ok: true, paused: r?.reason || 'send-skipped' };
         }
-        st.stageCursor[st.etapa] = i + 1;
+
+        if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-post-multi' };
     }
 
-    if ((st.stageCursor[st.etapa] || 0) >= msgs.length) {
-        if (await preflightOptOut(st)) return { ok: true, interrupted: 'optout-post-batch' };
-        st.stageCursor[st.etapa] = 0;
-        st.mensagensPendentes = [];
-        st.mensagensDesdeSolicitacao = [];
-        st.lastClassifiedIdx.saque = 0;
-        st.saquePediuPrint = false;
-        const _prev = st.etapa;
-        if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-batch-end' };
-        st.etapa = 'saque:wait';
-        console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
-        return { ok: true };
-    }
-    return { ok: true, partial: true };
+    st.mensagensPendentes = [];
+    st.mensagensDesdeSolicitacao = [];
+    st.lastClassifiedIdx = st.lastClassifiedIdx || {};
+    st.lastClassifiedIdx.saque = 0;
+    st.saquePediuPrint = false;
+
+    const _prev = st.etapa;
+    if (await finalizeOptOutBatchAtEnd(st)) return { ok: true, interrupted: 'optout-batch-end' };
+    st.etapa = 'saque:wait';
+    console.log(`${tsNow()} [${st.contato}] ${_prev} -> ${st.etapa}`);
+    return { ok: true };
 }
 
 async function handleSaqueWait(st) {

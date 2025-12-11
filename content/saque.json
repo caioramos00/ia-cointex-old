@@ -12,50 +12,76 @@
     },
     "msg2": {
         "m2b1": [
-            "Clica nesse link e depois clica em SACAR"
+            "Depois que alterar e salvar os dados"
         ],
         "m2b2": [
-            "https://mpay.vc/"
+            "você vai ir no menu e clicar em 'MPAY' pra voltar pra tela inicial"
         ]
     },
     "msg3": {
-        "m3b1": [
+        "type": "image",
+        "images": [
+            "https://images2.imgbox.com/3b/2d/2norYyjJ_o.jpg"
+        ],
+        "caption": [
+            "Print mostrando como acessar a Home"
+        ]
+    },
+    "msg4": {
+        "m4b1": [
+            "Depois que voltar pra tela inicial"
+        ],
+        "m4b2": [
+            "você vai clicar em 'SACAR'"
+        ]
+    },
+    "msg5": {
+        "type": "image",
+        "images": [
+            "https://images2.imgbox.com/cb/5d/0uLZ6VBu_o.jpg"
+        ],
+        "caption": [
+            "Print mostrando como acessar a tela 'Sacar'"
+        ]
+    },
+    "msg6": {
+        "m6b1": [
             "Essa conta tá com o saldo bem alto",
             "Essa conta tá com um saldo muito alto",
             "Essa conta aí tá com um saldo muito bom"
         ],
-        "m3b2": [
+        "m6b2": [
             "mas presta atenção",
             "mas é o seguinte",
             "mas muita atenção agora",
             "mas mta atenção agora",
             "mas muita atenção agr"
         ],
-        "m3b3": [
+        "m6b3": [
             "hoje a gente só vai sacar 5000 dela",
             "hoje você vai sacar só 5000 dela",
             "agora você vai sacar só 5000 dela"
         ],
-        "m3b4": [
+        "m6b4": [
             "não saca mais que isso",
             "não saca mais do que isso",
             "não pode sacar mais que isso"
         ],
-        "m3b5": [
+        "m6b5": [
             "a plataforma vai ficar com uns 5% do valor",
             "a plataforma fica com uns 5% do valor",
             "a plataforma fica com 5% do valor",
             "a plataforma fica com mais ou menos 5% do valor",
             "a plataforma pega uns 5% do valor"
         ],
-        "m3b6": [
+        "m6b6": [
             "mas não tem problema",
             "mas n tem problema nenhum",
             "mas relaxa q não tem problema"
         ]
     },
-    "msg4": {
-        "m4b1": [
+    "msg7": {
+        "m7b1": [
             "Quando você for sacar vai pedir um código",
             "Quando você for sacar vai pedir uma senha",
             "Quando você for sacar vai precisar de um código",
@@ -63,7 +89,7 @@
             "Quando você for sacar a plataforma vai pedir um código",
             "Quando você for sacar a plataforma vai pedir a senha"
         ],
-        "m4b2": [
+        "m7b2": [
             "tenta todos esses 3",
             "tenta com todos esses 3",
             "tenta esses três",
@@ -72,13 +98,13 @@
             "é um desses 3"
         ]
     },
-    "msg5": {
-        "m5b1": [
+    "msg8": {
+        "m8b1": [
             "Saca aí e me avisa certo?",
             "Saca aí e me avisa beleza?",
             "Saca e me avisa pode ser?"
         ],
-        "m5b2": [
+        "m8b2": [
             "to confiando na sua palavra",
             "tô confiando em você",
             "to na confiança em vc",
@@ -86,13 +112,13 @@
             "vou confiar em você hein",
             "tô confiando em vc"
         ],
-        "m5b3": [
+        "m8b3": [
             "fazendo certinho eu te passo outros trampos",
             "se fizer certinho eu te passo outros",
             "fazendo certo eu te passo mais trampo",
             "se fizer certo eu te passo mais trampo"
         ],
-        "m5b4": [
+        "m8b4": [
             "se aparecer qualquer erro aí",
             "se der qualquer BO aí",
             "e se acontecer qualquer problema",
@@ -103,14 +129,14 @@
             "e se aparecer problema aí",
             "se tiver qualquer erro aí"
         ],
-        "m5b5": [
+        "m8b5": [
             "me manda um PRINT da tela pra eu te ajudar",
             "manda PRINT da tela pra eu te ajudar",
             "tira um PRINT e me manda",
             "manda um PRINT que eu te ajudo",
             "tira um PRINT da tela e me manda"
         ],
-        "m5b6": [
+        "m8b6": [
             "vou esperar vc aqui",
             "to esperando vc aqui",
             "vou ficar esperando vc",
