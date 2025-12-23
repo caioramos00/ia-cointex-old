@@ -342,13 +342,13 @@ async function processarMensagensPendentes(contato) {
                                 `Output only valid JSON as {"label": "optin"} or {"label": "nao_optin"}`;
                             const ask = async (maxTok) => {
                                 try {
-                                    const r = await axios.post('https://api.openai.com/v1/responses', {
-                                        model: 'gpt-5',
-                                        input: structuredPrompt,
-                                        max_output_tokens: maxTok,
-                                        reasoning: { effort: 'low' }
+                                    const r = await axios.post('https://api.x.ai/v1/responses', {
+                                        model: 'grok-4-1-fast-reasoning',  // Ou 'grok-4-1-fast-non-reasoning' para modo sem raciocínio
+                                        input: structuredPrompt,  // Deve ser array de { role, content }
+                                        max_tokens: maxTok,  // Ajustado de max_output_tokens; confirme se é suportado no /v1/responses
+                                        // Remova 'reasoning' para modelos de raciocínio
                                     }, {
-                                        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                                        headers: { Authorization: `Bearer ${xaiApiKey}`, 'Content-Type': 'application/json' },  // Use a chave da xAI
                                         timeout: 15000,
                                         validateStatus: () => true
                                     });

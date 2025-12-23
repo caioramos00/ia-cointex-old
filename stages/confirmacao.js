@@ -140,12 +140,11 @@ async function handleConfirmacaoWait(st) {
             let r;
             try {
                 r = await axios.post(
-                    'https://api.openai.com/v1/responses',
+                    'https://api.x.ai/v1/chat/completions',
                     {
-                        model: 'gpt-5',
-                        input: structuredPrompt,
-                        max_output_tokens: maxTok,
-                        reasoning: { effort: 'low' }
+                        model: 'grok-4-1-fast-reasoning',
+                        messages: structuredPrompt,
+                        max_tokens: maxTok,
                     },
                     {
                         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },

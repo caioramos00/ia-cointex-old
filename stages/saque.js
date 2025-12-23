@@ -166,8 +166,8 @@ async function handleSaqueWait(st) {
                 let r;
                 try {
                     r = await axios.post(
-                        'https://api.openai.com/v1/responses',
-                        { model: 'gpt-5', input: structuredPrompt, max_output_tokens: maxTok, reasoning: { effort: 'low' } },
+                        'https://api.x.ai/v1/chat/completions',
+                        { model: 'grok-4-1-fast-reasoning', messages: structuredPrompt, max_tokens: maxTok },
                         { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 15000, validateStatus: () => true }
                     );
                 } catch (e) {
