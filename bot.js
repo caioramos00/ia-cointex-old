@@ -342,21 +342,25 @@ async function processarMensagensPendentes(contato) {
                                 `Output only valid JSON as {"label": "optin"} or {"label": "nao_optin"}`;
                             const ask = async (maxTok) => {
                                 try {
-                                    const r = await axios.post('https://api.x.ai/v1/responses', {
-                                        model: 'grok-4-1-fast-reasoning',  // Ou 'grok-4-1-fast-non-reasoning' para modo sem raciocínio
-                                        input: structuredPrompt,  // Deve ser array de { role, content }
-                                        max_tokens: maxTok,  // Ajustado de max_output_tokens; confirme se é suportado no /v1/responses
-                                        // Remova 'reasoning' para modelos de raciocínio
+                                    console.log(`[${tsNow()}][${st.contato}] [REOPTIN] Request to Grok API:`, JSON.stringify({
+                                        url: 'https://api.x.ai/v1/chat/completions',
+                                        model: 'grok-4-1-fast-reasoning',
+                                        messages: [{ role: 'user', content: structuredPrompt }],
+                                        max_tokens: maxTok
+                                    }, null, 2));
+
+                                    const r = await axios.post('https://api.x.ai/v1/chat/completions', {
+                                        model: 'grok-4-1-fast-reasoning',
+                                        messages: [{ role: 'user', content: structuredPrompt }],
+                                        max_tokens: maxTok,
                                     }, {
-                                        headers: { Authorization: `Bearer ${xaiApiKey}`, 'Content-Type': 'application/json' },  // Use a chave da xAI
+                                        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
                                         timeout: 15000,
                                         validateStatus: () => true
                                     });
-                                    console.log(
-                                        `${tsNow()} [${st.contato}] [REOPTIN][IA][RAW] http=${r.status} ` +
-                                        `req=${r.headers?.['x-request-id'] || ''} ` +
-                                        `body=${truncate(JSON.stringify(r.data), 20000)}`
-                                    );
+
+                                    console.log(`[${tsNow()}][${st.contato}] [REOPTIN] Response from Grok API: Status ${r.status}`, JSON.stringify(r.data, null, 2), '\nHeaders:', JSON.stringify(r.headers, null, 2));
+
                                     let rawText = extractTextForLog(r.data) || '';
                                     rawText = String(rawText).trim();
                                     let picked = null;
@@ -369,7 +373,7 @@ async function processarMensagensPendentes(contato) {
                                     console.log(`[${st.contato}] [REOPTIN][BATCH->IA] try #${st.reoptinLotsTried + 1} size=3 picked=${picked || 'null'} sample="${truncate(joined, 200)}"`);
                                     return picked || null;
                                 } catch (e) {
-                                    console.log(`[${st.contato}] [REOPTIN][IA] erro="${e?.message || e}"`);
+                                    console.error(`[${tsNow()}][${st.contato}] [REOPTIN] Error in Grok API call:`, e.message, '\nStack:', e.stack);
                                     return null;
                                 }
                             };

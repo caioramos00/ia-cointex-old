@@ -165,13 +165,22 @@ async function handleSaqueWait(st) {
             const callOnce = async (maxTok) => {
                 let r;
                 try {
+                    console.log(`[${tsNow()}][${st.contato}] Request to Grok API:`, JSON.stringify({
+                        url: 'https://api.x.ai/v1/chat/completions',
+                        model: 'grok-4-1-fast-reasoning',
+                        messages: [{ role: 'user', content: structuredPrompt }],
+                        max_tokens: maxTok
+                    }, null, 2));
+
                     r = await axios.post(
                         'https://api.x.ai/v1/chat/completions',
-                        { model: 'grok-4-1-fast-reasoning', messages: structuredPrompt, max_tokens: maxTok },
+                        { model: 'grok-4-1-fast-reasoning', messages: [{ role: 'user', content: structuredPrompt }], max_tokens: maxTok },
                         { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 15000, validateStatus: () => true }
                     );
+
+                    console.log(`[${tsNow()}][${st.contato}] Response from Grok API: Status ${r.status}`, JSON.stringify(r.data, null, 2), '\nHeaders:', JSON.stringify(r.headers, null, 2));
                 } catch (e) {
-                    console.error(`[${st.contato}] Erro na chamada à API: ${e.message}`);
+                    console.error(`[${tsNow()}][${st.contato}] Error in Grok API call:`, e.message, '\nStack:', e.stack);
                     return { status: 0, picked: null };
                 }
 

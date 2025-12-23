@@ -188,11 +188,18 @@ async function handleInstrucoesWait(st) {
             const callOnce = async (maxTok) => {
                 let r;
                 try {
+                    console.log(`[${tsNow()}][${st.contato}] Request to Grok API:`, JSON.stringify({
+                        url: 'https://api.x.ai/v1/chat/completions',
+                        model: 'grok-4-1-fast-reasoning',
+                        messages: [{ role: 'user', content: structuredPrompt }],
+                        max_tokens: maxTok
+                    }, null, 2));
+
                     r = await axios.post(
                         'https://api.x.ai/v1/chat/completions',
                         {
                             model: 'grok-4-1-fast-reasoning',
-                            messages: structuredPrompt,
+                            messages: [{ role: 'user', content: structuredPrompt }],
                             max_tokens: maxTok,
                         },
                         {
@@ -204,7 +211,10 @@ async function handleInstrucoesWait(st) {
                             validateStatus: () => true
                         }
                     );
-                } catch {
+
+                    console.log(`[${tsNow()}][${st.contato}] Response from Grok API: Status ${r.status}`, JSON.stringify(r.data, null, 2), '\nHeaders:', JSON.stringify(r.headers, null, 2));
+                } catch (err) {
+                    console.error(`[${tsNow()}][${st.contato}] Error in Grok API call:`, err.message, '\nStack:', err.stack);
                     return { status: 0, picked: null };
                 }
 

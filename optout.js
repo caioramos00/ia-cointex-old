@@ -208,11 +208,18 @@ async function finalizeOptOutBatchAtEnd(st) {
         `Output only valid JSON as {"label":"OPTOUT"} or {"label":"CONTINUAR"}`;
     const ask = async (maxTok) => {
         try {
+            console.log(`[${tsNow()}][${st.contato}] [OPTOUT] Request to Grok API:`, JSON.stringify({
+                url: 'https://api.x.ai/v1/chat/completions',
+                model: 'grok-4-1-fast-reasoning',
+                messages: [{ role: 'user', content: structuredPrompt }],
+                max_tokens: maxTok
+            }, null, 2));
+
             const r = await axios.post(
                 'https://api.x.ai/v1/chat/completions',
                 {
                     model: 'grok-4-1-fast-reasoning',
-                    messages: structuredPrompt,
+                    messages: [{ role: 'user', content: structuredPrompt }],
                     max_tokens: maxTok,
                 },
                 {
@@ -221,21 +228,9 @@ async function finalizeOptOutBatchAtEnd(st) {
                     validateStatus: () => true
                 }
             );
-            const reqId = (r.headers?.['x-request-id'] || r.headers?.['X-Request-Id'] || '');
-            console.log(
-                `${tsNow()} [${st.contato}] [OPTOUT][IA][RAW] http=${r.status} ` +
-                `req=${reqId} body=${truncate(JSON.stringify(r.data), 20000)}`
-            );
-            console.log(
-                `[${st.contato}] [OPTOUT][IA][DEBUG] http=${r.status} req=${reqId}` +
-                ` output_text="${truncate(r.data?.output_text, 300)}"` +
-                ` content0="${truncate(JSON.stringify(r.data?.output?.[0]?.content || ''), 300)}"` +
-                ` choices0="${truncate(r.data?.choices?.[0]?.message?.content || '', 300)}"` +
-                ` result="${truncate(r.data?.result || '', 300)}"`
-            );
-            if (!(r.status >= 200 && r.status < 300)) {
-                console.log(`[OPTOUT][IA][RAW] ${truncate(JSON.stringify(r.data), 800)}`);
-            }
+
+            console.log(`[${tsNow()}][${st.contato}] [OPTOUT] Response from Grok API: Status ${r.status}`, JSON.stringify(r.data, null, 2), '\nHeaders:', JSON.stringify(r.headers, null, 2));
+
             let rawText = extractTextForLog(r.data) || '';
             rawText = String(rawText).trim();
             let picked = null;
@@ -252,7 +247,7 @@ async function finalizeOptOutBatchAtEnd(st) {
             );
             return { status: r.status, picked };
         } catch (e) {
-            console.log(`[${st.contato}] [OPTOUT][IA] erro="${e?.message || e}"`);
+            console.error(`[${tsNow()}][${st.contato}] [OPTOUT] Error in Grok API call:`, e.message, '\nStack:', e.stack);
             if (e?.response) {
                 const d = e.response.data;
                 console.log(`[${st.contato}] [OPTOUT][IA][DEBUG] http=${e.response.status} body="${truncate(typeof d === 'string' ? d : JSON.stringify(d), 400)}"`); console.log(
