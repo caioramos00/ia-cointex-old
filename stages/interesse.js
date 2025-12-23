@@ -159,7 +159,7 @@ async function handleInteresseWait(st) {
                         'https://api.x.ai/v1/chat/completions',
                         {
                             model: 'grok-4-1-fast-reasoning',
-                            messages: structuredPrompt,
+                            messages: [{ role: 'user', content: structuredPrompt }],
                             max_tokens: maxTok,
                         },
                         {
